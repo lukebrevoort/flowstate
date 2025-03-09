@@ -7,6 +7,7 @@ from langchain.agents.format_scratchpad.openai_tools import (
 )
 from langchain.agents.output_parsers.openai_tools import OpenAIToolsAgentOutputParser
 from langchain.agents import AgentExecutor
+from langchain.memory import ConversationBufferMemory
 from notion_client import Client
 import os, sys
 # Add the parent directory to the path
@@ -14,6 +15,14 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from agents.notion_api import NotionAPI, Assignment
 import dotenv
 from datetime import datetime
+from typing import Dict, Any, Optional, Union
+import traceback
+import logging
+from difflib import get_close_matches
+
+# Setting up the logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Load the environment variables
 dotenv.load_dotenv()
@@ -108,13 +117,46 @@ def retrive_all_assignments():
     assignments = notion_api.get_all_assignments()
     return assignments
 
-
 @tool
-def create_subtasks(assignment):
+def find_assignment(query: str):
     """
-    Create substasks for each assignment
+    Find an assignment using fuzzy matching on the name.
+    
+    Args:
+        query: Text to search for in assignment names
+        
+    Returns:
+        The best matching assignment or a list of possible matches
     """
-    pass
+    notion_api = NotionAPI()
+    assignments = notion_api.get_all_assignments()
+    
+    # Extract just the names for matching
+    names = [a['name'] for a in assignments]
+    
+    # If exact match exists, return it
+    if query in names:
+        for assignment in assignments:
+            if assignment['name'] == query:
+                return assignment
+    
+    # Try fuzzy matching
+    matches = get_close_matches(query, names, n=3, cutoff=0.6)
+    
+    if not matches:
+        return f"No assignments found matching '{query}'"
+    
+    if len(matches) == 1:
+        # Return the single match
+        for assignment in assignments:
+            if assignment['name'] == matches[0]:
+                return assignment
+    
+    # Return possible matches for clarification
+    return {
+        "message": f"Multiple assignments found matching '{query}'",
+        "matches": matches
+    }
 
 @tool
 def create_assignment_item(assignment_dict):
@@ -161,94 +203,88 @@ def create_assignment_item(assignment_dict):
     return assignment
 
 @tool
-def get_course_id(course_name: str = None, notion_uuid: str = None):
+def get_course_info(course_name: str = None):
     """
-    Get all course IDs from Notion database
-
-    Agrs:
-        course_name: Name of the course to get the ID for (optional)
-        notion_uuid: UUID of the course to get the ID for (optional)
-
-    returns a list of course IDs
-    """
-    if course_name is None and notion_uuid is None:
-        raise ValueError("Either course name or notion UUID must be provided")
+    Get course information from Notion database.
     
+    Args:
+        course_name: (Optional) Name or code of the course to search for
+        
+    Returns:
+        If course_name is provided and found: Course UUID
+        If course_name is provided but not found: List of all course names
+        If course_name is not provided: List of all course names
+    """
     notion_api = NotionAPI()
-    course_id_dict = notion_api._get_course_mapping()
     
-    if course_name is None and notion_uuid is not None:
-        return course_id_dict.get(notion_uuid)
-    else:  # course_name is provided
-        course_id = notion_api.get_course_id(course_name)
+    # If no course name provided, return all course names
+    if not course_name:
+        course_name_dict = notion_api._get_course_name_mapping()
+        return list(course_name_dict.keys())
+    
+    # Try to get the course ID
+    course_id = notion_api.get_course_id(course_name)
+    
+    # If found, return the Canvas ID
+    if course_id:
+        course_id_dict = notion_api._get_course_mapping()
         for key, value in course_id_dict.items():
             if value == course_id:
                 return key
-        
+    
+    # If not found, return all course names
+    course_name_dict = notion_api._get_course_name_mapping()
+    return list(course_name_dict.keys())
 
 @tool
-def update_assignment_status(assignment_dict):
+def update_assignment(name: str, priority: str = None, status: str = None, 
+                      due_date: str = None, description: str = None) -> str:
     """
-    Update a assignment in Notion that follows the imported Assignment schema. 
-    Below is an example of the schema:
-
-    assignment = Assignment(
-        name="Midterm Research Paper",
-        description="<p>Write a 10-page research paper on a topic of your choice.</p>",
-        course_id=77456,  # Maps to a Notion course page via course_mapping, obtain this by using get_course_id tool
-        status="Not started",
-        due_date="2025-04-15T23:59:00Z",
-        id=67890,
-        priority="High",
-        group_name="Papers",
-        group_weight=30.0,
-        grade=None
-    )
-
-    returns the updated assignment object
-    """
-    notion_api = NotionAPI()
+    Update an assignment in Notion.
     
-    # If we're getting a dictionary (likely from the agent)
-    if isinstance(assignment_dict, dict):
-        # First retrieve the existing assignment to preserve critical fields
-        existing = notion_api.get_assignment_page(assignment_dict.get('name'))
-        if not existing:
-            raise ValueError(f"Assignment '{assignment_dict.get('name')}' not found")
-            
-        # Get the existing course relation ID from Notion
-        existing_course_id = None
-        if existing and 'properties' in existing and 'Course' in existing['properties']:
-            relations = existing['properties']['Course']['relation']
-            if relations and len(relations) > 0:
-                existing_course_id = relations[0]['id']
-                print(f"Found existing course ID: {existing_course_id}")
+    Args:
+        name: Name of the assignment to update (required)
+        priority: Priority level (High, Medium, Low)
+        status: Status (Not started, In progress, Completed)
+        due_date: Due date in ISO format
+        description: Description text
         
-        # Create assignment with preserved fields
-        assignment = Assignment(
-            name=assignment_dict.get('name'),
-            description=assignment_dict.get('description', existing['properties'].get('Description', {}).get('rich_text', [{}])[0].get('text', {}).get('content', '')),
-            # Use existing course ID from Notion if available
-            course_id=existing_course_id or assignment_dict.get('course_id'),
-            status=assignment_dict.get('status', 'Not started'),
-            due_date=existing['properties'].get('Due Date', {}).get('date', {}).get('start') if existing else None,
-            id=existing['properties'].get('AssignmentID', {}).get('number') if existing else None,
-            priority=existing['properties'].get('Priority', {}).get('select', {}).get('name', 'Medium'),
-            group_name=existing['properties'].get('Assignment Group', {}).get('select', {}).get('name'),
-            group_weight=existing['properties'].get('Group Weight', {}).get('number'),
-            grade=existing['properties'].get('Grade (%)', {}).get('number')
-        )
-    else:
-        assignment = assignment_dict
-    
-    print(f"Updating assignment with course_id: {assignment.course_id}")
-    notion_api.update_assignment(assignment)
-    return f"Successfully updated {assignment.name} to status: {assignment.status}"
+    Returns:
+        String confirmation of update or error message
+    """
+    # Build the dictionary from the individual parameters
+    assignment_dict = {'name': name}
+    if priority is not None:
+        assignment_dict['priority'] = priority
+    if status is not None:
+        assignment_dict['status'] = status
+    if due_date is not None:
+        assignment_dict['due_date'] = due_date
+    if description is not None:
+        assignment_dict['description'] = description
+        
+    # Initialize the NotionAPI
+    notion_api = NotionAPI()
+    try:
+        # Attempt to update the assignment
+        updated_assignment = notion_api.update_assignment(assignment_dict)
+        return f"Assignment updated successfully."
+    except Exception as e:
+        # Log the error and return a message
+        logger.error(f"Error updating assignment: {e}")
+        return f"Failed to update assignment: {e}"
 
 @tool
 def estimate_completion_time():
     """
     Estimate total time of completion for each assignment
+    """
+    pass
+
+@tool
+def create_subtasks(assignment):
+    """
+    Create substasks for each assignment
     """
     pass
 
@@ -264,7 +300,19 @@ llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
 
 # Define tools for model
 
-tools = [retireve_assignment, retrive_all_assignments, get_current_time, create_assignment_item, get_course_id, parse_relative_datetime, update_assignment_status]
+tools = [
+    retireve_assignment, 
+    retrive_all_assignments, 
+    get_current_time, 
+    create_assignment_item,
+    get_course_info, 
+    parse_relative_datetime, 
+    update_assignment,
+    find_assignment,
+    ]
+
+# Create a memory instance
+memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
 # Define the model prompt
 
@@ -272,12 +320,57 @@ prompt = ChatPromptTemplate.from_messages(
     [
         (
             "system",
-            "You are very powerful assistant, you can help me manage my assignments and projects. "
-            "IMPORTANT: When dealing with relative dates like 'tomorrow', 'next week', etc., "
-            "ALWAYS use the get_current_time tool first to determine the current date before calculating due dates."
-            "When the request includes a specific time (like 'at 5pm'), ALWAYS use parse_relative_datetime tool "
-            "to correctly handle both the date and time components."
+            """You are a powerful assistant for managing academic assignments in Notion.
+
+Your primary capabilities:
+1. Retrieving assignments from Notion
+2. Finding assignments with fuzzy matching
+3. Creating new assignments
+4. Updating assignment status and properties
+5. Managing course relationships
+
+IMPORTANT USAGE GUIDELINES:
+
+When updating assignments:
+- ALWAYS use update_assignment with name and other parameters like priority, status, due_date, etc.
+- Dictionary MUST contain the 'name' key with the assignment name
+- Include any properties you want to update (status, priority, due_date, etc.)
+- Example: {{"name": "Essay on Climate Change", "status": "In Progress", "priority": "High"}}
+
+When creating assignments:
+- ALWAYS use create_assignment_item with a complete dictionary of assignment properties
+- Required fields: name, course_id or course_name
+- Optional fields: description, status, due_date, priority, etc.
+- Example: {{"name": "Midterm Research Paper", "course_name": "Biology 101", "due_date": "2025-04-15T23:59:00Z", "priority": "High"}}
+
+When dealing with dates:
+- ALWAYS use get_current_time to get the current date/time first
+- Use parse_relative_datetime for converting user descriptions to proper dates
+- Example flow: get_current_time → parse_relative_datetime("tomorrow at 5pm")
+
+For finding assignments:
+- Use find_assignment with partial names for fuzzy matching
+- If multiple matches found, ask the user to clarify which one they meant
+
+For retrieving assignment details:
+- Use retireve_assignment with the exact assignment name
+- If unsure of exact name, use find_assignment first
+
+For finding course names and course IDs:
+- Use get_course_info with course_name or None for all courses
+- If course_name is not found, return all course names
+
+Common user requests and proper tool usage:
+- "Show all my assignments" → use retrive_all_assignments
+- "Update assignment X to status Y" → use update_assignment with name="X", status="Y"
+- "Find my biology homework" → use find_assignment with "biology homework"
+- "Create new assignment due tomorrow" → use get_current_time, then parse_relative_datetime, then create_assignment_item
+- "Set priority of X to high" → use update_assignment with name="X", priority="High"
+
+ALWAYS verify you have the correct formatting for dictionary parameters before calling any tool.
+"""
         ),
+        MessagesPlaceholder(variable_name="chat_history"),
         ("user", "{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad"),
     ]
@@ -292,6 +385,7 @@ llm_with_tools = llm.bind_tools(tools)
 agent = (
     {
         "input": lambda x: x["input"],
+        "chat_history": lambda x: memory.load_memory_variables({})["chat_history"],
         "agent_scratchpad": lambda x: format_to_openai_tool_messages(
             x["intermediate_steps"]
         ),
@@ -301,9 +395,20 @@ agent = (
     | OpenAIToolsAgentOutputParser()
 )
 
-agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
+agent_executor = AgentExecutor(agent=agent, tools=tools, memory=memory, verbose=True)
 
+# Add at the end of the file
 
-list(agent_executor.stream({"input": "I need you to update the Week 6 - Electric Potential (cont.) & Capacitors assignment to 'In progress'"}))
-
-
+if __name__ == "__main__":
+    print("Notion Project Manager Assistant (Type 'exit' to quit)")
+    print("------------------------------------------------------")
+    while True:
+        user_input = input("\nWhat would you like to do with your Notion assignments? \n")
+        if user_input.lower() in ("exit", "quit"):
+            break
+        try:
+            response = agent_executor.invoke({"input": user_input})
+            print(f"\nAssistant: {response['output']}")
+        except Exception as e:
+            print(f"\nError: {str(e)}")
+            logger.error(f"Error in CLI: {str(e)}", exc_info=True)

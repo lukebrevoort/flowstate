@@ -37,7 +37,10 @@ class NotionAPI:
         self.notion = Client(auth=NOTION_TOKEN)
         self.database_id = NOTION_DATABASE_ID
         self.course_db_id = COURSE_DATABASE_ID
-        self.course_mapping = self._get_course_mapping()
+        self.course_mapping = {}  # Initialize empty
+        self.course_name_mapping = {}  # For name→id mapping
+        self.last_mapping_refresh = None
+        self._refresh_course_mapping()  # Load on init
 
     @sleep_and_retry
     @limits(calls=MAX_REQUESTS_PER_SECOND, period=ONE_SECOND)
@@ -90,6 +93,50 @@ class NotionAPI:
             return dt.date()
             
         return dt
+    
+    def _refresh_course_mapping(self):
+        """Refresh the course mappings with timeout"""
+        try:
+            self.course_mapping = self._get_course_mapping()
+            # Also create a name-to-id mapping for fuzzy matching
+            self.course_name_mapping = self._get_course_name_mapping()
+            self.last_mapping_refresh = datetime.now()
+        except Exception as e:
+            logger.error(f"Failed to refresh course mappings: {e}")
+    
+    def _get_course_name_mapping(self) -> Dict[str, str]:
+        """Maps course names to Notion page UUIDs from the course database."""
+        mapping = {}
+        try:
+            response = self._make_notion_request(
+                "query_database",
+                database_id=self.course_db_id,
+                page_size=100
+            )
+            
+            for page in response.get('results', []):
+                try:
+                    notion_uuid = page['id']
+                    properties = page['properties']
+                    
+                    # Get the course name
+                    if 'Course Name' in properties and properties['Course Name'].get('title'):
+                        name = properties['Course Name']['title'][0]['text']['content']
+                        mapping[name.lower()] = notion_uuid
+                        # Also store common abbreviations or partial matches
+                        parts = name.split(' - ')
+                        if len(parts) > 1:
+                            course_code = parts[0].strip()
+                            mapping[course_code.lower()] = notion_uuid
+                except Exception as e:
+                    logger.warning(f"Error processing course page: {e}")
+                    continue
+        except Exception as e:
+            logger.error(f"Error building course name mapping: {e}")
+        
+        return mapping
+
+
     def get_course_id(self, course_name: str):
         """
         Get the Notion page UUID for a specific course name from the Notion database
@@ -397,91 +444,115 @@ class NotionAPI:
             logger.error(f"Error creating assignment {assignment.name} in Notion: {str(e)}")
             raise
 
-    def update_assignment(self, assignment: Assignment):
+    def update_assignment(self, update_data: Dict):
         """
-        Update an existing assignment in Notion from a Canvas assignment object.
+        Update specific fields of an existing assignment in Notion.
         
         Args:
-            assignment: Assignment object to update
+            update_data: Dictionary containing fields to update. 
+                         Must contain either 'id' or 'name' to identify the assignment.
         
         Returns:
-            None
+            None if successful, error message if failed
         """
         try:
-            existing_page = self.get_assignment_page(assignment.id)
-            if not existing_page:
-                logger.warning(f"No existing page found for assignment {assignment.id}, trying name")
-                existing_page = self.get_assignment_page(assignment.name)
-            if not existing_page:
-                logger.warning(f"No existing page found for assignment {assignment.name}")
-                return
+            # Check if we have an identifier to find the assignment
+            if 'id' not in update_data and 'name' not in update_data:
+                logger.error("Update data must contain either 'id' or 'name' to identify the assignment")
+                return "Update data must contain either 'id' or 'name' to identify the assignment"
                 
-            # Convert course_id to string and look up UUID
-            course_id_str = str(assignment.course_id)
-            course_uuid = self.course_mapping.get(course_id_str)
-            logger.debug(f"Looking up course {course_id_str} in mapping: {self.course_mapping}")
-
-            if not course_uuid:
-                return f"No Notion UUID found for course {course_id_str}"
+            # Get existing page
+            existing_page = None
+            if 'id' in update_data:
+                existing_page = self.get_assignment_page(update_data['id'])
             
-            # Parse due date using the helper
-            due_date = self._parse_date(assignment.due_date)
+            if existing_page is None and 'name' in update_data:
+                existing_page = self.get_assignment_page(update_data['name'])
+                
+            if existing_page is None:
+                identifier = update_data.get('id') or update_data.get('name')
+                logger.warning(f"No existing page found for assignment {identifier}")
+                return f"No existing page found for assignment {identifier}"
             
-            # Prepare properties
-            properties = {
-                "Assignment Title": {"title": [{"text": {"content": str(assignment.name)}}]},
-                "AssignmentID": {"number": int(assignment.id)},
-                "Description": {"rich_text": [{"text": {"content": self._clean_html(assignment.description)}}]},
-                "Course": {"relation": [{"id": course_uuid}]},
-                "Status": {"status": {"name": str(assignment.status)}},
-                "Assignment Group": {"select": {"name": assignment.group_name}} if assignment.group_name else None,
-                "Group Weight": {"number": assignment.group_weight} if assignment.group_weight is not None else None,
-            }
-
-            # Handle due date
-            if due_date:
-                properties["Due Date"] = {"date": {"start": due_date.isoformat()}}
-
-            # Handle priority
-            VALID_PRIORITIES = ["Low", "Medium", "High"]
-            if assignment.priority in VALID_PRIORITIES:
-                properties["Priority"] = {"select": {"name": assignment.priority}}
-            else:
-                properties["Priority"] = {"select": {"name": "Low"}}  # Default to Low
-
-            # Remove None values
-            properties = {k: v for k, v in properties.items() if v is not None}
+            # Initialize properties dictionary - we'll only add what's in update_data
+            properties = {}
             
-            # Handle grade
-            if assignment.grade is not None:
+            # Handle name/title update
+            if 'name' in update_data:
+                properties["Assignment Title"] = {"title": [{"text": {"content": str(update_data['name'])}}]}
+            
+            # Handle description update
+            if 'description' in update_data:
+                properties["Description"] = {"rich_text": [{"text": {"content": self._clean_html(update_data['description'])}}]}
+            
+            # Handle course update
+            if 'course_id' in update_data:
+                course_id_str = str(update_data['course_id'])
+                course_uuid = self.course_mapping.get(course_id_str)
+                if not course_uuid:
+                    logger.warning(f"No Notion UUID found for course {course_id_str}")
+                    return f"No Notion UUID found for course {course_id_str}"
+                properties["Course"] = {"relation": [{"id": course_uuid}]}
+            
+            # Handle status update
+            if 'status' in update_data:
+                properties["Status"] = {"status": {"name": str(update_data['status'])}}
+            
+            # Handle due date update
+            if 'due_date' in update_data:
+                due_date = self._parse_date(update_data['due_date'])
+                if due_date:
+                    properties["Due Date"] = {"date": {"start": due_date.isoformat()}}
+            
+            # Handle assignment group update
+            if 'group_name' in update_data and update_data['group_name']:
+                properties["Assignment Group"] = {"select": {"name": update_data['group_name']}}
+            
+            # Handle group weight update
+            if 'group_weight' in update_data and update_data['group_weight'] is not None:
+                properties["Group Weight"] = {"number": update_data['group_weight']}
+            
+            # Handle priority update
+            if 'priority' in update_data:
+                VALID_PRIORITIES = ["Low", "Medium", "High"]
+                priority = update_data['priority']
+                if priority in VALID_PRIORITIES:
+                    properties["Priority"] = {"select": {"name": priority}}
+                else:
+                    properties["Priority"] = {"select": {"name": "Low"}}  # Default to Low
+            
+            # Handle grade update
+            if 'grade' in update_data and update_data['grade'] is not None:
                 try:
-                    properties["Grade (%)"] = {"number": float(assignment.grade)}
+                    properties["Grade (%)"] = {"number": float(update_data['grade'])}
+                    # Only set status to "Mark received" if we're updating the grade and not already setting status
+                    if 'status' not in update_data:
+                        properties["Status"] = {"status": {"name": "Mark received"}}
                 except (ValueError, TypeError):
-                    logger.warning(f"Invalid grade format for assignment {assignment.name}: {assignment.grade}")
-                    if hasattr(assignment, "mark") and assignment.mark is not None:
-                        try:
-                            properties["Status"] = {"status": {"name": "Mark received"}}
-                        except (ValueError, TypeError):
-                            logger.warning(f"Invalid mark format for assignment {assignment.name}: {assignment.mark}")
+                    logger.warning(f"Invalid grade format: {update_data['grade']}")
             
-            # Check status and handle special cases
+            # Check if we have anything to update
+            if not properties:
+                logger.info("No properties to update")
+                return "No properties to update"
+            
+            # Check current status for special cases
             current_status = existing_page["properties"]["Status"]["status"]["name"]
-            if current_status == "Dont show":
-                logger.info(f"Skipping update for {assignment.name} due to 'Dont show' status")
-                return
-            elif current_status == "In progress":
-                logger.info(f"Preserving 'In progress' status for {assignment.name}")
+            if current_status == "Dont show" and 'status' not in update_data:
+                logger.info(f"Skipping update due to 'Dont show' status")
+                return "Skipping update due to 'Dont show' status"
+            elif current_status == "In progress" and 'status' not in update_data:
+                # Don't change the status if it's currently "In progress" unless explicitly requested
                 properties.pop("Status", None)
-            else:
-                if assignment.grade is not None:
-                    properties["Status"] = {"status": {"name": "Mark received"}}
             
-            logger.info(f"Updating existing assignment: {assignment.name}")
+            logger.info(f"Updating assignment fields: {', '.join(properties.keys())}")
             self._make_notion_request(
                 "update_page",
                 page_id=existing_page["id"],
                 properties=properties
             )
+            return None
         except Exception as e:
-            logger.error(f"Error updating assignment {assignment.name} in Notion: {str(e)}")
+            identifier = update_data.get('id') or update_data.get('name', 'Unknown')
+            logger.error(f"Error updating assignment {identifier} in Notion: {str(e)}")
             raise
