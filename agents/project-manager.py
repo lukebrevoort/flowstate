@@ -8,13 +8,15 @@ from langchain.agents.format_scratchpad.openai_tools import (
 from langchain.agents.output_parsers.openai_tools import OpenAIToolsAgentOutputParser
 from langchain.agents import AgentExecutor
 from langchain.memory import ConversationBufferMemory
+from langchain.chains import LLMChain
+from langchain.prompts import PromptTemplate
 from notion_client import Client
 import os, sys
 # Add the parent directory to the path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from agents.notion_api import NotionAPI, Assignment
 import dotenv
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, Union
 import traceback
 import logging
@@ -159,7 +161,7 @@ def find_assignment(query: str):
     }
 
 @tool
-def create_assignment_item(assignment_dict):
+def create_assignment_item(assignment_dict: Dict[str, Any]):
     """
     Create a assignment in Notion that follows the imported Assignment schema. 
     Below is an example of the schema:
@@ -273,27 +275,231 @@ def update_assignment(name: str, priority: str = None, status: str = None,
         # Log the error and return a message
         logger.error(f"Error updating assignment: {e}")
         return f"Failed to update assignment: {e}"
+    
+
+time_prompt = PromptTemplate.from_template("""
+Given an {assignment}, give an Estimated Time of Completion. This should consider the following factors:
+- Due date: {due_date} 
+- Description: {description}
+- Current progress: {status}
+- Assignment Notes: {notes}
+
+The time should be in hours and minutes, and should be a rough estimate.
+The output should be a simple string with the time in the format "X hours Y minutes" with some explaination as to why.
+For example:
+"Based on the current progress and the due date, I estimate that it will take approximately 3 hours and 30 minutes to complete this assignment. 
+This includes time for research, writing, and editing. Would you like me to create subtasks for this assignment?"                                                                                
+""")
 
 @tool
-def estimate_completion_time():
+def estimate_completion_time(assignment_dict):
     """
-    Estimate total time of completion for each assignment
+    Generate an estimated time of completion given an assignment dictionary.
+
+    Args:
+        assignment_dict: Dictionary containing assignment details.
+        MUST INCLUDE 'name', 'due_date', 'status', and 'description'.
+
+    Returns:
+        Estimated time of completion as a string.
     """
+    chain = time_prompt | llm
+
+    # Get the current time
+    current_time = datetime.now()
+
+    estimated_time = chain.invoke({
+        "assignment": assignment_dict['name'],
+        "due_date": assignment_dict['due_date'],
+        "status": assignment_dict.get('status', 'Not started'),
+        "description": assignment_dict.get('description', ''),
+        "notes": get_assignment_notes(assignment_dict['name'])
+    })
+
+    if estimated_time:
+        return estimated_time.content
+    else:
+        logger.error("Failed to estimate completion time.")
+        return "Failed to estimate completion time."
+
+    
     pass
 
-@tool
-def create_subtasks(assignment):
+subtask_prompt = PromptTemplate.from_template("""
+Break down {assignment} into subtasks considering:
+- Current date: {current_date}
+- Due date: {due_date}
+- Current progress: {status}
+- Description: {description}
+- Assignment Notes: {notes}
+
+Create NO MORE THAN 5 subtasks that are manageable and specific.
+The Due Dates for the each subtask should be set to some time BEFORE the due date of the assignment, but AFTER the current time.
+Return ONLY a simple list of subtask names, one per line, with no additional formatting.
+
+Common subtasks for assignments include:
+- For essays: Research topic, Create outline, Write first draft, Edit draft, Finalize citations
+- For exams: Review lecture notes, Create study guide, Take practice exams, Review weak areas
+- For projects: Research topic, Create project plan, Gather materials, Implementation, Final review
+""")
+
+def create_subtask_assignment(assignment_dict):
     """
-    Create substasks for each assignment
+    Create a subtask in Notion that follows the imported Assignment schema. 
+    Below is an example of the schema:
+
+    assignment = Assignment(
+        name="Midterm Research Paper",
+        description="<p>Write a 10-page research paper on a topic of your choice.</p>",
+        course_id=77456,  # Maps to a Notion course page via course_mapping
+        status="Not started",
+        due_date="2025-04-15T23:59:00Z",
+        id=67890,
+        priority="High",
+        group_name="Papers",
+        group_weight=30.0,
+        grade=None
+    )
+
+
+    returns the created assignment object
+    
     """
-    pass
+    if isinstance(assignment_dict, dict):
+        assignment = Assignment(
+            name=assignment_dict.get('name'),
+            description=assignment_dict.get('description'),
+            course_id=assignment_dict.get('course_id'),
+            course_name=assignment_dict.get('course_name'),
+            status=assignment_dict.get('status', 'Not started'),
+            due_date=assignment_dict.get('due_date'),
+            id=assignment_dict.get('id'),
+            priority=assignment_dict.get('priority', 'Medium'),
+            group_name=assignment_dict.get('group_name'),
+            group_weight=assignment_dict.get('group_weight'),
+            grade=assignment_dict.get('grade')
+        )
+    else:
+        assignment = assignment_dict
+        
+    notion_api = NotionAPI()
+    print(f"Creating assignment with due date: {assignment.due_date}"); notion_api.create_assignment(assignment)
+    return assignment
 
 @tool
-def generate_schedule():# For the future
+def create_subtasks(assignment_dict):
     """
-    Generate a schedule/study plan for each project
+    Create subtasks for a given assignment and add them to Notion.
+
+    Args:
+        assignment: Dictionary containing assignment details.
+
+    Returns:
+        List of subtask dictionaries ready to be created in Notion.
     """
-    pass
+    try:
+        chain = subtask_prompt | llm
+
+        if 'current_date' not in assignment_dict:
+            current_time = datetime.now()
+            assignment_dict['current_date'] = current_time.isoformat()
+        
+        # Get subtasks from LLM
+        subtasks_result = chain.invoke({
+            "assignment": assignment_dict['name'],
+            "current_date": assignment_dict['current_date'],
+            "due_date": assignment_dict['due_date'],
+            "status": assignment_dict.get('status', 'Not started'),
+            "description": assignment_dict.get('description', ''),
+            "notes": get_assignment_notes(assignment_dict['name'])
+        })
+        
+        # Parse the LLM output into a list of subtask names
+        subtask_names = subtasks_result.content.strip().split('\n')
+        
+        # Calculate time gap for evenly spaced subtasks
+        from dateutil import parser
+        import random
+        import pytz
+        from datetime import datetime, time
+        
+        # Parse dates and ensure both have timezone information
+        start_date = parser.parse(assignment_dict['current_date'])
+        due_date = parser.parse(assignment_dict['due_date'])
+            
+        # Calculate the number of days between start and due date
+        days_span = (due_date.date() - start_date.date()).days
+        
+        # Calculate time span with consistent timezone information
+        time_span = (due_date - start_date).total_seconds()
+        time_step = time_span / (len(subtask_names) + 1)
+        
+        # Create a list of dictionaries for each subtask
+        subtask_dicts = []
+        for i, subtask_name in enumerate(subtask_names):
+            subtask_due = start_date + timedelta(seconds=(i+1) * time_step)
+            
+            # Round to the nearest half hour
+            minute = subtask_due.minute
+            if minute < 15:
+                # Round down to the hour
+                subtask_due = subtask_due.replace(minute=0, second=0, microsecond=0)
+            elif 15 <= minute < 45:
+                # Round to half past the hour
+                subtask_due = subtask_due.replace(minute=30, second=0, microsecond=0)
+            else:
+                # Round up to the next hour
+                subtask_due = subtask_due.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+            
+            # Format the datetime as an ISO string with timezone
+            if subtask_due.tzinfo is None:
+                subtask_due_str = subtask_due.isoformat() + 'Z'
+            else:
+                subtask_due_str = subtask_due.isoformat()
+            
+            # Create subtask dictionary with necessary fields
+            subtask_dict = {
+                'name': f"{subtask_name} - {assignment_dict['name']}",
+                'description': f"<p>Subtask for: {assignment_dict['name']}</p>",
+                'course_id': assignment_dict.get('course_id'),
+                'course_name': assignment_dict.get('course_name'),
+                'status': 'Not started',
+                'due_date': subtask_due_str,
+                'id': int(f"{assignment_dict.get('id')}_{i+1}") if assignment_dict.get('id') and str(assignment_dict.get('id')).isdigit() else random.randint(100000, 999999),              
+                'priority': assignment_dict.get('priority', 'Medium'),
+                'group_name': "Subtasks",
+                'group_weight': None,
+                'grade': None,
+                'parent_assignment': assignment_dict.get('id')
+            }
+            subtask_dicts.append(subtask_dict)
+        
+        # Create each subtask in Notion
+        for subtask in subtask_dicts:
+            create_subtask_assignment(subtask)
+        return subtask_dicts
+    except Exception as e:
+        logger.error(f"Error creating subtasks: {e}")
+        return f"Failed to create subtasks: {e}"
+
+@tool
+def get_assignment_notes(assignment_name: str):
+    """
+    Get notes from an assignment by name
+    
+    Args:
+        assignment_name: Name of the assignment to retrieve notes from
+        
+    Returns:
+        Notes associated with the assignment
+    """
+    notion_api = NotionAPI()
+    notes = notion_api.get_assignment_notes(assignment_name)
+    
+    if notes:
+        return notes
+    else:
+        return f"No assignment found with the name '{assignment_name}'"
 
 # Create the agent
 llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
@@ -309,6 +515,9 @@ tools = [
     parse_relative_datetime, 
     update_assignment,
     find_assignment,
+    create_subtasks,
+    get_assignment_notes,
+    estimate_completion_time,
     ]
 
 # Create a memory instance
@@ -360,12 +569,24 @@ For finding course names and course IDs:
 - Use get_course_info with course_name or None for all courses
 - If course_name is not found, return all course names
 
+For creating subtasks:
+- Use create_subtasks with the assignment dictionary
+- Subtasks should be manageable and specific
+- Due dates should be staggered before the main assignment's due date
+- Example: create_subtasks(assignment_dict)
+- Returns a list of subtask dictionaries
+- Each subtask should have a name, description, due_date, etc.
+- Example: {{"name": "Research Topic", "description": "Research for the midterm paper", "due_date": "2025-04-10T23:59:00Z", current_date: "2025-04-01T12:00:00Z"}}
+
 Common user requests and proper tool usage:
 - "Show all my assignments" → use retrive_all_assignments
 - "Update assignment X to status Y" → use update_assignment with name="X", status="Y"
 - "Find my biology homework" → use find_assignment with "biology homework"
 - "Create new assignment due tomorrow" → use get_current_time, then parse_relative_datetime, then create_assignment_item
 - "Set priority of X to high" → use update_assignment with name="X", priority="High"
+- "Create subtasks for X" → use create_subtasks with assignment_dict 
+- "What is the estimated time for X?" → use find assignment with "X", then estimate_completion_time with assignment_dict
+- "Get notes for X" → use get_assignment_notes with "X"
 
 ALWAYS verify you have the correct formatting for dictionary parameters before calling any tool.
 """

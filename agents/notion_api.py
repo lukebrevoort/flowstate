@@ -69,6 +69,10 @@ class NotionAPI:
             return self.notion.pages.update(**kwargs)
         elif operation_type == "create_page":
             return self.notion.pages.create(**kwargs)
+        elif operation_type == "blocks/children/list":
+            return self.notion.blocks.children.list(**kwargs)
+        elif operation_type == "blocks/children/append":
+            return self.notion.blocks.children.append(**kwargs)
         raise ValueError(f"Unknown operation type: {operation_type}")
     
     def _parse_date(self, date_str) -> Optional[datetime]:
@@ -340,9 +344,20 @@ class NotionAPI:
                     
                     # Extract course relation ID
                     course_id = ""
+                    notion_course_id = ""
                     course_property = properties.get('Course', {}).get('relation', [])
                     if course_property and len(course_property) > 0:
-                        course_id = course_property[0].get('id', "")
+                        notion_course_id = course_property[0].get('id', "")
+                        
+                        # Try to map the Notion UUID back to a Canvas course ID
+                        for canvas_id, notion_uuid in self.course_mapping.items():
+                            if notion_uuid == notion_course_id:
+                                course_id = canvas_id
+                                break
+                        
+                        # If no mapping found, fall back to the Notion UUID
+                        if not course_id:
+                            course_id = notion_course_id
                     
                     # Create simplified assignment object
                     simplified_assignment = {
@@ -383,7 +398,7 @@ class NotionAPI:
 
             if not course_uuid:
                 logger.warning(f"No Notion UUID found for course {course_id_str}")
-                return f"No Notion UUID found for course {course_id_str}"
+                raise ValueError(f"No Notion UUID found for course {course_id_str}")
             
             # Parse due date using the helper
             due_date = self._parse_date(assignment.due_date)
@@ -556,3 +571,177 @@ class NotionAPI:
             identifier = update_data.get('id') or update_data.get('name', 'Unknown')
             logger.error(f"Error updating assignment {identifier} in Notion: {str(e)}")
             raise
+
+    def get_assignment_notes(self, assignment_id_or_name):
+        """
+        Retrieve and parse notes from an assignment page in Notion.
+        
+        Args:
+            assignment_id_or_name: Either Canvas assignment ID (int) or assignment name (str)
+            
+        Returns:
+            Structured dictionary of the assignment content
+        """
+        try:
+            # Get the page
+            page = self.get_assignment_page(assignment_id_or_name)
+            if not page:
+                logger.warning(f"No assignment page found for {assignment_id_or_name}")
+                return None
+                
+            # Get the complete page content with nested blocks
+            content = self.get_complete_page_content(page['id'])
+            
+            # Parse into a more user-friendly structure
+            structured_content = self._parse_content_structure(content)
+            
+            return structured_content
+        
+        except Exception as e:
+            logger.error(f"Error getting notes for assignment {assignment_id_or_name}: {str(e)}")
+            return None
+    
+    def get_complete_page_content(self, page_id):
+        """
+        Get the complete content of a page, including all nested blocks.
+        
+        Args:
+            page_id: ID of the Notion page
+        
+        Returns:
+            Complete hierarchical structure of the page
+        """
+        try:
+            all_blocks = []
+            has_more = True
+            cursor = None
+            
+            # Get all top-level blocks with pagination
+            while has_more:
+                params = {"block_id": page_id}
+                if cursor:
+                    params["start_cursor"] = cursor
+                    
+                response = self._make_notion_request(
+                    "blocks/children/list",
+                    **params
+                )
+                
+                all_blocks.extend(response.get('results', []))
+                has_more = response.get('has_more', False)
+                cursor = response.get('next_cursor')
+            
+            # Process each block to fetch its children
+            return self._process_blocks_recursively(all_blocks)
+                
+        except Exception as e:
+            logger.error(f"Error retrieving complete page content for {page_id}: {str(e)}")
+            return []
+    
+    def _process_blocks_recursively(self, blocks):
+        """
+        Process blocks recursively to fetch all children.
+        
+        Args:
+            blocks: List of blocks to process
+            
+        Returns:
+            Processed blocks with all children included
+        """
+        processed_blocks = []
+        
+        for block in blocks:
+            # Create a copy of the block
+            processed_block = dict(block)
+            
+            # If the block has children, fetch them
+            if block.get('has_children', False):
+                children = self._make_notion_request(
+                    "blocks/children/list",
+                    block_id=block['id']
+                ).get('results', [])
+                
+                # Process children recursively
+                processed_block['children'] = self._process_blocks_recursively(children)
+            
+            processed_blocks.append(processed_block)
+        
+        return processed_blocks
+    
+    def _parse_content_structure(self, blocks):
+        """
+        Parse raw Notion blocks into a more usable structure.
+        
+        Args:
+            blocks: Raw Notion blocks
+            
+        Returns:
+            Structured content dictionary
+        """
+        result = []
+        
+        for block in blocks:
+            block_type = block.get('type')
+            block_data = {
+                'type': block_type
+            }
+            
+            # Extract text content based on block type
+            if block_type in ['paragraph', 'heading_1', 'heading_2', 'heading_3', 
+                             'bulleted_list_item', 'numbered_list_item', 'to_do']:
+                rich_text = block.get(block_type, {}).get('rich_text', [])
+                block_data['text'] = self._extract_text_from_rich_text(rich_text)
+                
+                # Add checked state for to-do items
+                if block_type == 'to_do':
+                    block_data['checked'] = block.get('to_do', {}).get('checked', False)
+            
+            # Handle image blocks
+            elif block_type == 'image':
+                image_obj = block.get('image', {})
+                if 'file' in image_obj:
+                    block_data['url'] = image_obj['file'].get('url')
+                elif 'external' in image_obj:
+                    block_data['url'] = image_obj['external'].get('url')
+                    
+                caption = image_obj.get('caption', [])
+                if caption:
+                    block_data['caption'] = self._extract_text_from_rich_text(caption)
+            
+            # Handle code blocks
+            elif block_type == 'code':
+                code_obj = block.get('code', {})
+                rich_text = code_obj.get('rich_text', [])
+                block_data['text'] = self._extract_text_from_rich_text(rich_text)
+                block_data['language'] = code_obj.get('language', 'plain text')
+            
+            # Add children if present
+            if 'children' in block and block['children']:
+                block_data['children'] = self._parse_content_structure(block['children'])
+            
+            result.append(block_data)
+        
+        return result
+    
+    def _extract_text_from_rich_text(self, rich_text):
+
+        """
+        Extract plain text from Notion's rich_text format
+        
+        Args:
+            rich_text: List of Notion rich_text objects
+            
+        Returns:
+            Concatenated plain text string
+        """
+        if not rich_text:
+            return ""
+            
+        text_parts = []
+        for text_obj in rich_text:
+            if isinstance(text_obj, dict) and 'text' in text_obj and 'content' in text_obj['text']:
+                text_parts.append(text_obj['text']['content'])
+        
+        return "".join(text_parts)
+    
+    
