@@ -125,8 +125,12 @@ def get_calendar_timezone(calendar_id="primary") -> str:
     Returns:
     - Timezone of the calendar
     """
-    calendar = service.calendars().get(calendarId=calendar_id).execute()
-    return calendar['timeZone']
+    try:
+        calendar = service.calendars().get(calendarId=calendar_id).execute()
+        return calendar['timeZone']
+    except Exception as e:
+        logger.error(f"Error getting calendar timezone: {str(e)}")
+        return f"Error getting calendar timezone: {str(e)}"
 
 @tool
 def get_current_time() -> str:
@@ -136,7 +140,11 @@ def get_current_time() -> str:
     Returns:
     - Current date and time
     """
-    return datetime.now().isoformat()
+    try:
+        return datetime.now().isoformat()
+    except Exception as e:
+        logger.error(f"Error getting current time: {str(e)}")
+        return f"Error getting current time: {str(e)}"
 
 @tool 
 def get_relative_time(start_date: Optional[Union[str, datetime, date]] = None) -> List[Dict[datetime, str]]:
@@ -190,12 +198,16 @@ def get_calendar_mapping():
     Returns:
     - Mapping of calendar names to calendar IDs
     """
-    results = service.calendarList().list().execute()
-    calendars = results.get('items', [])
-    calendar_mapping = {}
-    for calendar in calendars:
-        calendar_mapping[calendar['summary']] = calendar['id']
-    return calendar_mapping
+    try:
+        results = service.calendarList().list().execute()
+        calendars = results.get('items', [])
+        calendar_mapping = {}
+        for calendar in calendars:
+            calendar_mapping[calendar['summary']] = calendar['id']
+        return calendar_mapping
+    except Exception as e:
+        logger.error(f"Error getting calendar mapping: {str(e)}")
+        return f"Error getting calendar mapping: {str(e)}"
 
 @tool
 def get_events(start_date: str, end_date: str, calendar_id="default") -> List[Dict[str, Any]]:
@@ -210,38 +222,39 @@ def get_events(start_date: str, end_date: str, calendar_id="default") -> List[Di
     Returns:
     - List of events with all details
     """
+    try:
+        if not (start_date.endswith('Z') or '+' in start_date or '-' in start_date[10:]):
+            start_date = start_date + 'Z'
+        if not (end_date.endswith('Z') or '+' in end_date or '-' in end_date[10:]):
+            end_date = end_date + 'Z'
 
-    if not (start_date.endswith('Z') or '+' in start_date or '-' in start_date[10:]):
-        start_date = start_date + 'Z'
-    if not (end_date.endswith('Z') or '+' in end_date or '-' in end_date[10:]):
-        end_date = end_date + 'Z'
+        if calendar_id == "default":
+            all_events = []
 
-    
-    if calendar_id == "default":
-        all_events = []
+            # Get all the calendars the user has access to
+            results = service.calendarList().list().execute()
+            calendars = results.get('items', [])
+            for calendar in calendars:
+                print(f"Checking calendar: {calendar['summary']}")
+                calendar_id = calendar['id']
+                events_result = service.events().list(calendarId=calendar_id, timeMin=start_date, timeMax=end_date, 
+                                                singleEvents=True,
+                                                orderBy='startTime').execute()
+                
+                events = events_result.get('items', [])
+                all_events.extend(events)
 
-        # Get all the calendars the user has access to
-        results = service.calendarList().list().execute()
-        calendars = results.get('items', [])
-        for calendar in calendars:
-            print(f"Checking calendar: {calendar['summary']}")
-            calendar_id = calendar['id']
+            return all_events
+        else:
             events_result = service.events().list(calendarId=calendar_id, timeMin=start_date, timeMax=end_date, 
                                             singleEvents=True,
                                             orderBy='startTime').execute()
-            
             events = events_result.get('items', [])
-            all_events.extend(events)
 
-        return all_events
-    else:
-        events_result = service.events().list(calendarId=calendar_id, timeMin=start_date, timeMax=end_date, 
-                                        singleEvents=True,
-                                        orderBy='startTime').execute()
-        events = events_result.get('items', [])
-
-        return events
-    
+            return events
+    except Exception as e:
+        logger.error(f"Error getting events: {str(e)}")
+        return f"Error getting events: {str(e)}"
 
 @tool
 def create_event(calendar_event: CalendarEvent, calendar_id: str = 'primary') -> str:
@@ -255,73 +268,99 @@ def create_event(calendar_event: CalendarEvent, calendar_id: str = 'primary') ->
     Returns:
     - Link to the created event
     """
-    timezone = get_calendar_timezone(calendar_id)
-    calendar_event.start['timeZone'] = timezone
-    calendar_event.end['timeZone'] = timezone
+    try:
 
-    # Convert the CalendarEvent object to a dictionary for the API
-    event = {
-        'summary': calendar_event.summary,
-        'location': calendar_event.location,
-        'description': calendar_event.description,
-        'start': calendar_event.start,
-        'end': calendar_event.end,
-        'reminders': calendar_event.reminders
-    }
-    
-    # Add optional fields if they exist
-    if calendar_event.recurrence:
-        event['recurrence'] = calendar_event.recurrence
-    if calendar_event.attendees:
-        event['attendees'] = [{'email': attendee} for attendee in calendar_event.attendees]
-    if calendar_event.conference_data:
-        event['conferenceData'] = calendar_event.conference_data
-    
-    # Create the event
-    event_result = service.events().insert(calendarId=calendar_id, body=event).execute()
-    return f"Event created: {event_result['htmlLink']}"
+        timezone = get_calendar_timezone(calendar_id)
+        calendar_event.start['timeZone'] = timezone
+        calendar_event.end['timeZone'] = timezone
 
-def update_event(event_id: str, event: CalendarEvent):
+        # Convert the CalendarEvent object to a dictionary for the API
+        event = {
+            'summary': calendar_event.summary,
+            'location': calendar_event.location,
+            'description': calendar_event.description,
+            'start': calendar_event.start,
+            'end': calendar_event.end,
+            'reminders': calendar_event.reminders
+        }
+        
+        # Add optional fields if they exist
+        if calendar_event.recurrence:
+            event['recurrence'] = calendar_event.recurrence
+        if calendar_event.attendees:
+            event['attendees'] = [{'email': attendee} for attendee in calendar_event.attendees]
+        if calendar_event.conference_data:
+            event['conferenceData'] = calendar_event.conference_data
+        
+        # Create the event
+        event_result = service.events().insert(calendarId=calendar_id, body=event).execute()
+        return f"Event created: {event_result['htmlLink']}"
+    except Exception as e:
+        logger.error(f"Error creating event: {str(e)}")
+        return f"Error creating event: {str(e)}"
+
+@tool
+def update_event(event_id: str, event: CalendarEvent, calendar_id: str = 'primary') -> str:
     """
-    Udates existing event on the user's Google Calendar with new details.
+    Updates existing event on the user's Google Calendar with new details.
 
     Args:
     - event_id: ID of the event to update
     - event: A CalendarEvent object containing updated event details
+    - calendar_id: ID of the calendar to update the event in (defaults to primary)
 
     Returns:
     - Link to the updated event
     """
-    updated_event = {
-        'summary': event.summary,
-        'location': event.location,
-        'description': event.description,
-        'start': event.start,
-        'end': event.end,
-        'reminders': event.reminders
-    }
+    try:
+        updated_event = {
+            'summary': event.summary,
+            'location': event.location,
+            'description': event.description,
+            'start': event.start,
+            'end': event.end,
+            'reminders': event.reminders
+        }
 
-    if event.recurrence:
-        updated_event['recurrence'] = event.recurrence
-    if event.attendees:
-        updated_event['attendees'] = [{'email': attendee} for attendee in event.attendees]
-    if event.conference_data:
-        updated_event['conferenceData'] = event.conference_data
+        if event.recurrence:
+            updated_event['recurrence'] = event.recurrence
+        if event.attendees:
+            updated_event['attendees'] = [{'email': attendee} for attendee in event.attendees]
+        if event.conference_data:
+            updated_event['conferenceData'] = event.conference_data
 
-    # Update the event
-    existing_event = service.events().get(calendarId='primary', eventId=event_id).execute()
-    print(f"Existing event ID: {existing_event['id']}")
+        # Update the event
+        existing_event = service.events().get(calendarId=calendar_id, eventId=event_id).execute()
+        print(f"Existing event ID: {existing_event['id']}")
 
-    # Make sure your updated_event contains the same ID
-    updated_event['id'] = event_id
+        # Make sure your updated_event contains the same ID
+        updated_event['id'] = event_id
 
-    # Now try the update
-    event_result = service.events().update(calendarId='primary', eventId=event_id, body=updated_event).execute()
-    return f"Event updated: {event_result['htmlLink']}"
+        # Now try the update
+        event_result = service.events().update(calendarId=calendar_id, eventId=event_id, body=updated_event).execute()
+        return f"Event updated: {event_result['htmlLink']}"
+    except Exception as e:
+        logger.error(f"Error updating event: {str(e)}")
+        return f"Error updating event: {str(e)}. The event may not exist, or you may not have permission to update it."
 
+@tool
+def delete_event(event_id: str, calendar_id: str = 'primary') -> str:
+    """
+    Deletes an event from the user's Google Calendar.
 
-def delete_event(event_id: str):
-    return
+    Args:
+    - event_id: ID of the event to delete
+    - calendar_id: ID of the calendar to delete the event from (defaults to primary)
+
+    Returns:
+    - Confirmation message
+    """
+    try:
+        service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
+        return f"Event with ID {event_id} was successfully deleted."
+    except Exception as e:
+        logger.error(f"Error deleting event: {str(e)}")
+        return f"Error deleting event: {str(e)}. The event may not exist, or you may not have permission to delete it."
 
 @tool
 def find_event(event_name: str, timeMin=None, timeMax=None):
@@ -336,29 +375,162 @@ def find_event(event_name: str, timeMin=None, timeMax=None):
     Returns:
     - Event details
     """
-    if timeMin is None:
-        timeMin = datetime.now().isoformat()
-    if timeMax is None:
-        timeMax = (datetime.now() + timedelta(days=7)).isoformat()
-    
-    # Get all calendars
-    calendar_mapping = get_calendar_mapping.invoke({})
-    matched_events = []
-    
-    for calendar_name, calendar_id in calendar_mapping.items():
-        events_result = service.events().list(calendarId=calendar_id, q=event_name).execute()
-        matched_events.extend(events_result.get('items', []))
-    
-    if not matched_events:
-        return f"No events matching '{event_name}' found in the specified time range."
-    
-    return matched_events
+    try:
+        if timeMin is None:
+            timeMin = datetime.now().isoformat()
+        if timeMax is None:
+            timeMax = (datetime.now() + timedelta(days=7)).isoformat()
+        
+        # Get all calendars
+        calendar_mapping = get_calendar_mapping.invoke({})
+        matched_events = []
+        
+        for calendar_name, calendar_id in calendar_mapping.items():
+            events_result = service.events().list(calendarId=calendar_id, q=event_name).execute()
+            matched_events.extend(events_result.get('items', []))
+        
+        if not matched_events:
+            return f"No events matching '{event_name}' found in the specified time range."
+        
+        return matched_events
+    except Exception as e:
+        logger.error(f"Error finding event: {str(e)}")
+        return f"Error finding event: {str(e)}"
 
-def get_event_details(event_id: str):
-    return
+@tool
+def find_available_time_slots(start_date: str, end_date: str, duration_minutes: int = 60) -> List[str]:
+    """
+    Finds available time slots in the user's calendar using Google Calendar's freebusy API.
+    
+    Args:
+    - start_date: Start date in ISO format
+    - end_date: End date in ISO format
+    - duration_minutes: Minimum duration needed for the slot in minutes (default 60)
 
-def estimate_completion_time(event: Dict[str, Any]):
-    return
+    Returns:
+    - List of available time slots
+    """
+    try:
+        if not (start_date.endswith('Z') or '+' in start_date or '-' in start_date[10:]):
+            start_date = start_date + 'Z'
+        if not (end_date.endswith('Z') or '+' in end_date or '-' in end_date[10:]):
+            end_date = end_date + 'Z'
+        
+        # Get all calendars
+        calendar_ids = []
+        results = service.calendarList().list().execute()
+        calendars = results.get('items', [])
+        for calendar in calendars:
+            calendar_ids.append(calendar['id'])
+        
+        # Set up freebusy query
+        body = {
+            "timeMin": start_date,
+            "timeMax": end_date,
+            "items": [{"id": calendar_id} for calendar_id in calendar_ids]
+        }
+        
+        # Query for busy times
+        freebusy_response = service.freebusy().query(body=body).execute()
+        
+        # Process the response to find free slots
+        busy_slots = []
+        for calendar_id, calendar_data in freebusy_response['calendars'].items():
+            busy_slots.extend(calendar_data.get('busy', []))
+        
+        # Sort busy slots by start time
+        busy_slots.sort(key=lambda x: x['start'])
+        
+        # Find gaps between busy slots (free time)
+        available_slots = []
+        current_time = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+        end_time = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        
+        for busy in busy_slots:
+            busy_start = datetime.fromisoformat(busy['start'].replace('Z', '+00:00'))
+            busy_end = datetime.fromisoformat(busy['end'].replace('Z', '+00:00'))
+            
+            # Add a free slot if there's enough time before the busy slot
+            slot_duration = (busy_start - current_time).total_seconds() / 60
+            if slot_duration >= duration_minutes:
+                available_slots.append(f"Available from {current_time.strftime('%A, %b %d, %I:%M %p')} to {busy_start.strftime('%I:%M %p')}")
+            
+            # Move current time to the end of the busy slot
+            current_time = max(current_time, busy_end)
+        
+        # Check if there's free time after the last busy slot
+        if (end_time - current_time).total_seconds() / 60 >= duration_minutes:
+            available_slots.append(f"Available from {current_time.strftime('%A, %b %d, %I:%M %p')} to {end_time.strftime('%I:%M %p')}")
+        
+        return available_slots if available_slots else ["No available slots found that match your criteria."]
+        
+    except Exception as e:
+        logger.error(f"Error finding available time slots: {str(e)}")
+        return [f"Error finding available time slots: {str(e)}"]
+    
+# Add this after the other tool functions and before the agent creation
+def day_name_to_date(day_name: str) -> datetime:
+    """
+    Helper function to convert day names to actual dates using the next occurrence.
+    
+    Args:
+    - day_name: Name of the day (e.g., "Monday", "Tuesday")
+    
+    Returns:
+    - Datetime object for the next occurrence of that day
+    """
+    # Get current date
+    today = datetime.now().date()
+    day_mapping = {
+        'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3,
+        'friday': 4, 'saturday': 5, 'sunday': 6
+    }
+    
+    today_weekday = today.weekday()
+    target_weekday = day_mapping[day_name.lower()]
+    
+    # Calculate days to add
+    days_ahead = (target_weekday - today_weekday) % 7
+    if days_ahead == 0:  # If it's the same day, get next week
+        days_ahead = 7
+        
+    target_date = today + timedelta(days=days_ahead)
+    return datetime.combine(target_date, datetime.min.time())
+
+@tool
+def validate_date_day_mapping(target_date: Union[str, datetime], day_name: str) -> bool:
+    """
+    Validates that a specific date corresponds to the expected day of the week.
+    
+    Args:
+    - target_date: The date to validate (string or datetime)
+    - day_name: Expected day name (e.g., "Monday", "Tuesday")
+    
+    Returns:
+    - True if the date corresponds to the expected day, False otherwise
+    """
+    try:
+        # Parse date if it's a string
+        if isinstance(target_date, str):
+            try:
+                parsed_date = datetime.fromisoformat(target_date)
+            except ValueError:
+                try:
+                    parsed_date = datetime.strptime(target_date, "%Y-%m-%d")
+                except ValueError:
+                    return False
+        else:
+            parsed_date = target_date
+        
+        # Get the day of week for the date
+        actual_day = parsed_date.strftime('%A').lower()
+        expected_day = day_name.lower()
+        
+        return actual_day == expected_day
+    except Exception as e:
+        logger.error(f"Error validating date-day mapping: {str(e)}")
+        return False
+
 
 
 
@@ -375,6 +547,10 @@ tools = [
     get_calendar_timezone,
     find_event,
     get_relative_time,
+    update_event,
+    delete_event,
+    find_available_time_slots,
+    validate_date_day_mapping,
     ]
 
 # Create a memory instance
@@ -412,7 +588,6 @@ When getting schedules for a specific calendar, use the following format:
 - The time range should be in ISO 8601 format such as 2025-03-27T00:00:00
 - Usage of the tool could look like: get_events('2025-03-27T00:00:00', '2025-03-28T00:00:00', 'c_dcbe20d5d573d8ce1cb90dd97afc9c6da386012257226588ef652b86d0fc3b8b@group.calendar.google.com')
 
-
 IMPORTANT UPDATE VS CREATE DISTINCTION:
 - When user asks to "update" an event, ALWAYS use find_event first to locate the existing event
 - If find_event returns no results or errors, inform the user no matching event was found and ask if they want to create a new event instead
@@ -420,8 +595,11 @@ IMPORTANT UPDATE VS CREATE DISTINCTION:
 - When searching with find_event, be precise with date ranges - for example "this Wednesday" means the closest upcoming Wednesday, not next week
 
 When creating an event, use the following format:
+- IF YOU ARE ASKED TO "UPDATE" AN EVENT: DO NOT CREATE A NEW EVENT. THIS WILL ALLOW US TO AVOID DUPLICATES
 - An example prompt could be: "Create an event for a meeting with the team at 10:00 AM for 1 hour on 2025-03-27"
 - The tool will create an event with the specified details.
+- ALWAYS double check before creating events that you cross-examine the day/date mappings to ensure the date is correct.
+- NEVER CALCULATE DATES INDEPENDANTLY
 - for RELATIVE DATES use the get_relative_time tool to convert dates to relative time periods. Usage of the tool could look like: get_relative_time(datetime(2025, 3, 29, 10, 0))
 - The default reminder time should ALWAYS be 10 minutes before the event.
 - Let the Google Calendar API handle timezone offsets - just specify the dateTime and timeZone separately
@@ -434,9 +612,19 @@ When updating event, use the following format:
 - For example, you can use the "find_event" tool to get the event ID and then call the "update_event" function with the new details.
 - An example prompt could be: "Update the meeting with the team on 2025-03-27 to start at 11:00 AM and end at 12:00 PM" -> first use find_event to get the event ID, then call update_event with the new details.
 
-Error handling guidelines:
-- If you encounter API errors during find_event (like context_length_exceeded), try narrowing the search with more specific parameters
-- For relative time references, calculate the exact date before searching
+When finding available time slots:
+- ALWAYS USE "find_available_time_slots" tool to retrieve all events within a specified time range and retrive the available time.
+- Analyze the list of events to find gaps in the schedule where a new event can be scheduled.
+- Return the available time slots in a user-friendly format.
+- ALWAYS consider the user's existing events and suggest time slots that do not overlap with them.
+
+CRITICAL DATE VALIDATION REQUIREMENTS:
+- When working with dates and weekdays, you MUST use the validate_date_day_mapping tool to confirm the day name matches the calendar date
+- For example, if a user mentions "this Wednesday", use get_relative_time to get the actual date, then validate_date_day_mapping to confirm it's really Wednesday
+- NEVER assume a date-to-day mapping without validation
+- For example: validate_date_day_mapping("2025-04-02", "Wednesday") will check if April 2, 2025 is a Wednesday
+- If validation fails, explain the discrepancy to the user and suggest the correct date for the day they mentioned
+- Add the new validate_date_day_mapping tool to the tools list
 
 
 Common user requests and proper tool usage:
@@ -444,7 +632,8 @@ Common user requests and proper tool usage:
 - "Do I have any scheduled events for my Meetings calendar in the next week?" → get_current_time then get_calendar_mapping to map name to ID and then get_events from todays's date to a week after for the Meetings calendar
 - "Create an event to study for my Physics Exam tomorrow at 3 PM" → first get the current time then create_event with the specified details for tomorrow at 3 PM
 - "Schedule a meeting for this Sunday at 5pm for 2 hours" → first get the current time then use relative_time to find what current day is and then create_event with the specified details for Sunday at 5 PM for 2 hours
-- "Update my Advisor Meeting this Wednesday to start at 2 PM and end at 3 PM" → first use find_event to get the event ID for "Advisor Meeting" on Wednesday, then call update_event with the new start and end times.
+- "Update my Advisor Meeting this Wednesday to start at 2 PM and end at 3 PM" → first use find_event to get the event ID for "Advisor Meeting" on Wednesday, then call update_event.
+- "What does my available schedule look like for the next 3 days?" → get_current_time then get_events from today to 3 days later and return when the user is available.
 
 ALWAYS verify you have the correct formatting for dictionary parameters before calling any tool.
 """
