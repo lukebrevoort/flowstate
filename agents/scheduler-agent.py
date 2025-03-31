@@ -424,10 +424,14 @@ def find_available_time_slots(start_date: str, end_date: str, duration_minutes: 
             calendar_ids.append(calendar['id'])
         
         # Set up freebusy query
+        # Get user's timezone from primary calendar
+        user_timezone = service.calendars().get(calendarId='primary').execute()['timeZone']
+        
         body = {
             "timeMin": start_date,
             "timeMax": end_date,
-            "items": [{"id": calendar_id} for calendar_id in calendar_ids]
+            "items": [{"id": calendar_id} for calendar_id in calendar_ids],
+            "timeZone": user_timezone
         }
         
         # Query for busy times
@@ -440,7 +444,7 @@ def find_available_time_slots(start_date: str, end_date: str, duration_minutes: 
         
         # Sort busy slots by start time
         busy_slots.sort(key=lambda x: x['start'])
-        
+
         # Find gaps between busy slots (free time)
         available_slots = []
         current_time = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
@@ -463,6 +467,7 @@ def find_available_time_slots(start_date: str, end_date: str, duration_minutes: 
             available_slots.append(f"Available from {current_time.strftime('%A, %b %d, %I:%M %p')} to {end_time.strftime('%I:%M %p')}")
         
         return available_slots if available_slots else ["No available slots found that match your criteria."]
+
         
     except Exception as e:
         logger.error(f"Error finding available time slots: {str(e)}")

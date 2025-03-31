@@ -35,7 +35,6 @@ logger = logging.getLogger(__name__)
 
 # Load the environment variables
 dotenv.load_dotenv()
-"""
 
 
 # Specify the scopes you need
@@ -48,55 +47,98 @@ creds = flow.run_local_server(port=0)
 # Build the service
 service = build('calendar', 'v3', credentials=creds)
 
-# Save credentials
-with open('token.pickle', 'wb') as token:
-    pickle.dump(creds, token)
 
-# Load credentials
-with open('token.pickle', 'rb') as token:
-    creds = pickle.load(token)
 
-"""
 
-def get_relative_time(target_date: str) -> str:
+def find_available_time_slots(start_date: str, end_date: str, duration_minutes: int = 60) -> List[str]:
     """
-    Used to map dates (Such as 03/28/2025) to days of the week (Friday) or relative time periods (Today).
-    Will be used to provide more user-friendly responses to queries.
+    Finds available time slots in the user's calendar using Google Calendar's freebusy API.
+    
+    Args:
+    - start_date: Start date in ISO format
+    - end_date: End date in ISO format
+    - duration_minutes: Minimum duration needed for the slot in minutes (default 60)
 
     Returns:
-    - Relative time period
+    - List of available time slots
     """
-    now = datetime.now()
-    today = date.today()
-    target = target_date.date() if isinstance(target_date, datetime) else target_date
-    delta = relativedelta(target, today)
-    
-    day_of_week = target_date.strftime('%A')
-    
-    if target == today:
-        return "Today"
-    elif target == today + relativedelta(days=1):
-        return "Tomorrow"
-    elif target == today - relativedelta(days=1):
-        return "Yesterday"
-    elif 0 < delta.days < 7:
-        return f"This {day_of_week}"
-    elif -7 < delta.days < 0:
-        return f"Last {day_of_week}"
-    elif delta.days == 7:
-        return f"Next {day_of_week}"
-    elif delta.months == 0 and delta.years == 0:
-        return f"{abs(delta.days)} days {'from now' if delta.days > 0 else 'ago'}"
-    elif delta.years == 0:
-        return f"{abs(delta.months)} months {'from now' if delta.months > 0 else 'ago'}"
-    else:
-        return f"{abs(delta.years)} years {'from now' if delta.years > 0 else 'ago'}"
+    try:
+        if not (start_date.endswith('Z') or '+' in start_date or '-' in start_date[10:]):
+            start_date = start_date + 'Z'
+        if not (end_date.endswith('Z') or '+' in end_date or '-' in end_date[10:]):
+            end_date = end_date + 'Z'
+        
+        # Get all calendars
+        calendar_ids = []
+        results = service.calendarList().list().execute()
+        calendars = results.get('items', [])
+        for calendar in calendars:
+            calendar_ids.append(calendar['id'])
+        
+        # Set up freebusy query
+        # Get user's timezone from primary calendar
+        user_timezone = service.calendars().get(calendarId='primary').execute()['timeZone']
+        
+        body = {
+            "timeMin": start_date,
+            "timeMax": end_date,
+            "items": [{"id": calendar_id} for calendar_id in calendar_ids],
+            "timeZone": user_timezone
+        }
+        
+        # Query for busy times
+        freebusy_response = service.freebusy().query(body=body).execute()
+        
+        # Process the response to find free slots
+        busy_slots = []
+        for calendar_id, calendar_data in freebusy_response['calendars'].items():
+            busy_slots.extend(calendar_data.get('busy', []))
+        
+        # Sort busy slots by start time
+        busy_slots.sort(key=lambda x: x['start'])
 
-tomorrow = datetime(2025, 3, 29, 10, 0)
-next_week = datetime(2025, 4, 4, 15, 30)
-last_month = datetime(2025, 2, 15, 9, 0)
+        # Find gaps between busy slots (free time)
+        available_slots = []
+        current_time = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+        end_time = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        
+        for busy in busy_slots:
+            busy_start = datetime.fromisoformat(busy['start'].replace('Z', '+00:00'))
+            busy_end = datetime.fromisoformat(busy['end'].replace('Z', '+00:00'))
+            
+            # Add a free slot if there's enough time before the busy slot
+            slot_duration = (busy_start - current_time).total_seconds() / 60
+            if slot_duration >= duration_minutes:
+                available_slots.append(f"Available from {current_time.strftime('%A, %b %d, %I:%M %p')} to {busy_start.strftime('%I:%M %p')}")
+            
+            # Move current time to the end of the busy slot
+            current_time = max(current_time, busy_end)
+        
+        # Check if there's free time after the last busy slot
+        if (end_time - current_time).total_seconds() / 60 >= duration_minutes:
+            available_slots.append(f"Available from {current_time.strftime('%A, %b %d, %I:%M %p')} to {end_time.strftime('%I:%M %p')}")
+        
+        return available_slots if available_slots else ["No available slots found that match your criteria."]
 
-print(get_relative_time(last_month))
+        
+    except Exception as e:
+        logger.error(f"Error finding available time slots: {str(e)}")
+        return [f"Error finding available time slots: {str(e)}"]
+
+# Test data for find_available_time_slots
+start_date = (datetime.now()).isoformat() + 'Z'
+end_date = (datetime.now() + timedelta(days=4)).isoformat() + 'Z'
+duration = 60  # minutes
+
+print("Testing with:")
+print(f"Start date: {start_date}")
+print(f"End date: {end_date}")
+print(f"Duration: {duration} minutes")
+
+available_slots = find_available_time_slots(start_date, end_date, duration)
+print("\nAvailable time slots:")
+for slot in available_slots:
+    print(f"- {slot}")
 '''
 # Output: {'Work': 'work_calendar_id', 'Personal': 'personal_calendar_id'}
 '''
