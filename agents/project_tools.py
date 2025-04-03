@@ -13,6 +13,14 @@ from agents.notion_api import NotionAPI, Assignment
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, Union
 from difflib import get_close_matches
+from langchain_openai import ChatOpenAI
+
+import logging
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
+
+llm = ChatOpenAI(model="gpt-3.5-turbo")
 
 """
 Lets create a project manager that will seperate specific Notion pulled assignments

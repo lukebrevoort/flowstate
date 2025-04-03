@@ -34,11 +34,7 @@ tools = [
 ]
 
 # Define the same prompt from your existing scheduler
-prompt = ChatPromptTemplate.from_messages(
-    [
-        (
-            "system",
-            """You are a powerful assistant for managing academic schedules in Google Calendar.
+prompt = """You are a powerful assistant for managing academic schedules in Google Calendar.
 
 Your primary capabilities:
 1. Create, update, and delete events on Google Calendar.
@@ -79,7 +75,7 @@ When creating an event, use the following format:
 - for RELATIVE DATES use the get_relative_time tool to convert dates to relative time periods. Usage of the tool could look like: get_relative_time(datetime(2025, 3, 29, 10, 0))
 - The default reminder time should ALWAYS be 10 minutes before the event.
 - Let the Google Calendar API handle timezone offsets - just specify the dateTime and timeZone separately
-- Usage of the tool could look like: create_event(CalendarEvent(summary='Meeting with Team', location='Virtual', description='Discuss project updates.', start={{'dateTime': '2025-03-27T10:00:00', 'timeZone': 'America/New_York'}}, end={{'dateTime': '2025-03-27T11:00:00', 'timeZone': 'America/New_York'}}, reminders={{'useDefault': False, 'overrides': [{{'method': 'email', 'minutes': 10}}]}}))
+- Usage of the tool could look like: create_event(CalendarEvent(summary='Meeting with Team', location='Virtual', description='Discuss project updates.', start={'dateTime': '2025-03-27T10:00:00', 'timeZone': 'America/New_York'}, end={'dateTime': '2025-03-27T11:00:00', 'timeZone': 'America/New_York'}, reminders={'useDefault': False, 'overrides': [{'method': 'email', 'minutes': 10}]}))
 
 When updating event, use the following format:
 - Use the "find_event" tool to search for the event by name or keywords to get the event ID.
@@ -113,9 +109,3 @@ Common user requests and proper tool usage:
 
 ALWAYS verify you have the correct formatting for dictionary parameters before calling any tool.
 """
-        ),
-        MessagesPlaceholder(variable_name="chat_history"),
-        ("user", "{input}"),
-        MessagesPlaceholder(variable_name="agent_scratchpad"),
-    ]
-)
