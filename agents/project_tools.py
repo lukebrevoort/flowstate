@@ -1,33 +1,26 @@
 # Import relevant functionality
-from langchain_openai import ChatOpenAI
 from langchain.agents import tool
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.agents.format_scratchpad.openai_tools import (
     format_to_openai_tool_messages,
 )
 from langchain.agents.output_parsers.openai_tools import OpenAIToolsAgentOutputParser
-from langchain.agents import AgentExecutor
-from langchain.memory import ConversationBufferMemory
-from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
 from notion_client import Client
 import os, sys
 # Add the parent directory to the path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from agents.notion_api import NotionAPI, Assignment
-import dotenv
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, Union
-import traceback
-import logging
 from difflib import get_close_matches
+from langchain_openai import ChatOpenAI
 
-# Setting up the logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+import logging
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# Load the environment variables
-dotenv.load_dotenv()
+llm = ChatOpenAI(model="gpt-3.5-turbo")
 
 """
 Lets create a project manager that will seperate specific Notion pulled assignments
@@ -501,10 +494,7 @@ def get_assignment_notes(assignment_name: str):
     else:
         return f"No assignment found with the name '{assignment_name}'"
 
-# Create the agent
-llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
 
-# Define tools for model
 
 tools = [
     retireve_assignment, 
@@ -519,117 +509,3 @@ tools = [
     get_assignment_notes,
     estimate_completion_time,
     ]
-
-# Create a memory instance
-memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-
-# Define the model prompt
-
-prompt = ChatPromptTemplate.from_messages(
-    [
-        (
-            "system",
-            """You are a powerful assistant for managing academic assignments in Notion.
-
-Your primary capabilities:
-1. Retrieving assignments from Notion
-2. Finding assignments with fuzzy matching
-3. Creating new assignments
-4. Updating assignment status and properties
-5. Managing course relationships
-
-IMPORTANT USAGE GUIDELINES:
-
-When updating assignments:
-- ALWAYS use update_assignment with name and other parameters like priority, status, due_date, etc.
-- Dictionary MUST contain the 'name' key with the assignment name
-- Include any properties you want to update (status, priority, due_date, etc.)
-- Example: {{"name": "Essay on Climate Change", "status": "In Progress", "priority": "High"}}
-
-When creating assignments:
-- ALWAYS use create_assignment_item with a complete dictionary of assignment properties
-- Required fields: name, course_id or course_name
-- Optional fields: description, status, due_date, priority, etc.
-- Example: {{"name": "Midterm Research Paper", "course_name": "Biology 101", "due_date": "2025-04-15T23:59:00Z", "priority": "High"}}
-
-When dealing with dates:
-- ALWAYS use get_current_time to get the current date/time first
-- Use parse_relative_datetime for converting user descriptions to proper dates
-- Example flow: get_current_time → parse_relative_datetime("tomorrow at 5pm")
-
-For finding assignments:
-- Use find_assignment with partial names for fuzzy matching
-- If multiple matches found, ask the user to clarify which one they meant
-
-For retrieving assignment details:
-- Use retireve_assignment with the exact assignment name
-- If unsure of exact name, use find_assignment first
-
-For finding course names and course IDs:
-- Use get_course_info with course_name or None for all courses
-- If course_name is not found, return all course names
-
-For creating subtasks:
-- Use create_subtasks with the assignment dictionary
-- Subtasks should be manageable and specific
-- Due dates should be staggered before the main assignment's due date
-- Example: create_subtasks(assignment_dict)
-- Returns a list of subtask dictionaries
-- Each subtask should have a name, description, due_date, etc.
-- Example: {{"name": "Research Topic", "description": "Research for the midterm paper", "due_date": "2025-04-10T23:59:00Z", current_date: "2025-04-01T12:00:00Z"}}
-
-Common user requests and proper tool usage:
-- "Show all my assignments" → use retrive_all_assignments
-- "Update assignment X to status Y" → use update_assignment with name="X", status="Y"
-- "Find my biology homework" → use find_assignment with "biology homework"
-- "Create new assignment due tomorrow" → use get_current_time, then parse_relative_datetime, then create_assignment_item
-- "Set priority of X to high" → use update_assignment with name="X", priority="High"
-- "Create subtasks for X" → use create_subtasks with assignment_dict 
-- "What is the estimated time for X?" → use find assignment with "X", then estimate_completion_time with assignment_dict
-- "Get notes for X" → use get_assignment_notes with "X"
-
-ALWAYS verify you have the correct formatting for dictionary parameters before calling any tool.
-"""
-        ),
-        MessagesPlaceholder(variable_name="chat_history"),
-        ("user", "{input}"),
-        MessagesPlaceholder(variable_name="agent_scratchpad"),
-    ]
-)
-
-# Bind the tools to the model
-
-llm_with_tools = llm.bind_tools(tools)
-
-# Create agent
-
-agent = (
-    {
-        "input": lambda x: x["input"],
-        "chat_history": lambda x: memory.load_memory_variables({})["chat_history"],
-        "agent_scratchpad": lambda x: format_to_openai_tool_messages(
-            x["intermediate_steps"]
-        ),
-    }
-    | prompt
-    | llm_with_tools
-    | OpenAIToolsAgentOutputParser()
-)
-
-agent_executor = AgentExecutor(agent=agent, tools=tools, memory=memory, verbose=True)
-
-# Add at the end of the file
-
-if __name__ == "__main__":
-    print("Notion Project Manager Assistant (Type 'exit' to quit)")
-    print("------------------------------------------------------")
-    while True:
-        user_input = input("\nWhat would you like to do with your Notion assignments? \n")
-        if user_input.lower() in ("exit", "quit"):
-            break
-        try:
-            response = agent_executor.invoke({"input": user_input})
-            print(f"\nAssistant: {response['output']}")
-        except Exception as e:
-            print(f"\nError: {str(e)}")
-            logger.error(f"Error in CLI: {str(e)}", exc_info=True)
