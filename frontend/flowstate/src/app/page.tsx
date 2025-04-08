@@ -1,103 +1,55 @@
+"use client";
+
 import Image from "next/image";
 
 export default function Home() {
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
+    <div className="relative min-h-screen w-full bg-flowstate-bg overflow-hidden">
+      <header className="w-full h-[89px] bg-flowstate-header shadow-header flex items-center justify-between px-[100px] max-lg:px-[50px] max-sm:px-5">
+        <div className="flex items-center gap-[10px]">
+          <Image
+            src="/flowstate-main-logo.png"
+            alt="FlowState Logo"
+            width={78}
+            height={78}
+            className="w-[78px] h-[78px] max-lg:w-[60px] max-lg:h-[60px] max-sm:w-[50px] max-sm:h-[50px]"
+            priority
+          />
+          <h1 className="font-alegreya text-[48px] text-black max-lg:text-[36px] max-sm:text-[28px]">
+            FlowState
+          </h1>
+        </div>
+        <div className="flex items-center">
+          <button className="text-white font-alegreya text-[48px] font-medium max-lg:text-[36px] max-sm:text-[24px] bg-flowstate-accent rounded-[40px] px-[30px] py-[6px]">
+            Log in
+          </button>
+        </div>
+      </header>
+
+      <main className="flex flex-col items-center justify-center mt-[160px] max-lg:mt-[100px] max-sm:mt-[60px]">
         <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
+          src="/flowstate-main-logo.png"
+          alt="FlowState Main Logo"
+          width={400}
+          height={400}
+          className="w-[469px] h-[469px] max-lg:w-[350px] max-lg:h-[350px] max-sm:w-[250px] max-sm:h-[250px]"
           priority
         />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
+        <h2 className="text-[96px] font-alegreya text-center mt-10 px-5 max-lg:text-[72px] max-sm:text-[48px]">
+          Welcome To FlowState
+        </h2>
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+
+      <section className="mx-[100px] mt-[100px] max-lg:mx-[50px] max-sm:mx-5">
+        <div className="bg-flowstate-dark rounded-[50px] flex justify-between items-center px-10 py-10 max-lg:flex-col max-lg:gap-[30px] max-sm:px-5">
+          <p className="text-flowstate-bg font-alegreya text-[48px] font-bold max-w-[597px] text-center max-lg:text-[36px] max-sm:text-[28px]">
+            A brand new way of experiencing productivity
+          </p>
+          <button className="text-white font-alegreya text-[40px] font-bold max-lg:text-[32px] max-sm:text-[24px] bg-flowstate-accent rounded-[60px] px-[30px] py-[10px]">
+            Sign Up Today
+          </button>
+        </div>
+      </section>
     </div>
   );
 }
