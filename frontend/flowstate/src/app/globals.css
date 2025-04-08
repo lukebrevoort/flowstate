@@ -6,6 +6,7 @@
   --flowstate-bg: #fffaf2;
   --flowstate-header: #f6eee3;
   --flowstate-accent: #9eab57;
+  --flowstate-accent-hover: #8a9748; /* Slightly darker shade for hover effects */
   --flowstate-dark: #331c16;
 }
 

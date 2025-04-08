@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { motion } from "framer-motion";
 
 export default function Home() {
   return (
@@ -12,17 +13,29 @@ export default function Home() {
             alt="FlowState Logo"
             width={78}
             height={78}
-            className="w-[78px] h-[78px] max-lg:w-[60px] max-lg:h-[60px] max-sm:w-[50px] max-sm:h-[50px]"
+            className="w-[50px] h-[50px] max-sm:w-[50px] max-sm:h-[50px]"
             priority
           />
-          <h1 className="font-alegreya text-[48px] text-black max-lg:text-[36px] max-sm:text-[28px]">
+          <h1 className="font-alegreya text-[32px] text-black max-lg:text-[30px] max-sm:text-[28px]">
             FlowState
           </h1>
         </div>
         <div className="flex items-center">
-          <button className="text-white font-alegreya text-[48px] font-medium max-lg:text-[36px] max-sm:text-[24px] bg-flowstate-accent rounded-[40px] px-[30px] py-[6px]">
-            Log in
-          </button>
+            <motion.button 
+              whileHover={{ 
+                scale: 1.05,
+                boxShadow: "0px 0px 8px rgba(0, 0, 0, 0.2)"
+              }}
+              whileTap={{ 
+                scale: 0.95,
+                boxShadow: "0px 0px 0px rgba(0, 0, 0, 0)"
+              }}
+              transition={{ type: "spring", stiffness: 400, damping: 17 }}
+              onClick={() => console.log('Login clicked')} 
+              className="text-white font-alegreya text-[24px] font-medium bg-flowstate-accent hover:bg-flowstate-accent-hover transition-colors duration-200 rounded-[40px] px-[30px] py-[6px] cursor-pointer"
+            >
+              Log in
+            </motion.button>
         </div>
       </header>
 
@@ -45,9 +58,20 @@ export default function Home() {
           <p className="text-flowstate-bg font-alegreya text-[48px] font-bold max-w-[597px] text-center max-lg:text-[36px] max-sm:text-[28px]">
             A brand new way of experiencing productivity
           </p>
-          <button className="text-white font-alegreya text-[40px] font-bold max-lg:text-[32px] max-sm:text-[24px] bg-flowstate-accent rounded-[60px] px-[30px] py-[10px]">
+          <motion.button 
+            whileHover={{ 
+              scale: 1.05,
+              boxShadow: "0px 0px 15px rgba(255, 255, 255, 0.3)"
+            }}
+            whileTap={{ 
+              scale: 0.95,
+              boxShadow: "0px 0px 0px rgba(255, 255, 255, 0)"
+            }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
+            className="text-white font-alegreya text-[40px] font-bold max-lg:text-[32px] max-sm:text-[24px] bg-flowstate-accent hover:bg-flowstate-accent-hover transition-colors duration-200 rounded-[60px] px-[30px] py-[10px] cursor-pointer"
+          >
             Sign Up Today
-          </button>
+          </motion.button>
         </div>
       </section>
     </div>
