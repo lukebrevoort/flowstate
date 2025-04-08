@@ -16,6 +16,7 @@ from typing_extensions import TypedDict
 from langchain_anthropic import ChatAnthropic
 from langgraph.graph import MessagesState, END
 from langgraph.types import Command
+import json
 
 from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, START, END
@@ -45,8 +46,17 @@ system_prompt = (
     "You are a supervisor tasked with managing a conversation between the"
     f" following workers: {members}. Given the following user request,"
     " respond with the worker to act next. Each worker will perform a"
-    " task and respond with their results and status. Only run again if the result is incomplete or if the next worker is required to continue the conversation.\n"
-    " When finished, respond with FINISH."
+    " task and respond with their results and status.\n\n"
+    "EFFICIENCY GUIDELINES:\n"
+    "- Route to project_manager for assignment and task management questions\n"
+    "- Route to scheduler for calendar events and time management questions\n"
+    "- Respond with FINISH immediately when ANY of these conditions are met:\n"
+    "  1. An agent has provided a complete answer to the user's question\n"
+    "  2. The necessary information has been retrieved and presented\n"
+    "  3. The requested action has been successfully completed\n"
+    "- NEVER route to an agent just to summarize or explain another agent's response\n"
+    "- NEVER alternate between agents more than once unless absolutely necessary\n\n"
+    "Token efficiency is critical. Respond with FINISH as soon as the task is complete."
 )
 
 class Router(TypedDict):
@@ -59,9 +69,14 @@ llm = ChatAnthropic(model="claude-3-5-haiku-latest")
 
 class State(MessagesState):
     next: str
+    task_addressed: bool = False
 
 
 def supervisor_node(state: State) -> Command[Literal["project_manager", "scheduler", "__end__"]]:
+    # If task has been addressed by one of the agents, consider finishing
+    if state.get("task_addressed", False):
+        return Command(goto=END, update={"next": "FINISH"})
+    
     messages = [
         {"role": "system", "content": system_prompt},
     ] + state["messages"]
@@ -72,6 +87,7 @@ def supervisor_node(state: State) -> Command[Literal["project_manager", "schedul
         goto = END
 
     return Command(goto=goto, update={"next": goto})
+    
 
 
 project_manager_agent = create_react_agent(
@@ -79,14 +95,24 @@ project_manager_agent = create_react_agent(
     prompt=project_manager_prompt,)
 
 def project_manager_node(state: State) -> Command[Literal["supervisor"]]:
-        """Node for the project manager agent."""
-        # Create execution with tools
-        result = project_manager_agent.invoke({"messages": state["messages"]})
-        
-        return Command(
-            update={"messages": [HumanMessage(content=result["output"], name="project_manager")]},
-            goto="supervisor"
-        )
+    """Node for the project manager agent."""
+    # Create execution with tools
+    result = project_manager_agent.invoke({"messages": state["messages"]})
+    
+
+    output = result.get("output") if isinstance(result, dict) and "output" in result else result.content if hasattr(result, "content") else str(result)
+
+    # Check if result seems complete
+    task_completed = len(output) > 50  # Simple heuristic
+
+    
+    return Command(
+        update={
+            "messages": [HumanMessage(content=output, name="project_manager")],
+            "task_addressed": task_completed
+        },
+        goto="supervisor"
+    )
 
 
 scheduler_agent = create_react_agent(
@@ -101,9 +127,13 @@ def scheduler_node(state: State) -> Command[Literal["supervisor"]]:
 
     output = result.get("output") if isinstance(result, dict) and "output" in result else result.content if hasattr(result, "content") else str(result)
 
-    
+    task_completed = len(output) > 50  # Simple heuristic
+
     return Command(
-        update={"messages": [HumanMessage(content=output, name="scheduler")]},
+        update={
+            "messages": [HumanMessage(content=output, name="scheduler")],
+            "task_addressed": task_completed  # Simple heuristic to determine if the task was addressed
+            },
         goto="supervisor"
     )
 
@@ -125,39 +155,62 @@ os.system("open graph.png")
 """
 
 # Run the Agents
-user_query = "What do I have going on tommorrow?"
-print(f"\n👤 User: {user_query}\n")
-
-# Track the agents we've seen respond
-# Replace the streaming loop with this better version
-for step in graph.stream(
-    {"messages": [HumanMessage(content=user_query)]}, subgraphs=True
-):
-    if len(step) != 2:
-        continue
-    
-    node_name, state = step
-    
-    # DEBUG: Print what we received at each step
-    print(f"Step: {node_name}")
-    if "messages" in state and state["messages"]:
-        print(f"Latest message type: {type(state['messages'][-1])}")
-        if hasattr(state["messages"][-1], "name"):
-            print(f"Latest message name: {state['messages'][-1].name}")
-    
-    # Show supervisor routing separately from agent responses
-    if node_name == "supervisor" and state.get("next"):
-        print(f"🧠 Supervisor routing to: {state['next']}")
-    
-    # Extract and display agent responses - don't track seen responses by name
-    if "messages" in state and len(state["messages"]) > 0:
-        latest_msg = state["messages"][-1]
+def format_message(message):
+    if hasattr(message, 'content'):
+        try:
+            # Attempt to parse JSON content
+            parsed_content = json.loads(message.content)
+            formatted_content = json.dumps(parsed_content, indent=2)
+            return f"🤖 AI (Structured Response):\n```json\n{formatted_content}\n```"
+        except json.JSONDecodeError:
+            # Fallback to plain text formatting
+            pass
         
-        if hasattr(latest_msg, "name"):
-            if latest_msg.name == "scheduler":
-                print(f"\n📅 Scheduler:\n{latest_msg.content}\n")
-            elif latest_msg.name == "project_manager":
-                print(f"\n📋 Project Manager:\n{latest_msg.content}\n")
+        if message.type == "human":
+            return f"👤 USER: {message.content}"
+        elif hasattr(message, 'name') and message.name:
+            return f"🤖 {message.name.upper()}: {message.content}"
+        else:
+            return f"🤖 AI: {message.content}"
+    return "⚠️ Message format not recognized"
+
+def run_conversation(query):
+    """Run the agent conversation with a specific query"""
+    print("\n=== Starting Agent Conversation ===\n")
+    steps = graph.stream(
+        {
+            "messages": [
+                HumanMessage(content=query)
+            ]
+        },
+        subgraphs=True,
+    )
+    
+    for step in steps:
+        # Extract subgraph information
+        if "subgraph" in step:
+            print(f"\n=== Subgraph: {step['subgraph']} ===\n")
+
+        # Extract messages
+        if "messages" in step:
+            if isinstance(step["messages"], list) and len(step["messages"]) > 0:
+                latest_message = step["messages"][-1]
+                print(format_message(latest_message))
+        
+        # Show routing information
+        if "next" in step:
+            next_agent = step["next"]
+            if next_agent != "FINISH":
+                print(f"\n→ Routing to: {next_agent}\n")
+            else:
+                print("\n→ Task complete, finishing conversation\n")
+        
+        print("----")
+
+# Example usage
+if __name__ == "__main__":
+    query = "Reseachule my study time for reviewing physics notes to 6pm to 8pm and add in a new study session today from 4pm to 6pm for reviewing CS284 notes."
+    run_conversation(query)
 
 
 
