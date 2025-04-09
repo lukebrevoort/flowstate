@@ -18,23 +18,24 @@ export default function Chat() {
     <div className="min-h-screen w-full bg-flowstate-bg flex flex-col">
       {/* Header */}
       <header className="w-full h-[89px] bg-flowstate-header shadow-header flex items-center justify-between px-[100px] max-lg:px-10 max-sm:px-5">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-[10px]">
           <Image
             src="/flowstate-main-logo.png"
             alt="FlowState Logo"
             width={78}
             height={78}
-            className="w-[78px] h-[78px]"
+            className="w-[50px] h-[50px] max-sm:w-[50px] max-sm:h-[50px]"
             priority
           />
-          <motion.h1
-            initial={{ opacity: 0, x: -20 }}
+          <motion.div
+            initial={{ opacity: 0, x: -40 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5 }}
-            className="text-[48px] font-alegreya text-black max-lg:text-[36px] max-sm:text-[28px]"
+            transition={{ duration: 1.5 }}
           >
-            FlowState
-          </motion.h1>
+            <h1 className="font-alegreya text-[32px] text-black max-lg:text-[30px] max-sm:text-[28px]">
+              FlowState
+            </h1>
+          </motion.div>
         </div>
 
         <div className="flex items-center gap-5">
@@ -86,7 +87,7 @@ export default function Chat() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col items-center justify-center mt-[355px] mb-20 max-lg:mt-[200px] max-sm:mt-[150px]">
+      <main className="flex-1 flex flex-col items-center justify-center mt-[200px] mb-20 max-lg:mt-[200px] max-sm:mt-[150px]">
         <motion.h2
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
