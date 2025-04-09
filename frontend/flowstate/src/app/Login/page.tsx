@@ -194,15 +194,17 @@ export default function Login() {
 
               {/* Buttons */}
               <div className="flex flex-col gap-[25px]">
-                <motion.button
+                <Link href="/Chat">
+                  <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   type="submit"
                   className="w-full h-[80px] rounded-[35px] bg-flowstate-dark text-white font-alegreya text-[36px]
                     cursor-pointer max-sm:h-[60px] max-sm:text-[28px] max-sm:-mt-[5px]"
-                >
+                  >
                   Sign in
-                </motion.button>
+                  </motion.button>
+                </Link>
 
                 <motion.button
                   whileHover={{ scale: 1.02 }}
