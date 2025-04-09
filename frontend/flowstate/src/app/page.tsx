@@ -27,7 +27,8 @@ export default function Home() {
           </motion.div>
         </div>
         <div className="flex items-center">
-            <motion.button 
+            <motion.a 
+              href="/Login"
               whileHover={{ 
                 scale: 1.05,
                 boxShadow: "0px 0px 8px rgba(0, 0, 0, 0.2)"
@@ -38,10 +39,10 @@ export default function Home() {
               }}
               transition={{ type: "spring", stiffness: 400, damping: 17 }}
               onClick={() => console.log('Login clicked')} 
-              className="text-white font-alegreya text-[24px] font-medium bg-flowstate-accent hover:bg-flowstate-accent-hover transition-colors duration-200 rounded-[40px] px-[30px] py-[6px] cursor-pointer"
+              className="text-white font-alegreya text-[24px] font-medium bg-flowstate-accent hover:bg-flowstate-accent-hover transition-colors duration-200 rounded-[40px] px-[30px] py-[6px] cursor-pointer inline-block text-center"
             >
               Log in
-            </motion.button>
+            </motion.a>
         </div>
       </header>
 
