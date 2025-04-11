@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  --flowstate-bg: #fffaf2;
+  --flowstate-header: #f6eee3;
+  --flowstate-accent: #9eab57;
+  --flowstate-accent-hover: #8a9748; /* Slightly darker shade for hover effects */
+  --flowstate-dark: #331c16;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-alegreya: var(--font-alegreya);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+@layer utilities {
+  .bg-flowstate-bg {
+    background-color: var(--flowstate-bg);
+  }
+  .bg-flowstate-header {
+    background-color: var(--flowstate-header);
+  }
+  .bg-flowstate-accent {
+    background-color: var(--flowstate-accent);
+  }
+  .bg-flowstate-dark {
+    background-color: var(--flowstate-dark);
+  }
+  .text-flowstate-bg {
+    color: var(--flowstate-bg);
+  }
+  .shadow-header {
+    box-shadow: 0px 4px 4px 0px rgba(34, 45, 28, 0.15);
+  }
+  .font-alegreya {
+    font-family: var(--font-alegreya);
+  }
+}
