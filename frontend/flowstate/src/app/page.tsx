@@ -59,7 +59,7 @@ export default function Home() {
         transition={{ duration: 1.5 }}
 
         >
-          <h2 className="text-[72px] font-alegreya text-center mt-10 px-5 max-lg:text-[50px] max-sm:text-[48px]">
+          <h2 className="text-[72px] font-alegreya text-center text-black mt-10 px-5 max-lg:text-[50px] max-sm:text-[48px]">
             Welcome To FlowState
           </h2>
         </motion.div>
