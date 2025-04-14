@@ -1,16 +1,24 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { useState } from "react";
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Signup() {
+  const router = useRouter();
+  const { signup, loading } = useAuth();
+  
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     password: "",
     terms: false,
   });
+  
+  const [error, setError] = useState('');
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
@@ -20,9 +28,30 @@ export default function Signup() {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Form submitted:", formData);
+    setError('');
+    
+    // Basic validation
+    if (!formData.name || !formData.email || !formData.password) {
+      setError('All fields are required');
+      return;
+    }
+    
+    if (!formData.terms) {
+      setError('You must agree to the Terms & Conditions');
+      return;
+    }
+    
+    try {
+      // Call signup function from AuthContext
+      await signup(formData.name, formData.email, formData.password);
+      
+      // Redirect to chat page on successful signup
+      router.push('/Chat');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred during signup');
+    }
   };
 
   return (
@@ -198,15 +227,21 @@ export default function Signup() {
           </div>
 
           {/* Sign Up Button */}
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+          <button
             type="submit"
-            className="w-full h-[80px] rounded-[35px] bg-flowstate-accent text-white font-alegreya text-[36px] 
-              cursor-pointer mb-6 max-sm:h-[60px] max-sm:text-[28px]"
+            disabled={loading}
+            className={`w-full h-[50px] rounded-[35px] bg-flowstate-dark text-white font-alegreya text-[24px] 
+              ${loading ? 'opacity-70' : ''}`}
           >
-            Sign Up
-          </motion.button>
+            {loading ? 'Creating Account...' : 'Create Account'}
+          </button>
+          
+          {/* Error display */}
+          {error && (
+            <div className="mt-4 text-red-500 text-center">
+              {error}
+            </div>
+          )}
 
           {/* Google Sign Up Button */}
           <motion.button
