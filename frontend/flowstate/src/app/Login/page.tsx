@@ -4,13 +4,20 @@ import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { useState } from "react";
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Login() {
+  const router = useRouter();
+  const { login, loading } = useAuth();
+  
   const [formData, setFormData] = useState({
     email: "",
     password: "",
     rememberMe: false,
   });
+  
+  const [error, setError] = useState('');
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
@@ -20,10 +27,21 @@ export default function Login() {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Form submitted:", formData);
+    setError('');
+    
+    try {
+      // Call login function from AuthContext
+      await login(formData.email, formData.password);
+      
+      // Redirect to chat page on successful login
+      router.push('/Chat');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred during login');
+    }
   };
+
 
   return (
     <div className="relative min-h-screen flex justify-center items-center p-5 bg-flowstate-bg overflow-hidden">
@@ -194,17 +212,16 @@ export default function Login() {
 
               {/* Buttons */}
               <div className="flex flex-col gap-[25px]">
-                <Link href="/Chat">
-                  <motion.button
+                <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   type="submit"
+                  disabled={loading}
                   className="w-full h-[80px] rounded-[35px] bg-flowstate-dark text-white font-alegreya text-[36px]
                     cursor-pointer max-sm:h-[60px] max-sm:text-[28px] max-sm:-mt-[5px]"
-                  >
-                  Sign in
-                  </motion.button>
-                </Link>
+                >
+                  {loading ? 'Signing in...' : 'Sign in'}
+                </motion.button>
 
                 <motion.button
                   whileHover={{ scale: 1.02 }}
@@ -225,6 +242,13 @@ export default function Login() {
                   </span>
                 </motion.button>
               </div>
+
+              {/* Error display */}
+              {error && (
+                <div className="mt-4 text-red-500 text-center">
+                  {error}
+                </div>
+              )}
             </form>
           </div>
         </div>
