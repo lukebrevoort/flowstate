@@ -23,8 +23,8 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import create_react_agent
 from IPython.display import display, Image
 
-from project_manager import prompt as project_manager_prompt, tools as project_manager_tools
-from scheduler_agent import prompt as scheduler_prompt, tools as scheduler_tools
+from .project_manager import prompt as project_manager_prompt, tools as project_manager_tools
+from .scheduler_agent import prompt as scheduler_prompt, tools as scheduler_tools
 
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
 from anthropic._exceptions import OverloadedError
@@ -209,7 +209,14 @@ def run_conversation(query):
 
 # Example usage
 if __name__ == "__main__":
-    query = "Reseachule my study time for reviewing physics notes to 6pm to 8pm and add in a new study session today from 4pm to 6pm for reviewing CS284 notes."
+    # Use non-relative imports when running directly
+    import sys
+    import os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from agents.project_manager import prompt as project_manager_prompt, tools as project_manager_tools
+    from agents.scheduler_agent import prompt as scheduler_prompt, tools as scheduler_tools
+    
+    query = "Find some time tonight and tomorrow that so I can finish my Upcoming CS135 Assignments"
     run_conversation(query)
 
 
