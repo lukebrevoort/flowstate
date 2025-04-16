@@ -164,14 +164,18 @@ function Chat() {
         {/* Chat messages */}
         <div className="w-full max-w-[1030px] flex-1 overflow-y-auto mb-6">
           {chatHistory.length === 0 ? (
-            <motion.h2
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8 }}
-              className="text-[92px] font-alegreya text-center text-black max-w-[825px] leading-[1.2] max-lg:text-[72px] max-sm:text-[48px] max-sm:px-5"
-            >
-              Welcome Back{user ? `, ${user.name}` : ''}! How can I assist you?
-            </motion.h2>
+            <div className="flex justify-center items-center h-full">
+              <motion.h2
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
+          className="text-[92px] font-alegreya text-center text-black max-w-[825px] leading-[1.2] mx-auto px-4 max-lg:text-[72px] max-sm:text-[48px] max-sm:px-5"
+              >
+          Welcome Back{user ? `,` : ''}
+          <span className="block mt-2">{user?.name ? user.name : ''}</span>
+          <span className="block mt-2">How can I assist you?</span>
+              </motion.h2>
+            </div>
           ) : (
             renderChatHistory()
           )}
