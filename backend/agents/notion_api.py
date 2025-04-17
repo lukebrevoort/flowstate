@@ -294,12 +294,16 @@ class NotionAPI:
             logger.error(f"Error fetching assignment ({assignment_parameter}) from Notion: {str(e)}")
             return None
         
-    def get_all_assignments(self):
+    def get_all_assignments(self, start_date=None, end_date=None):
         """
-        Retrieves all assignments from the Notion database.
+        Retrieves all assignments from the Notion database within a specified date range.
+        
+        Args:
+            start_date: Optional datetime object for the start of the range
+            end_date: Optional datetime object for the end of the range
         
         Returns:
-            List of all assignment pages in the Notion database
+            List of assignment objects in the specified date range
         """
         assignments = []
         next_cursor = None
@@ -311,6 +315,32 @@ class NotionAPI:
                     "database_id": self.database_id,
                     "page_size": 100 
                 }
+                
+                # Add date range filter if both dates are provided
+                if start_date and end_date:
+                    query_params["filter"] = {
+                        "property": "Due Date",
+                        "date": {
+                            "on_or_after": start_date.isoformat(),
+                            "on_or_before": end_date.isoformat()
+                        }
+                    }
+                # Filter for assignments on or after start_date
+                elif start_date:
+                    query_params["filter"] = {
+                        "property": "Due Date",
+                        "date": {
+                            "on_or_after": start_date.isoformat()
+                        }
+                    }
+                # Filter for assignments on or before end_date
+                elif end_date:
+                    query_params["filter"] = {
+                        "property": "Due Date",
+                        "date": {
+                            "on_or_before": end_date.isoformat()
+                        }
+                    }
                 
                 if next_cursor:
                     query_params["start_cursor"] = next_cursor
