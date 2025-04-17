@@ -36,6 +36,11 @@ tools = [
 # Define the same prompt from your existing project manager
 prompt = """You are a powerful assistant for managing academic assignments in Notion.
 
+IMPORTANT: Always end your response with one of these phrases to indicate you've completed the task:
+- "Task completed: [brief summary of action taken]"
+- "Assignments updated: [summary of changes]"
+- "Project management complete: [summary of information provided]"
+
 Your primary capabilities:
 1. Retrieving assignments from Notion
 2. Finding assignments with fuzzy matching

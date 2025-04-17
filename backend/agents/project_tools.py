@@ -14,6 +14,8 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, Union
 from difflib import get_close_matches
 from langchain_openai import ChatOpenAI
+from dateparser import parse
+import re
 
 import logging
 
@@ -59,8 +61,6 @@ def parse_relative_datetime(date_description: str):
     Returns:
         ISO format datetime string with the correct date and time
     """
-    from dateparser import parse
-    import re
     
     current_time = datetime.now()
     
@@ -102,14 +102,19 @@ def retireve_assignment(assignment_name: str):
     return assignment
 
 @tool
-def retrive_all_assignments():
+def retrive_all_assignments(current_time: str, end_time: str):
     """
-    Retrieve all assignments from the given Notion database that are either submitted or not submitted based on parameter
-
-    returns a list of assignment objects with name, due date, status, and course
+    Retrieve all assignments from the Notion database with date filtering.
+    
+    Args:
+        current_time: ISO datetime string to filter assignments after this time
+        end_time: ISO datetime string to filter assignments before this time
+        
+    Returns:
+        A list of assignment objects with details including name, due date, status, and course
     """
     notion_api = NotionAPI()
-    assignments = notion_api.get_all_assignments()
+    assignments = notion_api.get_all_assignments(current_time, end_time)
     return assignments
 
 @tool

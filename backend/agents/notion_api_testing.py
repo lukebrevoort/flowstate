@@ -26,7 +26,35 @@ from difflib import get_close_matches
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-notion_api = NotionAPI()
+def test_retrieve_all_assignments():
+    """Test function to retrieve all assignments"""
+    notion_api = NotionAPI()
+    
+    # Pass datetime objects instead of ISO strings
+    current_time = datetime.now()  # Remove isoformat()
+    end_time = datetime.now() + timedelta(days=30)  # Remove isoformat()
+    
+    # Call the function you defined
+    assignments = retrive_all_assignments(current_time, end_time)
+    
+    print(f"Found {len(assignments)} assignments")
+    for assignment in assignments:
+        print(f"Name: {assignment.name}, Due: {assignment.due_date}, Course: {assignment.course}")
 
-# Get notes from an assignment by name
-print(notion_api.get_assignment_notes("CS135 Midterm"))
+def retrive_all_assignments(current_time: datetime, end_time: datetime):
+    """
+    Retrieve all assignments from the Notion database with date filtering.
+    
+    Args:
+        current_time: datetime object to filter assignments after this time
+        end_time: datetime object to filter assignments before this time
+        
+    Returns:
+        A list of assignment objects with details including name, due date, status, and course
+    """
+    notion_api = NotionAPI()
+    assignment_dicts = notion_api.get_all_assignments(current_time, end_time)
+    return [Assignment(**assignment) for assignment in assignment_dicts]
+
+if __name__ == "__main__":
+    test_retrieve_all_assignments()
