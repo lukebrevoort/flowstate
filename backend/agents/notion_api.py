@@ -308,6 +308,26 @@ class NotionAPI:
         next_cursor = None
         
         try:
+            # If no start_date is provided, use the current date
+            if start_date is None:
+                start_date = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+            
+            # Ensure start_date is a datetime object for comparison
+            if not isinstance(start_date, datetime):
+                try:
+                    start_date = datetime.fromisoformat(start_date)
+                except (ValueError, TypeError):
+                    # Log the error but continue with original value
+                    logger.warning(f"Could not parse start_date: {start_date}, using as is")
+            
+            # Convert to UTC timezone for consistent comparison
+            if isinstance(start_date, datetime) and start_date.tzinfo is None:
+                start_date = start_date.replace(tzinfo=timezone.utc)
+                
+            # Extract just the current date for simpler comparison
+            current_date = datetime.now(timezone.utc).date()
+            logger.info(f"Filtering assignments from {start_date} to {end_date}")
+                
             simplified_assignments = []
             while True:
                 query_params = {
@@ -344,6 +364,8 @@ class NotionAPI:
                 if next_cursor:
                     query_params["start_cursor"] = next_cursor
                 
+                logger.debug(f"Querying Notion with params: {query_params}")
+                
                 response = self._make_notion_request(
                     "query_database",
                     **query_params
@@ -361,15 +383,37 @@ class NotionAPI:
                     
                     # Extract due date
                     due_date = None
+                    due_date_obj = None
                     date_property = properties.get('Due Date', {}).get('date', {})
                     if date_property:
                         due_date = date_property.get('start')
+                        if due_date:
+                            try:
+                                # Convert to datetime object for comparison
+                                if 'T' in due_date:  # ISO format with time
+                                    due_date_obj = datetime.fromisoformat(due_date.replace('Z', '+00:00'))
+                                else:  # Date only
+                                    due_date_obj = datetime.fromisoformat(due_date)
+                                    # Add UTC timezone for date-only values
+                                    if due_date_obj.tzinfo is None:
+                                        due_date_obj = due_date_obj.replace(tzinfo=timezone.utc)
+                                
+                                # Skip assignments with due dates before the current date
+                                if due_date_obj.date() < current_date:
+                                    logger.debug(f"Skipping past assignment: {title} (due {due_date})")
+                                    continue
+                            except (ValueError, TypeError) as e:
+                                logger.warning(f"Error parsing due date '{due_date}' for '{title}': {e}")
                     
                     # Extract status
                     status = ""
                     status_property = properties.get('Status', {}).get('status', {})
                     if status_property:
                         status = status_property.get('name', "")
+                    
+                    # Skip assignments with "Dont show" status
+                    if status == "Dont show":
+                        continue
                     
                     # Extract course_id relation ID
                     course_id_id = ""
@@ -396,6 +440,7 @@ class NotionAPI:
                         'course_id': course_id_id
                     }
                     
+                    # Add to results only if it's not before the current date
                     simplified_assignments.append(simplified_assignment)
                 
                 # Check if there are more pages
@@ -403,6 +448,7 @@ class NotionAPI:
                 if not next_cursor:
                     break
             
+            logger.info(f"Found {len(simplified_assignments)} assignments")
             return simplified_assignments
             
         except Exception as e:
@@ -772,5 +818,4 @@ class NotionAPI:
                 text_parts.append(text_obj['text']['content'])
         
         return "".join(text_parts)
-    
-    
+

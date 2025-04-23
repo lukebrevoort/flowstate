@@ -30,18 +30,35 @@ def test_retrieve_all_assignments():
     """Test function to retrieve all assignments"""
     notion_api = NotionAPI()
     
-    # Pass datetime objects instead of ISO strings
-    current_time = datetime.now()  # Remove isoformat()
-    end_time = datetime.now() + timedelta(days=7)  # Remove isoformat()
+    # Get current time and end time (7 days from now)
+    current_time = datetime.now()
+    end_time = current_time + timedelta(days=7)
     
-    # Call the function you defined
+    # Log the date range we're querying
+    print(f"Retrieving assignments between {current_time.strftime('%Y-%m-%d')} and {end_time.strftime('%Y-%m-%d')}")
+    
+    # Call the function with datetime objects
     assignments = retrive_all_assignments(current_time, end_time)
     
-    print(f"Found {len(assignments)} assignments")
+    # Print the number of assignments found
+    print(f"\nFound {len(assignments)} assignments")
+    
+    # Print each assignment with formatted date
     for assignment in assignments:
-        print(f"Name: {assignment.name}, Due: {assignment.due_date}, Course: {assignment.course}")
+        due_date = assignment['due_date']
+        if due_date and 'T' in due_date:
+            # Convert ISO format to more readable date
+            try:
+                dt = datetime.fromisoformat(due_date.replace('Z', '+00:00'))
+                formatted_date = dt.strftime('%Y-%m-%d %H:%M')
+            except ValueError:
+                formatted_date = due_date
+        else:
+            formatted_date = due_date
+        
+        print(f"{formatted_date} - {assignment['name']} ({assignment['course_id']})")
 
-def retrive_all_assignments(current_time: datetime, end_time: datetime):
+def retrive_all_assignments(current_time, end_time):
     """
     Retrieve all assignments from the Notion database with date filtering.
     
@@ -53,8 +70,8 @@ def retrive_all_assignments(current_time: datetime, end_time: datetime):
         A list of assignment objects with details including name, due date, status, and course
     """
     notion_api = NotionAPI()
-    assignment_dicts = notion_api.get_all_assignments(current_time, end_time)
-    print(f"Assignment dicts: {assignment_dicts}")
+    assignments = notion_api.get_all_assignments(current_time, end_time)
+    return assignments
 
 if __name__ == "__main__":
     test_retrieve_all_assignments()

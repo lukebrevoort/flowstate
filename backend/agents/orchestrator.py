@@ -19,9 +19,18 @@ import json
 from langgraph.graph import MessagesState
 from langgraph_supervisor import create_supervisor
 
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.store.memory import InMemoryStore
+
+class ValidatedChatAnthropic(ChatAnthropic):
+    def invoke(self, messages, **kwargs):
+        # Filter out any messages with empty content
+        valid_messages = [msg for msg in messages if hasattr(msg, "content") and msg.content]
+        return super().invoke(valid_messages, **kwargs)
+
 # Build out Main States 
 
-llm = ChatAnthropic(model="claude-3-5-haiku-latest")
+llm = ValidatedChatAnthropic(model="claude-3-5-haiku-latest")
 
 project_manager_agent = create_react_agent(
     model=llm,
