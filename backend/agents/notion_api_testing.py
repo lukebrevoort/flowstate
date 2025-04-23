@@ -32,7 +32,7 @@ def test_retrieve_all_assignments():
     
     # Pass datetime objects instead of ISO strings
     current_time = datetime.now()  # Remove isoformat()
-    end_time = datetime.now() + timedelta(days=30)  # Remove isoformat()
+    end_time = datetime.now() + timedelta(days=7)  # Remove isoformat()
     
     # Call the function you defined
     assignments = retrive_all_assignments(current_time, end_time)
@@ -54,7 +54,7 @@ def retrive_all_assignments(current_time: datetime, end_time: datetime):
     """
     notion_api = NotionAPI()
     assignment_dicts = notion_api.get_all_assignments(current_time, end_time)
-    return [Assignment(**assignment) for assignment in assignment_dicts]
+    print(f"Assignment dicts: {assignment_dicts}")
 
 if __name__ == "__main__":
     test_retrieve_all_assignments()

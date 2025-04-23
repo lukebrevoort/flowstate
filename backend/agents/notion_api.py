@@ -36,11 +36,11 @@ class NotionAPI:
     def __init__(self):
         self.notion = Client(auth=NOTION_TOKEN)
         self.database_id = NOTION_DATABASE_ID
-        self.course_db_id = COURSE_DATABASE_ID
-        self.course_mapping = {}  # Initialize empty
-        self.course_name_mapping = {}  # For name→id mapping
+        self.course_id_db_id = COURSE_DATABASE_ID
+        self.course_id_mapping = {}  # Initialize empty
+        self.course_id_name_mapping = {}  # For name→id mapping
         self.last_mapping_refresh = None
-        self._refresh_course_mapping()  # Load on init
+        self._refresh_course_id_mapping()  # Load on init
 
     @sleep_and_retry
     @limits(calls=MAX_REQUESTS_PER_SECOND, period=ONE_SECOND)
@@ -98,23 +98,23 @@ class NotionAPI:
             
         return dt
     
-    def _refresh_course_mapping(self):
-        """Refresh the course mappings with timeout"""
+    def _refresh_course_id_mapping(self):
+        """Refresh the course_id mappings with timeout"""
         try:
-            self.course_mapping = self._get_course_mapping()
+            self.course_id_mapping = self._get_course_id_mapping()
             # Also create a name-to-id mapping for fuzzy matching
-            self.course_name_mapping = self._get_course_name_mapping()
+            self.course_id_name_mapping = self._get_course_id_name_mapping()
             self.last_mapping_refresh = datetime.now()
         except Exception as e:
-            logger.error(f"Failed to refresh course mappings: {e}")
+            logger.error(f"Failed to refresh course_id mappings: {e}")
     
-    def _get_course_name_mapping(self) -> Dict[str, str]:
-        """Maps course names to Notion page UUIDs from the course database."""
+    def _get_course_id_name_mapping(self) -> Dict[str, str]:
+        """Maps course_id names to Notion page UUIDs from the course_id database."""
         mapping = {}
         try:
             response = self._make_notion_request(
                 "query_database",
-                database_id=self.course_db_id,
+                database_id=self.course_id_db_id,
                 page_size=100
             )
             
@@ -123,30 +123,30 @@ class NotionAPI:
                     notion_uuid = page['id']
                     properties = page['properties']
                     
-                    # Get the course name
+                    # Get the course_id name
                     if 'Course Name' in properties and properties['Course Name'].get('title'):
                         name = properties['Course Name']['title'][0]['text']['content']
                         mapping[name.lower()] = notion_uuid
                         # Also store common abbreviations or partial matches
                         parts = name.split(' - ')
                         if len(parts) > 1:
-                            course_code = parts[0].strip()
-                            mapping[course_code.lower()] = notion_uuid
+                            course_id_code = parts[0].strip()
+                            mapping[course_id_code.lower()] = notion_uuid
                 except Exception as e:
-                    logger.warning(f"Error processing course page: {e}")
+                    logger.warning(f"Error processing course_id page: {e}")
                     continue
         except Exception as e:
-            logger.error(f"Error building course name mapping: {e}")
+            logger.error(f"Error building course_id name mapping: {e}")
         
         return mapping
 
 
-    def get_course_id(self, course_name: str):
+    def get_course_id_id(self, course_id_name: str):
         """
-        Get the Notion page UUID for a specific course name from the Notion database
+        Get the Notion page UUID for a specific course_id name from the Notion database
         
         Args:
-            course_name: The name of the course to find
+            course_id_name: The name of the course_id to find
             
         Returns:
             str: The Notion page UUID if found, None otherwise
@@ -154,7 +154,7 @@ class NotionAPI:
         try:
             response = self._make_notion_request(
                 "query_database",
-                database_id=self.course_db_id,
+                database_id=self.course_id_db_id,
                 page_size=100
             )
             
@@ -162,7 +162,7 @@ class NotionAPI:
                 try:
                     properties = page['properties']
                     name = properties['Course Name']['title'][0]['text']['content']
-                    if name == course_name:
+                    if name == course_id_name:
                         return page['id']  # This returns the Notion UUID
                 except KeyError as e:
                     logger.error(f"Missing property in page {page.get('id')}: {e}")
@@ -174,20 +174,20 @@ class NotionAPI:
             return None
             
         except Exception as e:
-            logger.error(f"Failed to get course UUID: {e}")
+            logger.error(f"Failed to get course_id UUID: {e}")
             return None
     
-    def _get_course_mapping(self) -> Dict[str, str]:
+    def _get_course_id_mapping(self) -> Dict[str, str]:
         """
-        Maps Canvas course IDs to Notion page UUIDs from the course database.
+        Maps Canvas course_id IDs to Notion page UUIDs from the course_id database.
         
         Returns:
-            Dict mapping Canvas course IDs (str) to Notion page UUIDs (str)
+            Dict mapping Canvas course_id IDs (str) to Notion page UUIDs (str)
         """
         try:
             response = self._make_notion_request(
                 "query_database",
-                database_id=self.course_db_id,
+                database_id=self.course_id_db_id,
                 page_size=100
             )
             
@@ -226,7 +226,7 @@ class NotionAPI:
             return mapping
             
         except Exception as e:
-            logger.error(f"Failed to get course mapping: {e}")
+            logger.error(f"Failed to get course_id mapping: {e}")
             return {}
         
     def _clean_html(self, html_content: str) -> str:
@@ -305,7 +305,6 @@ class NotionAPI:
         Returns:
             List of assignment objects in the specified date range
         """
-        assignments = []
         next_cursor = None
         
         try:
@@ -321,8 +320,8 @@ class NotionAPI:
                     query_params["filter"] = {
                         "property": "Due Date",
                         "date": {
-                            "on_or_after": start_date.isoformat(),
-                            "on_or_before": end_date.isoformat()
+                            "on_or_after": start_date.isoformat() if isinstance(start_date, datetime) else start_date,
+                            "on_or_before": end_date.isoformat() if isinstance(end_date, datetime) else end_date
                         }
                     }
                 # Filter for assignments on or after start_date
@@ -330,7 +329,7 @@ class NotionAPI:
                     query_params["filter"] = {
                         "property": "Due Date",
                         "date": {
-                            "on_or_after": start_date.isoformat()
+                            "on_or_after": start_date.isoformat() if isinstance(start_date, datetime) else start_date
                         }
                     }
                 # Filter for assignments on or before end_date
@@ -338,7 +337,7 @@ class NotionAPI:
                     query_params["filter"] = {
                         "property": "Due Date",
                         "date": {
-                            "on_or_before": end_date.isoformat()
+                            "on_or_before": end_date.isoformat() if isinstance(end_date, datetime) else end_date
                         }
                     }
                 
@@ -372,29 +371,29 @@ class NotionAPI:
                     if status_property:
                         status = status_property.get('name', "")
                     
-                    # Extract course relation ID
-                    course_id = ""
-                    notion_course_id = ""
-                    course_property = properties.get('Course', {}).get('relation', [])
-                    if course_property and len(course_property) > 0:
-                        notion_course_id = course_property[0].get('id', "")
+                    # Extract course_id relation ID
+                    course_id_id = ""
+                    notion_course_id_id = ""
+                    course_id_property = properties.get('Course', {}).get('relation', [])
+                    if course_id_property and len(course_id_property) > 0:
+                        notion_course_id_id = course_id_property[0].get('id', "")
                         
-                        # Try to map the Notion UUID back to a Canvas course ID
-                        for canvas_id, notion_uuid in self.course_mapping.items():
-                            if notion_uuid == notion_course_id:
-                                course_id = canvas_id
+                        # Try to map the Notion UUID back to a Canvas course_id ID
+                        for canvas_id, notion_uuid in self.course_id_mapping.items():
+                            if notion_uuid == notion_course_id_id:
+                                course_id_id = canvas_id
                                 break
                         
                         # If no mapping found, fall back to the Notion UUID
-                        if not course_id:
-                            course_id = notion_course_id
+                        if not course_id_id:
+                            course_id_id = notion_course_id_id
                     
                     # Create simplified assignment object
                     simplified_assignment = {
                         'name': title,
                         'due_date': due_date,
                         'status': status,
-                        'course': course_id
+                        'course_id': course_id_id
                     }
                     
                     simplified_assignments.append(simplified_assignment)
@@ -421,14 +420,14 @@ class NotionAPI:
             None
         """
         try:
-            # Convert course_id to string and look up UUID
-            course_id_str = str(assignment.course_id)
-            course_uuid = self.course_mapping.get(course_id_str)
-            logger.debug(f"Looking up course {course_id_str} in mapping: {self.course_mapping}")
+            # Convert course_id_id to string and look up UUID
+            course_id_id_str = str(assignment.course_id_id)
+            course_id_uuid = self.course_id_mapping.get(course_id_id_str)
+            logger.debug(f"Looking up course_id {course_id_id_str} in mapping: {self.course_id_mapping}")
 
-            if not course_uuid:
-                logger.warning(f"No Notion UUID found for course {course_id_str}")
-                raise ValueError(f"No Notion UUID found for course {course_id_str}")
+            if not course_id_uuid:
+                logger.warning(f"No Notion UUID found for course_id {course_id_id_str}")
+                raise ValueError(f"No Notion UUID found for course_id {course_id_id_str}")
             
             # Parse due date using the helper
             due_date = self._parse_date(assignment.due_date)
@@ -437,7 +436,7 @@ class NotionAPI:
             properties = {
                 "Assignment Title": {"title": [{"text": {"content": str(assignment.name)}}]},
                 "Description": {"rich_text": [{"text": {"content": self._clean_html(assignment.description)}}]},
-                "Course": {"relation": [{"id": course_uuid}]},
+                "Course": {"relation": [{"id": course_id_uuid}]},
                 "Status": {"status": {"name": str(assignment.status)}},
             }
             
@@ -530,14 +529,14 @@ class NotionAPI:
             if 'description' in update_data:
                 properties["Description"] = {"rich_text": [{"text": {"content": self._clean_html(update_data['description'])}}]}
             
-            # Handle course update
-            if 'course_id' in update_data:
-                course_id_str = str(update_data['course_id'])
-                course_uuid = self.course_mapping.get(course_id_str)
-                if not course_uuid:
-                    logger.warning(f"No Notion UUID found for course {course_id_str}")
-                    return f"No Notion UUID found for course {course_id_str}"
-                properties["Course"] = {"relation": [{"id": course_uuid}]}
+            # Handle course_id update
+            if 'course_id_id' in update_data:
+                course_id_id_str = str(update_data['course_id_id'])
+                course_id_uuid = self.course_id_mapping.get(course_id_id_str)
+                if not course_id_uuid:
+                    logger.warning(f"No Notion UUID found for course_id {course_id_id_str}")
+                    return f"No Notion UUID found for course_id {course_id_id_str}"
+                properties["Course"] = {"relation": [{"id": course_id_uuid}]}
             
             # Handle status update
             if 'status' in update_data:
