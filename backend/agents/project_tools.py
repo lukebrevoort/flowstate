@@ -91,7 +91,7 @@ def parse_relative_datetime(date_description: str):
     return None
 
 @tool
-def retireve_assignment(assignment_name: str):
+def retrieve_assignment(assignment_name: str):
     """
     Retrieve assignments from a given Notion database
 
@@ -102,7 +102,7 @@ def retireve_assignment(assignment_name: str):
     return assignment
 
 @tool
-def retrive_all_assignments(current_time: str, end_time: str):
+def retrieve_all_assignments(current_time: str, end_time: str):
     """
     Retrieve all assignments from the Notion database with date filtering.
     
@@ -502,8 +502,8 @@ def get_assignment_notes(assignment_name: str):
 
 
 tools = [
-    retireve_assignment, 
-    retrive_all_assignments, 
+    retrieve_assignment, 
+    retrieve_all_assignments, 
     get_current_time, 
     create_assignment_item,
     get_course_info, 

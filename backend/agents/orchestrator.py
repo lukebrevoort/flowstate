@@ -10,8 +10,8 @@ from langgraph.prebuilt import create_react_agent
 from langgraph.prebuilt import ToolNode, tools_condition
 from IPython.display import display, Image
 
-from agents.project_manager import project_manager_rag_prompt, project_manager_cuda_prompt, project_cuda_tools, project_rag_tools
-from agents.scheduler_agent import scheduler_cuda_prompt, scheduler_rag_prompt, scheduler_cuda_tools, scheduler_rag_tools
+from agents.project_manager import project_manager_read_prompt, project_manager_cud_prompt, project_cud_tools, project_read_tools
+from agents.scheduler_agent import scheduler_cud_prompt, scheduler_read_prompt, scheduler_cud_tools, scheduler_read_tools
 
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
 from anthropic._exceptions import OverloadedError
@@ -44,15 +44,15 @@ llm = ValidatedChatAnthropic(model="claude-3-5-haiku-latest")
 
 project_manager_cuda = create_react_agent(
     model=llm,
-    tools=project_cuda_tools,
-    prompt=project_manager_cuda_prompt,
+    tools=project_cud_tools,
+    prompt=project_manager_cud_prompt,
     name="Project Manager CUDA Agent",
 )
 
 project_manager_rag = create_react_agent(
     model=llm,
-    tools=project_rag_tools,
-    prompt=project_manager_rag_prompt,
+    tools=project_read_tools,
+    prompt=project_manager_read_prompt,
     name="Project Manager RAG Agent",
 )
 
@@ -75,15 +75,15 @@ project_management_team = create_supervisor(
 
 scheduler_cuda = create_react_agent(
     model=llm,
-    tools=scheduler_cuda_tools,
-    prompt=scheduler_cuda_prompt,
+    tools=scheduler_cud_tools,
+    prompt=scheduler_cud_prompt,
     name="Scheduler CUDA Agent",
 )
 
 scheduler_rag = create_react_agent(
     model=llm,
-    tools=scheduler_rag_tools,
-    prompt=scheduler_rag_prompt,
+    tools=scheduler_read_tools,
+    prompt=scheduler_read_prompt,
     name="Scheduler RAG Agent",
 )
 

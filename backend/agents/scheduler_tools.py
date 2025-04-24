@@ -309,7 +309,7 @@ def delete_event(event_id: str, calendar_id: str = 'primary') -> str:
     Deletes an event from the user's Google Calendar.
 
     Args:
-    - event_id: ID of the event to delete
+    - event_id: ID of the event to delete (EX: _6tn3ah1g85p3cb9g60o32b9k8gojibb9c8ojabbe75hjcggng)
     - calendar_id: ID of the calendar to delete the event from (defaults to primary)
 
     Returns:
@@ -333,7 +333,7 @@ def find_event(event_name: str, timeMin=None, timeMax=None):
     - timeMax: End time of the range (defaults to one week from current time)
 
     Returns:
-    - Event details
+    - Event details such as summary, location, description, start and end times and Event ID
     """
     try:
         if timeMin is None:
