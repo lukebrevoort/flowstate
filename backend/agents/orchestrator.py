@@ -10,8 +10,8 @@ from langgraph.prebuilt import create_react_agent
 from langgraph.prebuilt import ToolNode, tools_condition
 from IPython.display import display, Image
 
-from agents.project_manager import prompt as project_manager_prompt, tools as project_manager_tools
-from agents.scheduler_agent import prompt as scheduler_prompt, tools as scheduler_tools
+from agents.project_manager import project_manager_rag_prompt, project_manager_cuda_prompt, project_cuda_tools, project_rag_tools
+from agents.scheduler_agent import scheduler_cuda_prompt, scheduler_rag_prompt, scheduler_cuda_tools, scheduler_rag_tools
 
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
 from anthropic._exceptions import OverloadedError
@@ -24,27 +24,83 @@ from langgraph.store.memory import InMemoryStore
 
 class ValidatedChatAnthropic(ChatAnthropic):
     def invoke(self, messages, **kwargs):
-        # Filter out any messages with empty content
         valid_messages = [msg for msg in messages if hasattr(msg, "content") and msg.content]
         return super().invoke(valid_messages, **kwargs)
+        
+    async def ainvoke(self, *args, **kwargs):
+        # Extract messages from args (assuming it's the first arg after self)
+        if len(args) > 0:
+            messages = args[0]
+            valid_messages = [msg for msg in messages if hasattr(msg, "content") and msg.content]
+            # Replace the messages in args
+            args_list = list(args)
+            args_list[0] = valid_messages
+            return await super().ainvoke(*args_list, **kwargs)
+        return await super().ainvoke(*args, **kwargs)
 
 # Build out Main States 
 
 llm = ValidatedChatAnthropic(model="claude-3-5-haiku-latest")
 
-project_manager_agent = create_react_agent(
+project_manager_cuda = create_react_agent(
     model=llm,
-    tools=project_manager_tools,
-    prompt=project_manager_prompt,
-    name="Project Manager Agent",
+    tools=project_cuda_tools,
+    prompt=project_manager_cuda_prompt,
+    name="Project Manager CUDA Agent",
 )
 
-scheduler_agent = create_react_agent(
+project_manager_rag = create_react_agent(
     model=llm,
-    tools=scheduler_tools,
-    prompt=scheduler_prompt,
-    name="Scheduler Agent",
+    tools=project_rag_tools,
+    prompt=project_manager_rag_prompt,
+    name="Project Manager RAG Agent",
 )
+
+project_manager_prompt = ("You are the supervisor agent for the project manager agent."
+"You will receive messages from the higher Orchestrator agent and you need to decide which agent should take the next action."
+"For anything related to creating, updating, or deleting assignments, use project_manager_cuda."
+"For anything related to retrieving assignments, finding assignments, or getting course information, use project_manager_rag."
+"For anything related to estimating task durations or retrieving notes, use project_manager_rag."
+"You MUST ALWAYS respond with a final answer, DO NOT respond with empty text"
+
+)
+
+project_management_team = create_supervisor(
+    [project_manager_cuda, project_manager_rag],
+    model=llm,
+    prompt=project_manager_prompt,
+    supervisor_name="Project Manager Supervisor",
+    output_mode="full_history",
+).compile(name="project_management_team")
+
+scheduler_cuda = create_react_agent(
+    model=llm,
+    tools=scheduler_cuda_tools,
+    prompt=scheduler_cuda_prompt,
+    name="Scheduler CUDA Agent",
+)
+
+scheduler_rag = create_react_agent(
+    model=llm,
+    tools=scheduler_rag_tools,
+    prompt=scheduler_rag_prompt,
+    name="Scheduler RAG Agent",
+)
+
+scheduler_prompt = ("You are the supervisor agent for the scheduler agent."
+"You will receive messages from the higher Orchestrator agent and you need to decide which agent should take the next action."
+"For anything related to creating, updating, or deleting calendar events, use scheduler_cuda."
+"For anything related to retrieving calendar events, finding calendar events, or getting calendar information, use scheduler_rag."
+"You MUST ALWAYS respond with a final answer, DO NOT respond with empty text"
+)
+
+scheduler_team = create_supervisor(
+    [scheduler_cuda, scheduler_rag],
+    model=llm,
+    prompt=scheduler_prompt,
+    supervisor_name="Scheduler Supervisor",
+    output_mode="full_history",
+).compile(name="scheduler_team")
 
 prompt = (
     "You are a supervisor agent that coordinates the project manager agent and the scheduler agent. "
@@ -54,13 +110,13 @@ prompt = (
 )
 
 orchestrator_agent = create_supervisor(
-    [scheduler_agent, project_manager_agent],
+    [scheduler_team, project_management_team],
     model=llm,
-    output_mode="last_message",
+    output_mode="full_history",
+    supervisor_name="Orchestrator Supervisor",
     prompt=prompt,
-)
+).compile(name="Orchestrator Supervisor")
 
 
-create_orchestrator_graph = orchestrator_agent.compile()
-app = create_orchestrator_graph
+app = orchestrator_agent
 
