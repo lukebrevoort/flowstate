@@ -74,7 +74,7 @@ class NotionAPI:
         elif operation_type == "blocks/children/append":
             return self.notion.blocks.children.append(**kwargs)
         raise ValueError(f"Unknown operation type: {operation_type}")
-    
+        
     def _parse_date(self, date_str) -> Optional[datetime]:
         """Helper to parse dates from various formats"""
         if not date_str:
@@ -89,8 +89,6 @@ class NotionAPI:
             except ValueError as e:
                 logger.warning(f"Could not parse date: {date_str}. Error: {e}")
                 return None
-
-        dt = dt.astimezone(pytz.timezone('US/Eastern'))
         
         # Optional: If time is exactly 11:59, return date only (adjust as needed)
         if dt.hour == 23 and dt.minute == 59:
