@@ -304,20 +304,72 @@ def update_event(event_id: str, event: CalendarEvent, calendar_id: str = 'primar
         return f"Error updating event: {str(e)}. The event may not exist, or you may not have permission to update it."
 
 @tool
-def delete_event(event_id: str, calendar_id: str = 'primary') -> str:
+def delete_event(event_id: str, calendar_id: str = 'primary', delete_all_instances: bool = False) -> str:
     """
     Deletes an event from the user's Google Calendar.
 
     Args:
     - event_id: ID of the event to delete (EX: _6tn3ah1g85p3cb9g60o32b9k8gojibb9c8ojabbe75hjcggng)
     - calendar_id: ID of the calendar to delete the event from (defaults to primary)
+    - delete_all_instances: For recurring events, whether to delete all instances (True) or just this one (False)
 
     Returns:
     - Confirmation message
     """
     try:
-        service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
-        return f"Event with ID {event_id} was successfully deleted."
+        # Check if this is a recurring event instance (ID contains underscore and timestamp)
+        if '_' in event_id and any(c.isdigit() for c in event_id.split('_')[1]):
+            # This appears to be a recurring event instance
+            original_event_id = event_id.split('_')[0]
+            
+            if delete_all_instances:
+                # Delete the entire series by using the original event ID
+                service.events().delete(calendarId=calendar_id, eventId=original_event_id).execute()
+                return f"Recurring event series with ID {original_event_id} was successfully deleted."
+            else:
+                # For deleting a single instance, we need to get the instance and mark it as cancelled
+                # First try to get the specific instance
+                try:
+                    # Try to get the specific instance
+                    event = service.events().get(calendarId=calendar_id, eventId=event_id).execute()
+                    # Mark it as cancelled
+                    event['status'] = 'cancelled'
+                    service.events().update(calendarId=calendar_id, eventId=event_id, body=event).execute()
+                    return f"Instance of recurring event with ID {event_id} was successfully cancelled."
+                except Exception as instance_error:
+                    # If we can't get the specific instance, try an alternative approach
+                    try:
+                        # Get the original event
+                        original_event = service.events().get(calendarId=calendar_id, eventId=original_event_id).execute()
+                        
+                        # Extract the instance timestamp
+                        instance_time = event_id.split('_')[1]
+                        # Format for recurrence ID - might need adjustment based on your actual timestamp format
+                        if 'T' in instance_time:
+                            recurrence_id = instance_time.split('T')[0]
+                            instance_datetime = datetime.strptime(instance_time, "%Y%m%dT%H%M%SZ")
+                        else:
+                            recurrence_id = instance_time
+                            instance_datetime = datetime.strptime(instance_time, "%Y%m%d")
+                            
+                        # Create an exception for this instance
+                        exception = {
+                            'summary': original_event['summary'],
+                            'status': 'cancelled',
+                            'originalStartTime': {
+                                'dateTime': instance_datetime.isoformat() + 'Z'
+                            },
+                            'recurringEventId': original_event_id
+                        }
+                        service.events().insert(calendarId=calendar_id, body=exception).execute()
+                        return f"Instance of recurring event with ID {event_id} was successfully cancelled."
+                    except Exception as e:
+                        return f"Error cancelling recurring event instance: {str(e)}"
+        else:
+            # Regular non-recurring event
+            service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
+            return f"Event with ID {event_id} was successfully deleted."
+            
     except Exception as e:
         logger.error(f"Error deleting event: {str(e)}")
         return f"Error deleting event: {str(e)}. The event may not exist, or you may not have permission to delete it."
