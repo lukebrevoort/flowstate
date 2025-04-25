@@ -141,12 +141,12 @@ class NotionAPI:
         return mapping
 
 
-    def get_course_id_id(self, course_id_name: str):
+    def get_course_id(self, course_name: str):
         """
-        Get the Notion page UUID for a specific course_id name from the Notion database
+        Get the Notion page UUID for a specific course name from the Notion database
         
         Args:
-            course_id_name: The name of the course_id to find
+            course_name: The name of the course to find
             
         Returns:
             str: The Notion page UUID if found, None otherwise
@@ -162,7 +162,7 @@ class NotionAPI:
                 try:
                     properties = page['properties']
                     name = properties['Course Name']['title'][0]['text']['content']
-                    if name == course_id_name:
+                    if name == course_name:
                         return page['id']  # This returns the Notion UUID
                 except KeyError as e:
                     logger.error(f"Missing property in page {page.get('id')}: {e}")
@@ -174,7 +174,7 @@ class NotionAPI:
             return None
             
         except Exception as e:
-            logger.error(f"Failed to get course_id UUID: {e}")
+            logger.error(f"Failed to get course UUID: {e}")
             return None
     
     def _get_course_id_mapping(self) -> Dict[str, str]:
@@ -407,7 +407,7 @@ class NotionAPI:
                     
                     # Extract status
                     status = ""
-                    status_property = properties.get('Status', {}).get('status', {})
+                    status_property = properties.get('Status', {}).get('select', {})
                     if status_property:
                         status = status_property.get('name', "")
                     
@@ -415,29 +415,29 @@ class NotionAPI:
                     if status == "Dont show":
                         continue
                     
-                    # Extract course_id relation ID
-                    course_id_id = ""
-                    notion_course_id_id = ""
+                    # Extract course relation ID
+                    course_id = ""
+                    notion_course_id = ""
                     course_id_property = properties.get('Course', {}).get('relation', [])
                     if course_id_property and len(course_id_property) > 0:
-                        notion_course_id_id = course_id_property[0].get('id', "")
+                        notion_course_id = course_id_property[0].get('id', "")
                         
-                        # Try to map the Notion UUID back to a Canvas course_id ID
+                        # Try to map the Notion UUID back to a Canvas course ID
                         for canvas_id, notion_uuid in self.course_id_mapping.items():
-                            if notion_uuid == notion_course_id_id:
-                                course_id_id = canvas_id
+                            if notion_uuid == notion_course_id:
+                                course_id = canvas_id
                                 break
                         
                         # If no mapping found, fall back to the Notion UUID
-                        if not course_id_id:
-                            course_id_id = notion_course_id_id
+                        if not course_id:
+                            course_id = notion_course_id
                     
                     # Create simplified assignment object
                     simplified_assignment = {
                         'name': title,
                         'due_date': due_date,
                         'status': status,
-                        'course_id': course_id_id
+                        'course_id': course_id
                     }
                     
                     # Add to results only if it's not before the current date
@@ -466,14 +466,14 @@ class NotionAPI:
             None
         """
         try:
-            # Convert course_id_id to string and look up UUID
-            course_id_id_str = str(assignment.course_id_id)
-            course_id_uuid = self.course_id_mapping.get(course_id_id_str)
-            logger.debug(f"Looking up course_id {course_id_id_str} in mapping: {self.course_id_mapping}")
+            # Convert course_id to string and look up UUID
+            course_id_str = str(assignment.course_id)
+            course_id_uuid = self.course_id_mapping.get(course_id_str)
+            logger.debug(f"Looking up course {course_id_str} in mapping: {self.course_id_mapping}")
 
             if not course_id_uuid:
-                logger.warning(f"No Notion UUID found for course_id {course_id_id_str}")
-                raise ValueError(f"No Notion UUID found for course_id {course_id_id_str}")
+                logger.warning(f"No Notion UUID found for course {course_id_str}")
+                raise ValueError(f"No Notion UUID found for course {course_id_str}")
             
             # Parse due date using the helper
             due_date = self._parse_date(assignment.due_date)
@@ -483,7 +483,7 @@ class NotionAPI:
                 "Assignment Title": {"title": [{"text": {"content": str(assignment.name)}}]},
                 "Description": {"rich_text": [{"text": {"content": self._clean_html(assignment.description)}}]},
                 "Course": {"relation": [{"id": course_id_uuid}]},
-                "Status": {"status": {"name": str(assignment.status)}},
+                "Status": {"select": {"name": str(assignment.status)}},
             }
             
             # Add AssignmentID only if available
@@ -520,7 +520,7 @@ class NotionAPI:
                     logger.warning(f"Invalid grade format for assignment {assignment.name}: {assignment.grade}")
                     if hasattr(assignment, "mark") and assignment.mark is not None:
                         try:
-                            properties["Status"] = {"status": {"name": "Mark received"}}
+                            properties["Status"] = {"select": {"name": "Mark received"}}
                         except (ValueError, TypeError):
                             logger.warning(f"Invalid mark format for assignment {assignment.name}: {assignment.mark}")
 
@@ -575,18 +575,18 @@ class NotionAPI:
             if 'description' in update_data:
                 properties["Description"] = {"rich_text": [{"text": {"content": self._clean_html(update_data['description'])}}]}
             
-            # Handle course_id update
-            if 'course_id_id' in update_data:
-                course_id_id_str = str(update_data['course_id_id'])
-                course_id_uuid = self.course_id_mapping.get(course_id_id_str)
+            # Handle course update
+            if 'course_id' in update_data:
+                course_id_str = str(update_data['course_id'])
+                course_id_uuid = self.course_id_mapping.get(course_id_str)
                 if not course_id_uuid:
-                    logger.warning(f"No Notion UUID found for course_id {course_id_id_str}")
-                    return f"No Notion UUID found for course_id {course_id_id_str}"
+                    logger.warning(f"No Notion UUID found for course {course_id_str}")
+                    return f"No Notion UUID found for course {course_id_str}"
                 properties["Course"] = {"relation": [{"id": course_id_uuid}]}
             
             # Handle status update
             if 'status' in update_data:
-                properties["Status"] = {"status": {"name": str(update_data['status'])}}
+                properties["Status"] = {"select": {"name": str(update_data['status'])}}
             
             # Handle due date update
             if 'due_date' in update_data:
@@ -617,7 +617,7 @@ class NotionAPI:
                     properties["Grade (%)"] = {"number": float(update_data['grade'])}
                     # Only set status to "Mark received" if we're updating the grade and not already setting status
                     if 'status' not in update_data:
-                        properties["Status"] = {"status": {"name": "Mark received"}}
+                        properties["Status"] = {"select": {"name": "Mark received"}}
                 except (ValueError, TypeError):
                     logger.warning(f"Invalid grade format: {update_data['grade']}")
             
@@ -627,7 +627,7 @@ class NotionAPI:
                 return "No properties to update"
             
             # Check current status for special cases
-            current_status = existing_page["properties"]["Status"]["status"]["name"]
+            current_status = existing_page["properties"]["Status"]["select"]["name"]
             if current_status == "Dont show" and 'status' not in update_data:
                 logger.info(f"Skipping update due to 'Dont show' status")
                 return "Skipping update due to 'Dont show' status"

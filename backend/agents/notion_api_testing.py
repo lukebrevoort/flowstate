@@ -23,55 +23,63 @@ import logging
 from difflib import get_close_matches
 
 # Setting up the logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
-def test_retrieve_all_assignments():
-    """Test function to retrieve all assignments"""
-    notion_api = NotionAPI()
-    
-    # Get current time and end time (7 days from now)
-    current_time = datetime.now()
-    end_time = current_time + timedelta(days=7)
-    
-    # Log the date range we're querying
-    print(f"Retrieving assignments between {current_time.strftime('%Y-%m-%d')} and {end_time.strftime('%Y-%m-%d')}")
-    
-    # Call the function with datetime objects
-    assignments = retrive_all_assignments(current_time, end_time)
-    
-    # Print the number of assignments found
-    print(f"\nFound {len(assignments)} assignments")
-    
-    # Print each assignment with formatted date
-    for assignment in assignments:
-        due_date = assignment['due_date']
-        if due_date and 'T' in due_date:
-            # Convert ISO format to more readable date
-            try:
-                dt = datetime.fromisoformat(due_date.replace('Z', '+00:00'))
-                formatted_date = dt.strftime('%Y-%m-%d %H:%M')
-            except ValueError:
-                formatted_date = due_date
-        else:
-            formatted_date = due_date
-        
-        print(f"{formatted_date} - {assignment['name']} ({assignment['course_id']})")
-
-def retrive_all_assignments(current_time, end_time):
+def create_assignment_item(assignment_dict: Dict[str, Any]):
     """
-    Retrieve all assignments from the Notion database with date filtering.
-    
-    Args:
-        current_time: datetime object to filter assignments after this time
-        end_time: datetime object to filter assignments before this time
-        
-    Returns:
-        A list of assignment objects with details including name, due date, status, and course
-    """
-    notion_api = NotionAPI()
-    assignments = notion_api.get_all_assignments(current_time, end_time)
-    return assignments
+    Create a assignment in Notion that follows the imported Assignment schema. 
+    Below is an example of the schema:
 
+    assignment = Assignment(
+        name="Midterm Research Paper",
+        description="<p>Write a 10-page research paper on a topic of your choice.</p>",
+        course_id=77456,  # Maps to a Notion course page via course_mapping
+        status="Not started",
+        due_date="2025-04-15T23:59:00Z",
+        id=67890,
+        priority="High",
+        group_name="Papers",
+        group_weight=30.0,
+        grade=None
+    )
+
+
+    returns the created assignment object
+    
+    """
+    if isinstance(assignment_dict, dict):
+        assignment = Assignment(
+            name=assignment_dict.get('name'),
+            description=assignment_dict.get('description'),
+            course_id=assignment_dict.get('course_id'),
+            course_name=assignment_dict.get('course_name'),
+            status=assignment_dict.get('select', 'Not started'),  # Changed from 'select' to 'status' to match expected input
+            due_date=assignment_dict.get('due_date'),
+            id=assignment_dict.get('id'),
+            priority=assignment_dict.get('priority', 'Medium'),
+            group_name=assignment_dict.get('group_name'),
+            group_weight=assignment_dict.get('group_weight'),
+            grade=assignment_dict.get('grade')
+        )
+    else:
+        assignment = assignment_dict
+        
+    notion_api = NotionAPI()
+    print(f"Creating assignment with due date: {assignment.due_date}"); notion_api.create_assignment(assignment)
+    return assignment
+    
 if __name__ == "__main__":
-    test_retrieve_all_assignments()
+    dotenv.load_dotenv()
+    notion_api = NotionAPI()
+    assignment = Assignment(
+        name="Midterm Research Paper",
+        description="<p>Write a 10-page research paper on a topic of your choice.</p>",
+        course_id=77456,  # Maps to a Notion course page via course_mapping
+        course_name="Sample Course",  # Added course_name
+        status="Not started",
+        due_date="2025-04-26T23:59:00Z",
+        id=67890,
+        priority="High",
+        group_name="Papers",
+        group_weight=30.0,
+        grade=None
+    )
+    notion_api.create_assignment(assignment)

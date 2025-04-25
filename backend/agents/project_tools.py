@@ -187,7 +187,7 @@ def create_assignment_item(assignment_dict: Dict[str, Any]):
             description=assignment_dict.get('description'),
             course_id=assignment_dict.get('course_id'),
             course_name=assignment_dict.get('course_name'),
-            status=assignment_dict.get('status', 'Not started'),
+            status=assignment_dict.get('select', 'Not started'),  # Changed from 'select' to 'status' to match expected input
             due_date=assignment_dict.get('due_date'),
             id=assignment_dict.get('id'),
             priority=assignment_dict.get('priority', 'Medium'),
@@ -211,30 +211,46 @@ def get_course_info(course_name: str = None):
         course_name: (Optional) Name or code of the course to search for
         
     Returns:
-        If course_name is provided and found: Course UUID
-        If course_name is provided but not found: List of all course names
-        If course_name is not provided: List of all course names
+        If course_name is provided and found: Dict with course_id and course_name
+        If course_name is provided but not found: Dict with all course names and their IDs
+        If course_name is not provided: Dict with all course names and their IDs
     """
     notion_api = NotionAPI()
     
-    # If no course name provided, return all course names
+    # Get mappings
+    course_name_dict = notion_api._get_course_id_name_mapping()
+    course_id_dict = notion_api._get_course_id_mapping()
+    
+    # Create a comprehensive dict with both names and IDs
+    course_info = {}
+    for name, notion_id in course_name_dict.items():
+        canvas_id = None
+        # Find the canvas_id that maps to this notion_id
+        for canvas_key, notion_value in course_id_dict.items():
+            if notion_value == notion_id:
+                canvas_id = canvas_key
+                break
+        
+        course_info[name] = {
+            "notion_id": notion_id,
+            "course_id": canvas_id
+        }
+    
+    # If no course name provided, return all course info
     if not course_name:
-        course_name_dict = notion_api._get_course_name_mapping()
-        return list(course_name_dict.keys())
+        return course_info
     
-    # Try to get the course ID
-    course_id = notion_api.get_course_id(course_name)
+    # Try to find the course by exact match
+    if course_name in course_info:
+        return {course_name: course_info[course_name]}
     
-    # If found, return the Canvas ID
-    if course_id:
-        course_id_dict = notion_api._get_course_mapping()
-        for key, value in course_id_dict.items():
-            if value == course_id:
-                return key
+    # Try to find by case-insensitive partial match
+    for name in course_info:
+        if course_name.lower() in name.lower():
+            return {name: course_info[name]}
     
-    # If not found, return all course names
-    course_name_dict = notion_api._get_course_name_mapping()
-    return list(course_name_dict.keys())
+    # If not found, return all course info
+    return course_info
 
 @tool
 def update_assignment(name: str, priority: str = None, status: str = None, 
@@ -257,7 +273,7 @@ def update_assignment(name: str, priority: str = None, status: str = None,
     if priority is not None:
         assignment_dict['priority'] = priority
     if status is not None:
-        assignment_dict['status'] = status
+        assignment_dict['select'] = status  # NotionAPI will now use select instead of status internally
     if due_date is not None:
         assignment_dict['due_date'] = due_date
     if description is not None:
@@ -309,7 +325,7 @@ def estimate_completion_time(assignment_dict):
     estimated_time = chain.invoke({
         "assignment": assignment_dict['name'],
         "due_date": assignment_dict['due_date'],
-        "status": assignment_dict.get('status', 'Not started'),
+        "status": assignment_dict.get('select', 'Not started'),
         "description": assignment_dict.get('description', ''),
         "notes": get_assignment_notes(assignment_dict['name'])
     })
@@ -369,7 +385,7 @@ def create_subtask_assignment(assignment_dict):
             description=assignment_dict.get('description'),
             course_id=assignment_dict.get('course_id'),
             course_name=assignment_dict.get('course_name'),
-            status=assignment_dict.get('status', 'Not started'),
+            status=assignment_dict.get('select', 'Not started'),  # Changed from select to status to match expected input
             due_date=assignment_dict.get('due_date'),
             id=assignment_dict.get('id'),
             priority=assignment_dict.get('priority', 'Medium'),
@@ -407,7 +423,7 @@ def create_subtasks(assignment_dict):
             "assignment": assignment_dict['name'],
             "current_date": assignment_dict['current_date'],
             "due_date": assignment_dict['due_date'],
-            "status": assignment_dict.get('status', 'Not started'),
+            "status": assignment_dict.get('select', 'Not started'),
             "description": assignment_dict.get('description', ''),
             "notes": get_assignment_notes(assignment_dict['name'])
         })
