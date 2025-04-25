@@ -415,7 +415,7 @@ def create_subtasks(assignment_dict):
         chain = subtask_prompt | llm
 
         if 'current_date' not in assignment_dict:
-            current_time = datetime.now()
+            current_time = datetime.now().replace(microsecond=0)
             assignment_dict['current_date'] = current_time.isoformat()
         
         # Get subtasks from LLM
@@ -434,44 +434,45 @@ def create_subtasks(assignment_dict):
         # Calculate time gap for evenly spaced subtasks
         from dateutil import parser
         import random
-        import pytz
-        from datetime import datetime, time
         
-        # Parse dates and ensure both have timezone information
+        # Parse dates properly with consistent timezone handling
         start_date = parser.parse(assignment_dict['current_date'])
         due_date = parser.parse(assignment_dict['due_date'])
-            
-        # Calculate the number of days between start and due date
-        days_span = (due_date.date() - start_date.date()).days
         
-        # Calculate time span with consistent timezone information
-        time_span = (due_date - start_date).total_seconds()
+        # Ensure both dates have timezone info (use UTC if not specified)
+        if start_date.tzinfo is None:
+            start_date = start_date.replace(tzinfo=datetime.timezone.utc)
+        if due_date.tzinfo is None:
+            due_date = due_date.replace(tzinfo=datetime.timezone.utc)
+            
+        # Make sure start date is before due date
+        if start_date > due_date:
+            logger.warning(f"Start date {start_date} is after due date {due_date}. Using current time.")
+            start_date = datetime.now(datetime.timezone.utc)
+            
+        # Calculate time span in seconds
+        time_span = max((due_date - start_date).total_seconds(), 3600)  # Minimum 1 hour
         time_step = time_span / (len(subtask_names) + 1)
         
         # Create a list of dictionaries for each subtask
         subtask_dicts = []
         for i, subtask_name in enumerate(subtask_names):
+            # Calculate subtask due time
             subtask_due = start_date + timedelta(seconds=(i+1) * time_step)
             
             # Round to the nearest half hour
             minute = subtask_due.minute
             if minute < 15:
-                # Round down to the hour
                 subtask_due = subtask_due.replace(minute=0, second=0, microsecond=0)
             elif 15 <= minute < 45:
-                # Round to half past the hour
                 subtask_due = subtask_due.replace(minute=30, second=0, microsecond=0)
             else:
-                # Round up to the next hour
                 subtask_due = subtask_due.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
             
-            # Format the datetime as an ISO string with timezone
-            if subtask_due.tzinfo is None:
-                subtask_due_str = subtask_due.isoformat() + 'Z'
-            else:
-                subtask_due_str = subtask_due.isoformat()
+            # Format with consistent timezone
+            subtask_due_str = subtask_due.isoformat()
             
-            # Create subtask dictionary with necessary fields
+            # Create subtask dictionary
             subtask_dict = {
                 'name': f"{subtask_name} - {assignment_dict['name']}",
                 'description': f"<p>Subtask for: {assignment_dict['name']}</p>",
@@ -495,7 +496,6 @@ def create_subtasks(assignment_dict):
     except Exception as e:
         logger.error(f"Error creating subtasks: {e}")
         return f"Failed to create subtasks: {e}"
-
 @tool
 def get_assignment_notes(assignment_name: str):
     """
