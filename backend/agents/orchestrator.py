@@ -46,14 +46,14 @@ project_manager_cuda = create_react_agent(
     model=llm,
     tools=project_cud_tools,
     prompt=project_manager_cud_prompt,
-    name="Project Manager CUDA Agent",
+    name="Project Manager CUD Agent",
 )
 
 project_manager_rag = create_react_agent(
     model=llm,
     tools=project_read_tools,
     prompt=project_manager_read_prompt,
-    name="Project Manager RAG Agent",
+    name="Project Manager READ Agent",
 )
 
 project_manager_prompt = ("You are the supervisor agent for the project manager agent."
@@ -77,14 +77,14 @@ scheduler_cuda = create_react_agent(
     model=llm,
     tools=scheduler_cud_tools,
     prompt=scheduler_cud_prompt,
-    name="Scheduler CUDA Agent",
+    name="Scheduler CUD Agent",
 )
 
 scheduler_rag = create_react_agent(
     model=llm,
     tools=scheduler_read_tools,
     prompt=scheduler_read_prompt,
-    name="Scheduler RAG Agent",
+    name="Scheduler READ Agent",
 )
 
 scheduler_prompt = ("You are the supervisor agent for the scheduler agent."
