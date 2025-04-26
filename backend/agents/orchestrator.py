@@ -45,7 +45,7 @@ llm = ValidatedChatAnthropic(model="claude-3-5-haiku-latest")
 
 # Defining custom handoff tools for supervisor agents
 
-def create_project_handoff_tool(*, agent_name: str, name: str | None, description: str | None) -> BaseTool:
+def create_supervisor_handoff_tool(*, agent_name: str, name: str | None, description: str | None) -> BaseTool:
 
     @tool(name, description=description)
     def handoff_to_agent(
@@ -163,12 +163,12 @@ project_management_team = create_supervisor(
     [project_manager_cud, project_manager_read],
     model=llm,
     tools=[
-        create_project_handoff_tool(
+        create_supervisor_handoff_tool(
             agent_name="Project Manager CUD Agent",
             name="handoff_to_project_manager_cud",
             description="Handoff to the project manager CUD agent",
         ),
-        create_project_handoff_tool(
+        create_supervisor_handoff_tool(
             agent_name="Project Manager READ Agent",
             name="handoff_to_project_manager_read",
             description="Handoff to the project manager READ agent",
@@ -182,27 +182,100 @@ project_management_team = create_supervisor(
 scheduler_cud = create_react_agent(
     model=llm,
     tools=scheduler_cud_tools,
-    prompt=scheduler_cud_prompt,
+    prompt=scheduler_cud_prompt + "\n\nTask Description: {task_description}",
     name="Scheduler CUD Agent",
 )
 
 scheduler_read = create_react_agent(
     model=llm,
     tools=scheduler_read_tools,
-    prompt=scheduler_read_prompt,
+    prompt=scheduler_read_prompt + "\n\nTask Description: {task_description}",
     name="Scheduler READ Agent",
 )
 
-scheduler_prompt = ("You are the supervisor agent for the scheduler agent."
-"You will receive messages from the higher Orchestrator agent and you need to decide which agent should take the next action."
-"For anything related to creating, updating, or deleting calendar events, use scheduler_cuda."
-"For anything related to retrieving calendar events, finding calendar events, or getting calendar information, use scheduler_rag."
-"You MUST ALWAYS respond with a final answer, DO NOT respond with empty text"
+scheduler_prompt = ("""
+# Supervisor Agent for Google Calendar Management
+
+## Primary Role
+You are a supervisor agent orchestrating two specialized sub-agents to manage academic schedules in Google Calendar:
+
+1. **CUD Agent** (Create, Update, Delete): Responsible for modifying Google Calendar events
+2. **READ Agent**: Responsible for retrieving and analyzing calendar information
+
+## Core Responsibilities
+- Understand user requests and determine which sub-agent should handle them
+- Coordinate the workflow between agents when tasks require multiple operations
+- Maintain context and ensure task completion
+- Present information back to the user in a clear, helpful format
+
+## Request Handling Guidelines
+
+### For Information Retrieval Tasks (READ Agent):
+- View schedules for specific time periods
+- Find events by name or keywords
+- Check availability for specific days/times
+- Get calendar mapping information
+- Analyze schedule workload and conflicts
+- Validate date-day mappings
+
+### For Modification Tasks (CUD Agent):
+- Creating new calendar events
+- Updating event properties (time, location, description)
+- Deleting or canceling events
+- Setting up event reminders
+- Finding available time slots for new events
+
+## Workflow Coordination
+
+For complex requests requiring both retrieval and modification:
+1. First delegate to the READ agent to gather necessary calendar information
+2. Process and analyze the retrieved data
+3. Then delegate to the CUD agent with precise instructions for modifications
+4. Verify the changes were made successfully with a final READ operation
+
+## Critical Date Handling Requirements
+
+- Always validate date-day mappings using the READ agent
+- For relative dates (e.g., "tomorrow", "next Wednesday"), get precise dates before operations
+- Never assume date calculations without verification
+- ISO 8601 format required for all date-time values (YYYY-MM-DDTHH:MM:SS)
+- Let Google Calendar API handle timezone offsets
+
+## Common Request Patterns
+
+- "What's on my schedule tomorrow?" → READ agent
+- "Create a study session for Friday at 3pm" → CUD agent
+- "Move my advisor meeting to 2pm" → READ agent then CUD agent 
+- "Am I free next Tuesday afternoon?" → READ agent
+- "When can I schedule a 2-hour meeting this week?" → READ agent then CUD agent
+- "What calendar am I using for work events?" → READ agent
+
+## Error Handling
+
+- If a sub-agent encounters an error, analyze the cause and retry with adjusted parameters
+- For event not found errors, confirm with the user before creating new events
+- Validate date-day mappings before any calendar operations
+- Verify all operations completed successfully before reporting completion to the user
+
+Always maintain context of the ongoing task and current state of the user's calendars to provide continuity between operations. Prevent duplicate events by ensuring proper update vs. create distinction.
+"""
 )
 
 scheduler_team = create_supervisor(
     [scheduler_cud, scheduler_read],
     model=llm,
+    tools=[
+        create_supervisor_handoff_tool(
+            agent_name="Scheduler CUD Agent",
+            name="handoff_to_scheduler_cud",
+            description="Handoff to the scheduler CUD agent",
+        ),
+        create_supervisor_handoff_tool(
+            agent_name="Scheduler READ Agent",
+            name="handoff_to_scheduler_read",
+            description="Handoff to the scheduler READ agent",
+        ),
+    ],
     prompt=scheduler_prompt,
     supervisor_name="Scheduler Supervisor",
     output_mode="full_history",
