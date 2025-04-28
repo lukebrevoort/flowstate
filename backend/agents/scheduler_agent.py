@@ -21,6 +21,8 @@ from agents.scheduler_tools import (
 # Define the tools list
 scheduler_cud_tools = [
     get_calendar_timezone,
+    get_current_time,
+    get_relative_time,
     create_event,
     update_event,
     find_event,

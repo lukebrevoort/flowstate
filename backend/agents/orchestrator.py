@@ -238,6 +238,7 @@ For complex requests requiring both retrieval and modification:
 - Always validate date-day mappings using the READ agent
 - For relative dates (e.g., "tomorrow", "next Wednesday"), get precise dates before operations
 - Never assume date calculations without verification
+- ALWAYS make sure the YEAR is correct for ANY created events.
 - ISO 8601 format required for all date-time values (YYYY-MM-DDTHH:MM:SS)
 - Let Google Calendar API handle timezone offsets
 
