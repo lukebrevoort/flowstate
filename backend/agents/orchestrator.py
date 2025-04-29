@@ -24,19 +24,26 @@ from langgraph.types import Command
 from langgraph.prebuilt import InjectedState
 
 class ValidatedChatAnthropic(ChatAnthropic):
-    def invoke(self, messages, **kwargs):
-        valid_messages = [msg for msg in messages if hasattr(msg, "content") and msg.content]
-        return super().invoke(valid_messages, **kwargs)
+    def invoke(self, input, *args, **kwargs):
+        # Check if input is a list of messages or a state dict from LangGraph
+        if isinstance(input, list):
+            # This is a list of messages - validate them
+            valid_messages = [msg for msg in input if hasattr(msg, "content") and msg.content]
+            return super().invoke(valid_messages, *args, **kwargs)
+        else:
+            # This is a state dict or something else - pass through unchanged
+            return super().invoke(input, *args, **kwargs)
         
     async def ainvoke(self, *args, **kwargs):
         # Extract messages from args (assuming it's the first arg after self)
         if len(args) > 0:
-            messages = args[0]
-            valid_messages = [msg for msg in messages if hasattr(msg, "content") and msg.content]
-            # Replace the messages in args
-            args_list = list(args)
-            args_list[0] = valid_messages
-            return await super().ainvoke(*args_list, **kwargs)
+            input = args[0]
+            if isinstance(input, list):
+                valid_messages = [msg for msg in input if hasattr(msg, "content") and msg.content]
+                # Replace the messages in args
+                args_list = list(args)
+                args_list[0] = valid_messages
+                return await super().ainvoke(*args_list, **kwargs)
         return await super().ainvoke(*args, **kwargs)
 
 # Build out Main States 
@@ -300,3 +307,31 @@ orchestrator_agent = create_supervisor(
 
 app = orchestrator_agent
 
+def run_conversation(message):
+    """
+    Run a conversation with the orchestrator agent.
+    
+    Args:
+        message (str): The user's message
+        
+    Returns:
+        dict: The response from the agent
+    """
+    # Initial state with the user's message
+    initial_state = {
+        "messages": [HumanMessage(content=message)],
+        "active_agent": None,
+        "task_description": None
+    }
+    
+    # Run the orchestrator with the initial state
+    result = app.invoke(initial_state)
+    
+    # Extract the AI's response from the conversation history
+    # The last AI message in the history should be the response
+    messages = result["messages"]
+    for message in reversed(messages):
+        if isinstance(message, AIMessage):
+            return {"response": message.content}
+    
+    return {"response": "No response generated."}

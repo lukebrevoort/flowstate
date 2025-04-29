@@ -10,6 +10,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 type Message = {
   role: 'user' | 'assistant' | 'system';
   content: string;
+  id?: string;
 };
 
 function Chat() {
@@ -32,7 +33,15 @@ function Chat() {
     try {
       const token = localStorage.getItem('accessToken');
       
-      const response = await fetch('/api/chat', {
+      // Add a loading message that will be replaced when the response arrives
+      const loadingId = Date.now().toString();
+      setChatHistory(prev => [...prev, { 
+        role: 'assistant', 
+        content: '...',
+        id: loadingId
+      }]);
+      
+      const response = await fetch('http://localhost:5001/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -47,17 +56,23 @@ function Chat() {
         throw new Error(data.error || 'Failed to process message');
       }
       
-      // Add AI response to chat
-      setChatHistory(prev => [...prev, { 
-        role: 'assistant', 
-        content: data.response 
-      }]);
+      // Replace the loading message with the actual response
+      setChatHistory(prev => 
+        prev.map(msg => 
+          msg.id === loadingId 
+            ? { role: 'assistant', content: data.response }
+            : msg
+        )
+      );
     } catch (error) {
       console.error('Chat error:', error);
-      setChatHistory(prev => [...prev, { 
-        role: 'system', 
-        content: `Error: ${error instanceof Error ? error.message : 'Failed to process your request'}`
-      }]);
+      setChatHistory(prev => 
+        prev.filter(msg => !msg.id) // Remove any loading messages
+          .concat([{ 
+            role: 'system', 
+            content: `Error: ${error instanceof Error ? error.message : 'Failed to process your request'}`
+          }])
+      );
     } finally {
       setIsLoading(false);
     }

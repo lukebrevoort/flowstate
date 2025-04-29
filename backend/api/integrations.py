@@ -23,12 +23,11 @@ def chat(current_user):
     
     # Process messages through your orchestrator
     try:
-        # Modify this to capture the output from run_conversation
-        # This may require modifying your orchestrator to return results
+        # Get the actual response from the run_conversation function
         result = run_conversation(data['message'])
         
-        # For now, return a simple response
-        return jsonify({"response": "Your message was processed"}), 200
+        # Return the actual agent response
+        return jsonify(result), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
