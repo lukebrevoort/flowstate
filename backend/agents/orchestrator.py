@@ -29,6 +29,24 @@ class ValidatedChatAnthropic(ChatAnthropic):
         if isinstance(input, list):
             # This is a list of messages - validate them
             valid_messages = [msg for msg in input if hasattr(msg, "content") and msg.content]
+            
+            # Ensure tool calls have corresponding results
+            tool_use_indices = []
+            for i, msg in enumerate(valid_messages):
+                if hasattr(msg, "additional_kwargs") and msg.additional_kwargs.get("tool_calls"):
+                    tool_use_indices.append(i)
+            
+            # For each tool use, check if the next message is a tool result
+            # If not, remove the tool call message to prevent Claude API errors
+            indices_to_remove = []
+            for idx in tool_use_indices:
+                if idx + 1 >= len(valid_messages) or not hasattr(valid_messages[idx + 1], "content") or not valid_messages[idx + 1].content:
+                    indices_to_remove.append(idx)
+            
+            # Remove problematic tool calls (in reverse order to not mess up indices)
+            for idx in sorted(indices_to_remove, reverse=True):
+                valid_messages.pop(idx)
+                
             return super().invoke(valid_messages, *args, **kwargs)
         else:
             # This is a state dict or something else - pass through unchanged
@@ -40,6 +58,24 @@ class ValidatedChatAnthropic(ChatAnthropic):
             input = args[0]
             if isinstance(input, list):
                 valid_messages = [msg for msg in input if hasattr(msg, "content") and msg.content]
+                
+                # Ensure tool calls have corresponding results
+                tool_use_indices = []
+                for i, msg in enumerate(valid_messages):
+                    if hasattr(msg, "additional_kwargs") and msg.additional_kwargs.get("tool_calls"):
+                        tool_use_indices.append(i)
+                
+                # For each tool use, check if the next message is a tool result
+                # If not, remove the tool call message to prevent Claude API errors
+                indices_to_remove = []
+                for idx in tool_use_indices:
+                    if idx + 1 >= len(valid_messages) or not hasattr(valid_messages[idx + 1], "content") or not valid_messages[idx + 1].content:
+                        indices_to_remove.append(idx)
+                
+                # Remove problematic tool calls (in reverse order to not mess up indices)
+                for idx in sorted(indices_to_remove, reverse=True):
+                    valid_messages.pop(idx)
+                    
                 # Replace the messages in args
                 args_list = list(args)
                 args_list[0] = valid_messages

@@ -10,7 +10,7 @@ import os, sys
 # Add the parent directory to the path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from agents.notion_api import NotionAPI, Assignment
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional, Union
 from difflib import get_close_matches
 from langchain_openai import ChatOpenAI
@@ -441,14 +441,14 @@ def create_subtasks(assignment_dict):
         
         # Ensure both dates have timezone info (use UTC if not specified)
         if start_date.tzinfo is None:
-            start_date = start_date.replace(tzinfo=datetime.timezone.utc)
+            start_date = start_date.replace(tzinfo=timezone.utc)
         if due_date.tzinfo is None:
-            due_date = due_date.replace(tzinfo=datetime.timezone.utc)
+            due_date = due_date.replace(tzinfo=timezone.utc)
             
         # Make sure start date is before due date
         if start_date > due_date:
             logger.warning(f"Start date {start_date} is after due date {due_date}. Using current time.")
-            start_date = datetime.now(datetime.timezone.utc)
+            start_date = datetime.now(timezone.utc)
             
         # Calculate time span in seconds
         time_span = max((due_date - start_date).total_seconds(), 3600)  # Minimum 1 hour
