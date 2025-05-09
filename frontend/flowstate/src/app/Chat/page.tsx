@@ -2,8 +2,9 @@
 
 import Image from "next/image";
 import { motion } from "framer-motion";
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useEffect, useRef } from "react";
 import { useAuth } from '@/contexts/AuthContext';
+import { useLangGraph } from '@/contexts/LangGraphContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
 // Message type definition
@@ -13,15 +14,94 @@ type Message = {
   id?: string;
 };
 
+// Function to convert LangGraph messages to chat format
+const convertLangGraphMessages = (messages: any[]) => {
+  return messages.map(msg => ({
+    role: msg.type === 'user' ? 'user' : 
+          msg.type === 'assistant' ? 'assistant' : 
+          msg.type === 'system' ? 'system' : 'assistant',
+    content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+  })) as Message[];
+};
+
 function Chat() {
   const [message, setMessage] = useState("");
   const [chatHistory, setChatHistory] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [threadId, setThreadId] = useState<string | null>(null);
   const { user } = useAuth();
+  const { 
+    createThread, 
+    sendMessage, 
+    streamResponse, 
+    getThreadHistory, 
+    resetThread,
+    loading: langGraphLoading,
+    error: langGraphError,
+    isConnected 
+  } = useLangGraph();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Scroll to bottom of messages
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  // Effect to scroll to bottom when messages change
+  useEffect(() => {
+    scrollToBottom();
+  }, [chatHistory]);
+
+  // Initialize thread when component mounts
+  useEffect(() => {
+    const initializeThread = async () => {
+      try {
+        // Check localStorage for existing threadId
+        const savedThreadId = localStorage.getItem('flowstate_thread_id');
+        
+        if (savedThreadId) {
+          setThreadId(savedThreadId);
+          
+          // Load previous messages if there's an existing threadId
+          const messages = await getThreadHistory(savedThreadId);
+          
+          // Convert LangGraph message format to our app's format
+          setChatHistory(convertLangGraphMessages(messages));
+        } else {
+          // Create new thread if no existing one
+          const newThreadId = await createThread();
+          setThreadId(newThreadId);
+          localStorage.setItem('flowstate_thread_id', newThreadId);
+        }
+      } catch (error) {
+        console.error('Failed to initialize thread:', error);
+        setChatHistory([{
+          role: 'system',
+          content: `Error initializing conversation: ${error instanceof Error ? error.message : 'Connection failed'}`
+        }]);
+      }
+    };
+
+    if (!langGraphLoading && user && isConnected) {
+      initializeThread();
+    }
+  }, [langGraphLoading, user, isConnected, createThread, getThreadHistory]);
+
+  const handleNewConversation = async () => {
+    try {
+      setIsLoading(true);
+      setChatHistory([]);
+      const newThreadId = await resetThread();
+      setThreadId(newThreadId);
+      setIsLoading(false);
+    } catch (error) {
+      console.error('Failed to create new conversation:', error);
+    }
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!message.trim() || isLoading) return;
+    if (!message.trim() || isLoading || !threadId || !isConnected) return;
     
     const userMessage = message;
     setMessage(""); // Clear input immediately
@@ -30,49 +110,49 @@ function Chat() {
     // Add user message to chat
     setChatHistory(prev => [...prev, { role: 'user', content: userMessage }]);
     
+    // Define assistantMessageId outside try block to make it accessible in catch block
+    const assistantMessageId = Date.now().toString();
+    
     try {
-      const token = localStorage.getItem('accessToken');
-      
-      // Add a loading message that will be replaced when the response arrives
-      const loadingId = Date.now().toString();
+      // Add a temporary assistant message that will be updated as we receive chunks
       setChatHistory(prev => [...prev, { 
         role: 'assistant', 
-        content: '...',
-        id: loadingId
+        content: '',
+        id: assistantMessageId
       }]);
       
-      const response = await fetch('http://localhost:5001/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ message: userMessage })
-      });
+      // Send message to LangGraph backend using the correct format
+      await sendMessage(threadId, userMessage);
       
-      const data = await response.json();
+      // Function to handle streaming response updates
+      const handleChunk = (chunk: any) => {
+        if (chunk.type === 'text') {
+          setChatHistory(prev => 
+            prev.map(msg => 
+              msg.id === assistantMessageId 
+                ? { ...msg, content: msg.content + (typeof chunk.content === 'string' ? chunk.content : JSON.stringify(chunk.content)) }
+                : msg
+            )
+          );
+        } else if (chunk.type === 'tool_use') {
+          // For now, we'll just log tool use events, but in the future
+          // we could add special UI components for different tool responses
+          console.log('Tool use:', chunk);
+        }
+      };
       
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to process message');
-      }
+      // Start streaming the response from the LangGraph backend
+      await streamResponse(threadId, handleChunk);
       
-      // Replace the loading message with the actual response
-      setChatHistory(prev => 
-        prev.map(msg => 
-          msg.id === loadingId 
-            ? { role: 'assistant', content: data.response }
-            : msg
-        )
-      );
     } catch (error) {
       console.error('Chat error:', error);
-      setChatHistory(prev => 
-        prev.filter(msg => !msg.id) // Remove any loading messages
-          .concat([{ 
-            role: 'system', 
-            content: `Error: ${error instanceof Error ? error.message : 'Failed to process your request'}`
-          }])
-      );
+      setChatHistory(prev => [
+        ...prev.filter(msg => msg.id !== assistantMessageId),
+        { 
+          role: 'system', 
+          content: `Error: ${error instanceof Error ? error.message : 'Failed to process your request'}`
+        }
+      ]);
     } finally {
       setIsLoading(false);
     }
@@ -84,18 +164,62 @@ function Chat() {
       <div 
         key={index} 
         className={`my-4 p-4 rounded-[35px] ${
-          msg.role === 'user' ? 'bg-flowstate-accent text-white ml-auto' : 'bg-flowstate-header'
-        } max-w-[80%] ${msg.role === 'user' ? 'ml-auto' : 'mr-auto'}`}
+          msg.role === 'user' 
+            ? 'bg-flowstate-accent text-white ml-auto' 
+            : msg.role === 'system' 
+              ? 'bg-red-100 text-red-800 mx-auto' 
+              : 'bg-flowstate-header'
+        } max-w-[80%] ${
+          msg.role === 'user' 
+            ? 'ml-auto' 
+            : msg.role === 'system' 
+              ? 'mx-auto' 
+              : 'mr-auto'
+        }`}
       >
-        {msg.content}
+        {msg.content || (msg.role === 'assistant' && isLoading ? '...' : '')}
       </div>
     ));
+  };
+
+  // Show connection status or errors
+  const renderConnectionStatus = () => {
+    if (langGraphLoading) {
+      return (
+        <div className="absolute top-4 right-4 bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm">
+          Connecting...
+        </div>
+      );
+    }
+    
+    if (langGraphError) {
+      return (
+        <div className="absolute top-4 right-4 bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm">
+          Connection Error: {langGraphError}
+        </div>
+      );
+    }
+    
+    if (isConnected) {
+      return (
+        <div className="absolute top-4 right-4 bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm flex items-center">
+          <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+          Connected
+        </div>
+      );
+    }
+    
+    return (
+      <div className="absolute top-4 right-4 bg-gray-100 text-gray-800 px-3 py-1 rounded-full text-sm">
+        Disconnected
+      </div>
+    );
   };
 
   return (
     <div className="min-h-screen w-full bg-flowstate-bg flex flex-col">
       {/* Header */}
-      <header className="w-full h-[89px] bg-flowstate-header shadow-header flex items-center justify-between px-[100px] max-lg:px-10 max-sm:px-5">
+      <header className="w-full h-[89px] bg-flowstate-header shadow-header flex items-center justify-between px-[100px] max-lg:px-10 max-sm:px-5 relative">
         <div className="flex items-center gap-[10px]">
           <a href="/Chat" aria-label="Go to Chat">
             <Image
@@ -118,7 +242,19 @@ function Chat() {
           </motion.div>
         </div>
 
+        {renderConnectionStatus()}
+
         <div className="flex items-center gap-15">
+          {/* New Chat Button */}
+          <button
+            onClick={handleNewConversation}
+            disabled={isLoading || !isConnected}
+            className={`mr-4 bg-flowstate-accent text-white px-3 py-1 rounded-full text-sm
+              ${isLoading || !isConnected ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:opacity-80'}`}
+          >
+            New Chat
+          </button>
+
           {/* Mind Map Icon */}
           <a href="/MindMap" aria-label="Go to Mind Map">
             <Image
@@ -181,21 +317,24 @@ function Chat() {
           {chatHistory.length === 0 ? (
             <div className="flex justify-center items-center h-full">
               <motion.h2
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          className="text-[92px] font-alegreya text-center text-black max-w-[825px] leading-[1.2] mx-auto px-4 max-lg:text-[72px] max-sm:text-[48px] max-sm:px-5"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8 }}
+                className="text-[92px] font-alegreya text-center text-black max-w-[825px] leading-[1.2] mx-auto px-4 max-lg:text-[72px] max-sm:text-[48px] max-sm:px-5"
               >
-          Welcome Back{user ? `,` : ''}
-          <span className="block mt-2">{user?.name ? user.name : ''}</span>
-          <span className="block mt-2">How can I assist you?</span>
+                Welcome Back{user ? `,` : ''}
+                <span className="block mt-2">{user?.name ? user.name : ''}</span>
+                <span className="block mt-2">How can I assist you?</span>
               </motion.h2>
             </div>
           ) : (
-            renderChatHistory()
+            <>
+              {renderChatHistory()}
+              <div ref={messagesEndRef} />
+            </>
           )}
           
-          {isLoading && (
+          {isLoading && !chatHistory.some(msg => msg.role === 'assistant' && msg.id) && (
             <div className="flex justify-center items-center my-4">
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-flowstate-accent"></div>
             </div>
@@ -213,18 +352,18 @@ function Chat() {
           <textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder="Ask Anything..."
+            placeholder={isConnected ? "Ask Anything..." : "Connecting to backend..."}
             className="w-full h-[120px] bg-transparent text-[30px] font-alegreya text-[#665F5D] resize-none focus:outline-none"
             aria-label="Chat message"
-            disabled={isLoading}
+            disabled={isLoading || langGraphLoading || !threadId || !isConnected}
           />
 
           {/* Submit button */}
           <button
             type="submit"
-            disabled={isLoading || !message.trim()}
+            disabled={isLoading || !message.trim() || langGraphLoading || !threadId || !isConnected}
             className={`absolute right-[25px] bottom-[25px] bg-flowstate-accent text-white p-3 rounded-full
-              ${isLoading || !message.trim() ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+              ${isLoading || !message.trim() || langGraphLoading || !threadId || !isConnected ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
             aria-label="Send message"
           >
             {/* Send icon */}

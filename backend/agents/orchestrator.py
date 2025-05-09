@@ -23,63 +23,88 @@ from langgraph.types import Command
 from langgraph.prebuilt import InjectedState
 
 class ValidatedChatAnthropic(ChatAnthropic):
-    def invoke(self, input, *args, **kwargs):
-        # Check if input is a list of messages or a state dict from LangGraph
-        if isinstance(input, list):
-            # This is a list of messages - validate them
-            valid_messages = [msg for msg in input if hasattr(msg, "content") and msg.content]
-            
-            # Ensure tool calls have corresponding results
-            tool_use_indices = []
-            for i, msg in enumerate(valid_messages):
-                if hasattr(msg, "additional_kwargs") and msg.additional_kwargs.get("tool_calls"):
-                    tool_use_indices.append(i)
-            
-            # For each tool use, check if the next message is a tool result
-            # If not, remove the tool call message to prevent Claude API errors
-            indices_to_remove = []
-            for idx in tool_use_indices:
-                if idx + 1 >= len(valid_messages) or not hasattr(valid_messages[idx + 1], "content") or not valid_messages[idx + 1].content:
-                    indices_to_remove.append(idx)
-            
-            # Remove problematic tool calls (in reverse order to not mess up indices)
-            for idx in sorted(indices_to_remove, reverse=True):
-                valid_messages.pop(idx)
-                
-            return super().invoke(valid_messages, *args, **kwargs)
-        else:
-            # This is a state dict or something else - pass through unchanged
-            return super().invoke(input, *args, **kwargs)
+    def _validate_tool_messages(self, messages):
+        """
+        Helper method to clean message history for Claude API.
         
-    async def ainvoke(self, *args, **kwargs):
-        # Extract messages from args (assuming it's the first arg after self)
-        if len(args) > 0:
-            input = args[0]
-            if isinstance(input, list):
-                valid_messages = [msg for msg in input if hasattr(msg, "content") and msg.content]
+        Claude requires that each tool_result must have a corresponding tool_use
+        in the previous message. This method ensures this requirement is met.
+        """
+        if not messages or not isinstance(messages, list):
+            return messages
+        
+        # Step 1: Make a first pass to collect all tool_use_ids and tool_result_ids
+        tool_use_ids = {}  # Maps tool_use_id -> message index
+        tool_result_ids = {}  # Maps tool_result_id -> message index
+        
+        for i, msg in enumerate(messages):
+            # Find tool uses (in AI messages)
+            if hasattr(msg, "additional_kwargs") and msg.additional_kwargs.get("tool_calls"):
+                for tool_call in msg.additional_kwargs.get("tool_calls", []):
+                    if "id" in tool_call:
+                        tool_use_ids[tool_call["id"]] = i
+            
+            # Find tool results
+            if hasattr(msg, "tool_call_id") and msg.tool_call_id:
+                tool_result_ids[msg.tool_call_id] = i
+        
+        # Step 2: Build new clean message list ensuring proper pairing
+        # Only include messages that form valid tool_use -> tool_result pairs
+        # or are not part of tool interactions
+        valid_messages = []
+        
+        # Add non-tool messages first
+        for i, msg in enumerate(messages):
+            is_tool_use = (hasattr(msg, "additional_kwargs") and 
+                          msg.additional_kwargs.get("tool_calls"))
+            is_tool_result = hasattr(msg, "tool_call_id") and msg.tool_call_id
+            
+            # Include regular messages (not tool-related)
+            if not is_tool_use and not is_tool_result:
+                valid_messages.append(msg)
+        
+        # Add valid tool_use -> tool_result pairs 
+        processed_tool_results = set()
+        
+        for tool_id in tool_use_ids:
+            # Only include pairs where both tool_use and tool_result exist
+            if tool_id in tool_result_ids:
+                tool_use_msg = messages[tool_use_ids[tool_id]]
+                tool_result_msg = messages[tool_result_ids[tool_id]]
                 
-                # Ensure tool calls have corresponding results
-                tool_use_indices = []
-                for i, msg in enumerate(valid_messages):
-                    if hasattr(msg, "additional_kwargs") and msg.additional_kwargs.get("tool_calls"):
-                        tool_use_indices.append(i)
+                # Add the tool_use message if not already added
+                if tool_use_msg not in valid_messages:
+                    valid_messages.append(tool_use_msg)
                 
-                # For each tool use, check if the next message is a tool result
-                # If not, remove the tool call message to prevent Claude API errors
-                indices_to_remove = []
-                for idx in tool_use_indices:
-                    if idx + 1 >= len(valid_messages) or not hasattr(valid_messages[idx + 1], "content") or not valid_messages[idx + 1].content:
-                        indices_to_remove.append(idx)
-                
-                # Remove problematic tool calls (in reverse order to not mess up indices)
-                for idx in sorted(indices_to_remove, reverse=True):
-                    valid_messages.pop(idx)
-                    
-                # Replace the messages in args
-                args_list = list(args)
-                args_list[0] = valid_messages
-                return await super().ainvoke(*args_list, **kwargs)
-        return await super().ainvoke(*args, **kwargs)
+                # Add the corresponding tool_result if not already added
+                if tool_result_msg not in valid_messages:
+                    valid_messages.append(tool_result_msg)
+                    processed_tool_results.add(tool_id)
+        
+        # Sort the messages to restore the original conversation flow
+        # We use the original message indices to sort
+        message_indices = {}
+        for i, msg in enumerate(valid_messages):
+            for j, orig_msg in enumerate(messages):
+                if msg == orig_msg:
+                    message_indices[i] = j
+                    break
+        
+        valid_messages = [msg for _, msg in sorted(zip(message_indices.values(), valid_messages))]
+        
+        return valid_messages
+    
+    def invoke(self, input, *args, **kwargs):
+        if isinstance(input, list):
+            valid_messages = self._validate_tool_messages(input)
+            return super().invoke(valid_messages, *args, **kwargs)
+        return super().invoke(input, *args, **kwargs)
+        
+    async def ainvoke(self, input, *args, **kwargs):
+        if isinstance(input, list):
+            valid_messages = self._validate_tool_messages(input)
+            return await super().ainvoke(valid_messages, *args, **kwargs)
+        return await super().ainvoke(input, *args, **kwargs)
 
 # Build out Main States 
 

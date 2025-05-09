@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Alegreya } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
-
+import { LangGraphProvider } from "@/contexts/LangGraphContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,7 +33,9 @@ export default function RootLayout({
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} ${alegreya.variable}`}>
       <body>
         <AuthProvider>
-          {children}
+          <LangGraphProvider>
+            {children}
+          </LangGraphProvider>
         </AuthProvider>
       </body>
     </html>

@@ -19,10 +19,12 @@ with app.app_context():
 # Import blueprints - do this after app creation to avoid circular imports
 from api.auth import auth_bp
 from api.integrations import integrations_bp
+from api.chat import chat_bp  # Import the new chat blueprint
 
 # Register blueprints
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
 app.register_blueprint(integrations_bp, url_prefix='/api')
+app.register_blueprint(chat_bp, url_prefix='/api/chat')  # Register chat blueprint
 
 @app.route('/api/test', methods=['GET'])
 def test_route():
