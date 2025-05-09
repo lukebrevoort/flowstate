@@ -1,4 +1,4 @@
-from typing import Annotated, Dict, List, Literal, TypedDict
+from typing import Annotated, Dict, List, Literal, TypedDict, Optional, Any
 import os
 import datetime 
 
@@ -22,88 +22,255 @@ from langchain_core.messages import ToolMessage
 from langgraph.types import Command
 from langgraph.prebuilt import InjectedState
 
+class ToolCallSpy:
+    """
+    Class to track tool calls made by the Claude API.
+    Similar to the Spy class in the provided code.
+    """
+    def __init__(self):
+        self.called_tools = []
+        self.responses = []
+        self.timestamp = datetime.datetime.now().isoformat()
+    
+    def record_tool_call(self, tool_calls: List[Dict[str, Any]]):
+        """Record a tool call made by the model"""
+        self.called_tools.append(tool_calls)
+        
+    def record_response(self, response: Any):
+        """Record a response from a tool"""
+        self.responses.append(response)
+        
+    def get_tool_stats(self) -> Dict[str, int]:
+        """Get statistics about tool usage"""
+        stats = {}
+        for call_group in self.called_tools:
+            for call in call_group:
+                if 'name' in call:
+                    name = call['name']
+                    stats[name] = stats.get(name, 0) + 1
+        return stats
+    
+    def summary(self) -> str:
+        """Get a summary of tool usage"""
+        stats = self.get_tool_stats()
+        if not stats:
+            return "No tools were called."
+        
+        result = ["Tool usage summary:"]
+        for name, count in stats.items():
+            result.append(f"- {name}: called {count} time(s)")
+        
+        return "\n".join(result)
+
 class ValidatedChatAnthropic(ChatAnthropic):
+    model_config ={"extra": "allow"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.spy = ToolCallSpy()
+        
     def _validate_tool_messages(self, messages):
         """
         Helper method to clean message history for Claude API.
         
-        Claude requires that each tool_result must have a corresponding tool_use
-        in the previous message. This method ensures this requirement is met.
+        Claude requires that each tool_use must have a corresponding tool_result
+        in the next message. This method ensures this requirement is met.
         """
         if not messages or not isinstance(messages, list):
             return messages
         
-        # Step 1: Make a first pass to collect all tool_use_ids and tool_result_ids
-        tool_use_ids = {}  # Maps tool_use_id -> message index
-        tool_result_ids = {}  # Maps tool_result_id -> message index
+        # First, identify all tool use/result pairs
+        valid_pairs = []
+        regular_messages = []
         
-        for i, msg in enumerate(messages):
-            # Find tool uses (in AI messages)
+        i = 0
+        while i < len(messages) - 1:  # Stop one before the end to check pairs
+            msg = messages[i]
+            next_msg = messages[i + 1]
+            
+            # Check if this is a tool use message
+            is_tool_use = (hasattr(msg, "additional_kwargs") and 
+                        msg.additional_kwargs.get("tool_calls"))
+            
+            # Check if next message is a tool result that matches
+            is_next_tool_result = False
+            matching_ids = set()
+            
+            if is_tool_use and hasattr(next_msg, "tool_call_id"):
+                # For single tool result response
+                if next_msg.tool_call_id in [
+                    tc.get("id") for tc in msg.additional_kwargs.get("tool_calls", [])
+                    if tc.get("id")
+                ]:
+                    is_next_tool_result = True
+                    matching_ids.add(next_msg.tool_call_id)
+                    
+            # Process messages based on their type
+            if is_tool_use and is_next_tool_result:
+                # This is a valid tool use + result pair
+                valid_pairs.append((msg, next_msg))
+                i += 2  # Skip both messages in the next iteration
+            else:
+                # This is a regular message (not part of a valid tool pair)
+                if not (hasattr(msg, "tool_call_id") and msg.tool_call_id):
+                    # Only include messages that aren't orphaned tool results
+                    regular_messages.append(msg)
+                i += 1
+        
+        # Don't forget to check the last message if we haven't processed it yet
+        if i == len(messages) - 1:
+            last_msg = messages[i]
+            if not (hasattr(last_msg, "tool_call_id") and last_msg.tool_call_id):
+                regular_messages.append(last_msg)
+        
+        # Reconstruct the message sequence: regular messages first, then tool pairs
+        result = regular_messages[:]
+        
+        for tool_use, tool_result in valid_pairs:
+            result.append(tool_use)
+            result.append(tool_result)
+        
+        # Sort the resulting messages to maintain original conversation flow
+        # Map each message to its original position
+        message_positions = {id(msg): i for i, msg in enumerate(messages)}
+        result.sort(key=lambda msg: message_positions.get(id(msg), float('inf')))
+        
+        return result
+    
+    def _extract_tool_info(self, tool_calls, schema_name=None):
+        """
+        Extract information from tool calls for both patches and new memories.
+        
+        Args:
+            tool_calls: List of tool calls from the model
+            schema_name: Optional name of the schema tool to focus on
+        """
+        if not tool_calls:
+            return "No tool calls made."
+            
+        # Initialize list of changes
+        changes = []
+        
+        for call in tool_calls:
+            if 'name' not in call:
+                continue
+                
+            if call['name'] == 'PatchDoc' and 'args' in call:
+                # Check if there are any patches
+                if call['args'].get('patches'):
+                    changes.append({
+                        'type': 'update',
+                        'doc_id': call['args'].get('json_doc_id'),
+                        'planned_edits': call['args'].get('planned_edits'),
+                        'value': call['args']['patches'][0].get('value')
+                    })
+                else:
+                    # Handle case where no changes were needed
+                    changes.append({
+                        'type': 'no_update',
+                        'doc_id': call['args'].get('json_doc_id'),
+                        'planned_edits': call['args'].get('planned_edits')
+                    })
+            elif schema_name and call['name'] == schema_name and 'args' in call:
+                changes.append({
+                    'type': 'new',
+                    'name': schema_name,
+                    'value': call['args']
+                })
+            elif not schema_name and 'args' in call:
+                changes.append({
+                    'type': 'tool_usage',
+                    'name': call['name'],
+                    'args': call['args']
+                })
+
+        # Format results as a single string
+        result_parts = []
+        for change in changes:
+            if change['type'] == 'update':
+                result_parts.append(
+                    f"Document {change['doc_id']} updated:\n"
+                    f"Plan: {change['planned_edits']}\n"
+                    f"Added content: {change['value']}"
+                )
+            elif change['type'] == 'no_update':
+                result_parts.append(
+                    f"Document {change['doc_id']} unchanged:\n"
+                    f"{change['planned_edits']}"
+                )
+            elif change['type'] == 'new':
+                result_parts.append(
+                    f"New {change['name']} created:\n"
+                    f"Content: {change['value']}"
+                )
+            else:
+                result_parts.append(
+                    f"Tool '{change['name']}' called with args: {change['args']}"
+                )
+        
+        return "\n\n".join(result_parts)
+    
+    def _track_tool_usage(self, messages):
+        """
+        Track tool usage in the message history.
+        
+        Returns a dictionary containing the tools used and their call counts.
+        """
+        tool_usage = {}
+        
+        for msg in messages:
             if hasattr(msg, "additional_kwargs") and msg.additional_kwargs.get("tool_calls"):
                 for tool_call in msg.additional_kwargs.get("tool_calls", []):
-                    if "id" in tool_call:
-                        tool_use_ids[tool_call["id"]] = i
-            
-            # Find tool results
-            if hasattr(msg, "tool_call_id") and msg.tool_call_id:
-                tool_result_ids[msg.tool_call_id] = i
+                    if "name" in tool_call:
+                        tool_name = tool_call["name"]
+                        tool_usage[tool_name] = tool_usage.get(tool_name, 0) + 1
         
-        # Step 2: Build new clean message list ensuring proper pairing
-        # Only include messages that form valid tool_use -> tool_result pairs
-        # or are not part of tool interactions
-        valid_messages = []
-        
-        # Add non-tool messages first
-        for i, msg in enumerate(messages):
-            is_tool_use = (hasattr(msg, "additional_kwargs") and 
-                          msg.additional_kwargs.get("tool_calls"))
-            is_tool_result = hasattr(msg, "tool_call_id") and msg.tool_call_id
-            
-            # Include regular messages (not tool-related)
-            if not is_tool_use and not is_tool_result:
-                valid_messages.append(msg)
-        
-        # Add valid tool_use -> tool_result pairs 
-        processed_tool_results = set()
-        
-        for tool_id in tool_use_ids:
-            # Only include pairs where both tool_use and tool_result exist
-            if tool_id in tool_result_ids:
-                tool_use_msg = messages[tool_use_ids[tool_id]]
-                tool_result_msg = messages[tool_result_ids[tool_id]]
-                
-                # Add the tool_use message if not already added
-                if tool_use_msg not in valid_messages:
-                    valid_messages.append(tool_use_msg)
-                
-                # Add the corresponding tool_result if not already added
-                if tool_result_msg not in valid_messages:
-                    valid_messages.append(tool_result_msg)
-                    processed_tool_results.add(tool_id)
-        
-        # Sort the messages to restore the original conversation flow
-        # We use the original message indices to sort
-        message_indices = {}
-        for i, msg in enumerate(valid_messages):
-            for j, orig_msg in enumerate(messages):
-                if msg == orig_msg:
-                    message_indices[i] = j
-                    break
-        
-        valid_messages = [msg for _, msg in sorted(zip(message_indices.values(), valid_messages))]
-        
-        return valid_messages
+        return tool_usage
     
     def invoke(self, input, *args, **kwargs):
         if isinstance(input, list):
             valid_messages = self._validate_tool_messages(input)
-            return super().invoke(valid_messages, *args, **kwargs)
+            # Track tool usage for debugging/analytics
+            tool_usage = self._track_tool_usage(valid_messages)
+            
+            # Record tool calls in the messages for analysis
+            for msg in valid_messages:
+                if hasattr(msg, "additional_kwargs") and msg.additional_kwargs.get("tool_calls"):
+                    self.spy.record_tool_call(msg.additional_kwargs.get("tool_calls"))
+            
+            result = super().invoke(valid_messages, *args, **kwargs)
+            
+            # Record result and potentially extract tool info
+            if hasattr(result, "additional_kwargs") and result.additional_kwargs.get("tool_calls"):
+                self.spy.record_tool_call(result.additional_kwargs.get("tool_calls"))
+            
+            # Enhanced logging could be added here
+            # print(f"Tool call spy summary: {self.spy.summary()}")
+            
+            return result
         return super().invoke(input, *args, **kwargs)
         
     async def ainvoke(self, input, *args, **kwargs):
         if isinstance(input, list):
             valid_messages = self._validate_tool_messages(input)
-            return await super().ainvoke(valid_messages, *args, **kwargs)
+            # Track tool usage for debugging/analytics
+            tool_usage = self._track_tool_usage(valid_messages)
+            
+            # Record tool calls in the messages for analysis
+            for msg in valid_messages:
+                if hasattr(msg, "additional_kwargs") and msg.additional_kwargs.get("tool_calls"):
+                    self.spy.record_tool_call(msg.additional_kwargs.get("tool_calls"))
+            
+            result = await super().ainvoke(valid_messages, *args, **kwargs)
+            
+            # Record result and potentially extract tool info
+            if hasattr(result, "additional_kwargs") and result.additional_kwargs.get("tool_calls"):
+                self.spy.record_tool_call(result.additional_kwargs.get("tool_calls"))
+            
+            # Enhanced logging could be added here
+            # print(f"Tool call spy summary: {self.spy.summary()}")
+            
+            return result
         return await super().ainvoke(input, *args, **kwargs)
 
 # Build out Main States 
