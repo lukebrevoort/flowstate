@@ -1,4 +1,5 @@
 {
+    "dockerfile_lines": [],
     "dependencies": ["."],
     "graphs": {
       "main": "./agents/orchestrator.py:app"
