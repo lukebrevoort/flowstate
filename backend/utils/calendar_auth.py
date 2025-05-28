@@ -1,10 +1,10 @@
-import os
-import pickle
-import logging
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
+import os
+import pickle
+import logging
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +33,9 @@ def get_calendar_service():
         if creds and creds.expired and creds.refresh_token:
             try:
                 creds.refresh(Request())
-                logger.info("Refreshed expired credentials")
+                logger.info("Refreshed existing credentials")
             except Exception as e:
-                logger.error(f"Error refreshing credentials: {str(e)}")
+                logger.error(f"Error refreshing token: {str(e)}")
                 creds = None
         
         # If no valid creds, run the OAuth flow
@@ -46,13 +46,14 @@ def get_calendar_service():
             )
             try:
                 flow = InstalledAppFlow.from_client_secrets_file(oauth_file_path, SCOPES)
-                creds = flow.run_local_server(port=0)
-                logger.info("Generated new credentials via OAuth flow")
+                # Use console flow instead of browser flow
+                creds = flow.run_console()
+                logger.info("Created new credentials through OAuth flow")
                 
-                # Save credentials
+                # Save the credentials for the next run
                 with open(token_path, 'wb') as token:
                     pickle.dump(creds, token)
-                logger.info(f"Saved credentials to {token_path}")
+                    logger.info("Saved new credentials to token file")
             except Exception as e:
                 logger.error(f"OAuth flow failed: {str(e)}")
                 raise

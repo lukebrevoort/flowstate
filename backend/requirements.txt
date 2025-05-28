@@ -3,6 +3,7 @@ flask==2.3.3
 flask-cors==4.0.0
 werkzeug==2.3.7
 gunicorn==21.2.0
+trustcall
 
 # Database
 sqlalchemy==2.0.23
@@ -29,7 +30,7 @@ langchain-core>=0.2.38
 langchain-anthropic>=0.2.0
 langchain-openai>=0.1.0
 langgraph>=0.3.27
-langgraph-supervisor==0.0.2
+langgraph-supervisor
 anthropic>=0.17.0,<1.0
 openai>=1.10.0,<2.0.0
 

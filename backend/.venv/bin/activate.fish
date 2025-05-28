@@ -33,7 +33,7 @@ end
 # Unset irrelevant variables.
 deactivate nondestructive
 
-set -gx VIRTUAL_ENV /Users/lbrevoort/Desktop/flowstate/backend/.venv
+set -gx VIRTUAL_ENV /Users/lbrevoort/Desktop/langchain-academy-main/module-6/deployment/.venv
 
 set -gx _OLD_VIRTUAL_PATH $PATH
 set -gx PATH "$VIRTUAL_ENV/"bin $PATH

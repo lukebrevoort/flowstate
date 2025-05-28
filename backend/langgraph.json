@@ -1,8 +1,10 @@
 {
     "dockerfile_lines": [],
-    "dependencies": ["."],
     "graphs": {
-      "main": "./agents/orchestrator.py:app"
+      "task_maistro": "./agents/supervisor.py:app"
     },
-    "env": ".env"
+    "python_version": "3.11",
+    "dependencies": [
+      "."
+    ]
   }

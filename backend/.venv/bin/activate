@@ -35,7 +35,7 @@ deactivate () {
 # unset irrelevant variables
 deactivate nondestructive
 
-VIRTUAL_ENV=/Users/lbrevoort/Desktop/flowstate/backend/.venv
+VIRTUAL_ENV=/Users/lbrevoort/Desktop/langchain-academy-main/module-6/deployment/.venv
 export VIRTUAL_ENV
 
 _OLD_VIRTUAL_PATH="$PATH"
