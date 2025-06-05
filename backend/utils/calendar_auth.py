@@ -17,7 +17,7 @@ def get_calendar_service():
     Manages token creation, storage, and refresh.
     """
     creds = None
-    token_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'token.pickle')
+    token_path = '/etc/secrets/token.pickle'
     
     # Load existing token if available
     if os.path.exists(token_path):
@@ -40,10 +40,7 @@ def get_calendar_service():
         
         # If no valid creds, run the OAuth flow
         if not creds:
-            oauth_file_path = os.path.join(
-                os.path.dirname(os.path.dirname(__file__)), 
-                'OAuthClientIDJSON.json'
-            )
+            oauth_file_path = '/etc/secrets/OAuthClientIDJSON.json'
             try:
                 flow = InstalledAppFlow.from_client_secrets_file(oauth_file_path, SCOPES)
                 # Use console flow instead of browser flow
