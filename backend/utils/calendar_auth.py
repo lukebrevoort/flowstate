@@ -42,7 +42,7 @@ def get_calendar_service():
         if not creds:
             oauth_file_path = os.path.join(
                 os.path.dirname(os.path.dirname(__file__)), 
-                'OAuth Client ID JSON.json'
+                'OAuthClientIDJSON.json'
             )
             try:
                 flow = InstalledAppFlow.from_client_secrets_file(oauth_file_path, SCOPES)
