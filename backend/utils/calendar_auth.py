@@ -17,7 +17,7 @@ def get_calendar_service():
     Manages token creation, storage, and refresh.
     """
     creds = None
-    token_path = '/etc/secrets/token.pickle'
+    token_path = '/etc/secrets/token.json'
     
     # Load existing token if available
     if os.path.exists(token_path):

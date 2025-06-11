@@ -3,6 +3,7 @@ import os
 import pickle
 import sys
 import logging
+import json
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -15,8 +16,8 @@ def generate_token():
     """Generate a new OAuth token for Google Calendar access"""
     # Get absolute path to the credentials file
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    credentials_file = os.path.join(script_dir, 'OAuth Client ID JSON.json')
-    token_path = os.path.join(script_dir, 'token.pickle')
+    credentials_file = os.path.join(script_dir, 'OAuthClientIDJSON.json')
+    token_path = os.path.join(script_dir, 'token.json')
     
     # Check if credentials file exists
     if not os.path.exists(credentials_file):
@@ -36,8 +37,16 @@ def generate_token():
         creds = flow.run_local_server(port=0)  # This will open a browser window
         
         # Save token
-        with open(token_path, 'wb') as token:
-            pickle.dump(creds, token)
+        token_data = {
+            'token': creds.token,
+            'refresh_token': creds.refresh_token,
+            'token_uri': creds.token_uri,
+            'client_id': creds.client_id,
+            'client_secret': creds.client_secret,
+            'scopes': creds.scopes
+        }
+        with open(token_path, 'w') as token:
+            json.dump(token_data, token)
         
         logger.info(f"Token successfully generated and saved to {token_path}")
         print(f"Success! Token saved to {token_path}")
