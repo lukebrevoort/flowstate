@@ -11,7 +11,7 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from db import get_db, engine, Base
 import models
-from models import User, UserCreate, UserLogin, UserResponse
+from models.user import User, UserCreate, UserLogin, UserResponse
 from utils.auth import get_password_hash, authenticate_user, create_access_token, get_current_user
 from pydantic import BaseModel
 from typing import Dict
