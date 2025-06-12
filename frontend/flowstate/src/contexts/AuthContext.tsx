@@ -1,9 +1,9 @@
 "use client"
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-// Define proper user interface
+// Update User interface to match backend response
 interface User {
-    id: number;
+    id: string; // Changed from number to string to match backend UUID
     name: string;
     email: string;
     notion_connected?: boolean;
@@ -41,14 +41,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Check if user is already logged in
         const checkAuthStatus = async () => {
             try {
-                // Get token from localStorage
                 const token = localStorage.getItem('accessToken');
                 if (!token) {
                     setLoading(false);
                     return;
                 }
                 
-                // Validate token with backend
                 const response = await fetch('/api/auth/user', {
                     headers: {
                         'Authorization': `Bearer ${token}`
@@ -59,7 +57,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                     const userData = await response.json();
                     setUser(userData);
                 } else {
-                    // If token is invalid, remove it
                     localStorage.removeItem('accessToken');
                 }
             } catch (error) {

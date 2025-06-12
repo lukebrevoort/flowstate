@@ -5,203 +5,137 @@ import type { ClientConfig } from '@langchain/langgraph-sdk/client';
 import { useAuth } from './AuthContext';
 import config from '@/lib/config';
 
-// Configure client with appropriate base URL for your Docker setup
-// Default is localhost:8000 when running locally
+// Configure client to use your deployed backend
 const clientConfig: ClientConfig = {
-  apiKey: process.env.NEXT_PUBLIC_LANGGRAPH_API_KEY, // Use if your deployment requires auth
-  apiUrl: process.env.NEXT_PUBLIC_LANGGRAPH_API_URL || 'http://localhost:9876', // Use your LangGraph API URL
+  apiUrl: config.langGraphUrl, // This will now use your Render deployment
 };
 
 const client = new Client(clientConfig);
 
 // Message type definition for LangGraph messages
 type LangGraphMessage = {
-  type: 'user' | 'assistant' | 'tool' | 'system'; // Corrected role types to match SDK
+  type: 'user' | 'assistant' | 'tool' | 'system';
   content: string | object;
   id?: string;
 };
 
-// Context interface definition
 interface LangGraphContextType {
   isConnected: boolean;
   loading: boolean;
-  error: string | null;
-  assistantId: string | null;
-  availableAssistants: Array<{ id: string; name: string; }>; // Corrected to use id instead of assistant_id
   createThread: () => Promise<string>;
   sendMessage: (threadId: string, content: string) => Promise<void>;
-  streamResponse: (threadId: string, onChunk: (chunk: any) => void) => Promise<void>;
   getThreadHistory: (threadId: string) => Promise<LangGraphMessage[]>;
   resetThread: () => Promise<string>;
 }
 
-// Default context values
-const defaultContextValues: LangGraphContextType = {
-  isConnected: false,
-  loading: true,
-  error: null,
-  assistantId: null,
-  availableAssistants: [],
-  createThread: async () => { throw new Error('Context not initialized'); },
-  sendMessage: async () => { throw new Error('Context not initialized'); },
-  streamResponse: async () => { throw new Error('Context not initialized'); },
-  getThreadHistory: async () => [],
-  resetThread: async () => { throw new Error('Context not initialized'); },
+const LangGraphContext = createContext<LangGraphContextType | undefined>(undefined);
+
+export const useLangGraph = () => {
+  const context = useContext(LangGraphContext);
+  if (context === undefined) {
+    throw new Error('useLangGraph must be used within a LangGraphProvider');
+  }
+  return context;
 };
 
-// Create context
-const LangGraphContext = createContext<LangGraphContextType>(defaultContextValues);
+interface LangGraphProviderProps {
+  children: ReactNode;
+}
 
-// Provider component
-export function LangGraphProvider({ children }: { children: ReactNode }) {
-  const [isConnected, setIsConnected] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [assistantId, setAssistantId] = useState<string | null>(null);
-  const [availableAssistants, setAvailableAssistants] = useState<Array<{ id: string; name: string; }>>([]);
+export const LangGraphProvider: React.FC<LangGraphProviderProps> = ({ children }) => {
+  const [isConnected, setIsConnected] = useState(false);
+  const [loading, setLoading] = useState(true);
   const { user } = useAuth();
 
-  // Initialize connection to LangGraph
   useEffect(() => {
-    const initLangGraph = async () => {
-      if (!user) {
-        setLoading(false);
-        return;
-      }
-
+    const checkConnection = async () => {
       try {
-        setLoading(true);
-        // Fetch available assistants/graphs
-        const assistants = await client.assistants.search({ metadata: null, offset: 0, limit: 10 });
-        
-        if (assistants && assistants.length > 0) {
-          setAvailableAssistants(assistants.map(assistant => ({
-            id: assistant.assistant_id,
-            name: assistant.name || assistant.assistant_id
-          })));
-          // Use the first assistant by default
-          setAssistantId(assistants[0].assistant_id);
-          setIsConnected(true);
-          setError(null);
-        } else {
-          throw new Error('No assistants found in LangGraph deployment');
-        }
-      } catch (err) {
-        console.error('Failed to initialize LangGraph connection:', err);
-        setError(err instanceof Error ? err.message : 'Failed to connect to LangGraph');
+        // Test connection to your deployed backend
+        const response = await fetch(`${config.apiUrl}/`);
+        setIsConnected(response.ok);
+      } catch (error) {
+        console.error('LangGraph connection failed:', error);
         setIsConnected(false);
       } finally {
         setLoading(false);
       }
     };
 
-    initLangGraph();
-  }, [user]);
+    checkConnection();
+  }, []);
 
-  // Create a new thread
   const createThread = async (): Promise<string> => {
     try {
-      const thread = await client.threads.create();
-      return thread.thread_id;
-    } catch (err) {
-      console.error('Failed to create thread:', err);
-      throw new Error(err instanceof Error ? err.message : 'Failed to create thread');
-    }
-  };
-
-  // Send a message to a thread
-  const sendMessage = async (threadId: string, content: string): Promise<void> => {
-    if (!assistantId) throw new Error('No assistant is selected');
-  
-    try {
-      // Create a run with the user message as input
-      await client.runs.create(threadId, assistantId, {
-        input: {
-          messages: [{ role: 'user', content }],
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`${config.apiUrl}/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
+        body: JSON.stringify({
+          message: "Start new conversation",
+          user_id: user?.id || "default_user"
+        }),
       });
-    } catch (err) {
-      console.error('Failed to send message:', err);
-      throw new Error(err instanceof Error ? err.message : 'Failed to send message');
-    }
-  };
-  
-  // Stream the response from the assistant
-  const streamResponse = async (
-    threadId: string,
-    onChunk: (chunk: any) => void
-  ): Promise<void> => {
-    if (!assistantId) throw new Error('No assistant is selected');
-  
-    try {
-      const stream = client.runs.stream(threadId, assistantId, {
-        // Optionally pass input if needed to start a run with streaming
-      });
-  
-      for await (const chunk of stream) {
-        onChunk(chunk);
+      
+      if (!response.ok) {
+        throw new Error('Failed to create thread');
       }
-    } catch (err) {
-      console.error('Failed to stream response:', err);
-      throw new Error(err instanceof Error ? err.message : 'Failed to stream response');
+      
+      const data = await response.json();
+      return data.session_id;
+    } catch (error) {
+      console.error('Error creating thread:', error);
+      throw error;
     }
   };
-  
 
-// Get thread history
-const getThreadHistory = async (threadId: string): Promise<LangGraphMessage[]> => {
+  const sendMessage = async (threadId: string, content: string): Promise<void> => {
     try {
-      const history = await client.threads.getHistory(threadId);
-  
-      return history.map((message: any) => ({
-        type: message.role === 'user' ? 'user'
-             : message.role === 'assistant' ? 'assistant'
-             : message.role,
-        content: Array.isArray(message.content)
-          ? message.content.map((c: any) => c.text || '').join(' ')
-          : message.content,
-        id: message.message_id || message.id || undefined,
-      }));
-    } catch (err) {
-      console.error('Failed to get thread history:', err);
-      return [];
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`${config.apiUrl}/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          message: content,
+          session_id: threadId,
+          user_id: user?.id || "default_user"
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to send message');
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      throw error;
     }
   };
 
-  // Reset thread (creates a new thread)
+  const getThreadHistory = async (threadId: string): Promise<LangGraphMessage[]> => {
+    // For now, return empty array since we're using stateless chat
+    // In the future, you could implement message history retrieval
+    return [];
+  };
+
   const resetThread = async (): Promise<string> => {
-    try {
-      const newThreadId = await createThread();
-      // Clear local storage if you're storing the thread ID there
-      localStorage.setItem('flowstate_thread_id', newThreadId);
-      return newThreadId;
-    } catch (err) {
-      console.error('Failed to reset thread:', err);
-      throw new Error(err instanceof Error ? err.message : 'Failed to reset thread');
-    }
+    return await createThread();
   };
 
-  // Context value
-  const contextValue: LangGraphContextType = {
+  const value = {
     isConnected,
     loading,
-    error,
-    assistantId,
-    availableAssistants,
     createThread,
     sendMessage,
-    streamResponse,
     getThreadHistory,
-    resetThread
+    resetThread,
   };
 
-  return (
-    <LangGraphContext.Provider value={contextValue}>
-      {children}
-    </LangGraphContext.Provider>
-  );
-}
+  return <LangGraphContext.Provider value={value}>{children}</LangGraphContext.Provider>;
+};
 
-// Hook to use the LangGraph context
-export const useLangGraph = () => useContext(LangGraphContext);
-
+export default LangGraphProvider;

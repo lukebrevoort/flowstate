@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
+import config from '@/lib/config';
 
 export async function POST(request) {
   try {
     const body = await request.json();
     
-    // Forward request to backend
-    const response = await fetch('http://localhost:5001/api/auth/signup', {
+    // Forward request to deployed backend
+    const response = await fetch(`${config.apiUrl}/api/auth/signup`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
