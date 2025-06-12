@@ -264,12 +264,16 @@ Your current instructions are:
 
 ## Node definitions
 
+
+# Currently, only using project management to avoid OAuth issues with Google Calendar
+"""
 scheduler_agent = create_react_agent(
     model=model,
     tools=scheduler_tools,
     prompt=scheduler_prompt + "\nTask Description: {task_description}",
     name="Scheduler Agent",
 )
+"""
 
 project_management_agent = create_react_agent(
     model=model,
@@ -373,8 +377,10 @@ project_manager_handoff = create_supervisor_handoff_tool(
 
 
 # Modify the orchestrator_agent definition
+# Currently, only using project management to avoid OAuth issues with Google Calendar
+# scheduler_agent
 orchestrator_agent = create_supervisor(
-    [scheduler_agent, project_management_agent],
+    [project_management_agent],
     model=ValidatedChatAnthropic(model="claude-3-5-haiku-latest", temperature=0),
     add_handoff_back_messages=True,
     tools=[
