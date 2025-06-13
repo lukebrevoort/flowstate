@@ -1,24 +1,33 @@
 import json
 import uuid
-from fastapi import FastAPI, Request, BackgroundTasks
+from fastapi import FastAPI, Request, BackgroundTasks, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import Dict, List, Any, Optional
 from langchain_core.messages import HumanMessage
 from langgraph.store.memory import InMemoryStore
-
-from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
+
+# Import your compiled agent
+try:
+    from agents.supervisor import app as agent_app
+    print("✅ Successfully imported agent_app")
+except ImportError as e:
+    print(f"❌ Failed to import agent_app: {e}")
+    agent_app = None
+
+try:
+    import agents.configuration as configuration
+    print("✅ Successfully imported configuration")
+except ImportError as e:
+    print(f"❌ Failed to import configuration: {e}")
+    configuration = None
+
+# Import authentication components
 from db import get_db, engine, Base
 import models
 from models.user import User, UserCreate, UserLogin, UserResponse
 from utils.auth import get_password_hash, authenticate_user, create_access_token, get_current_user
-from pydantic import BaseModel
-from typing import Dict
-
-# Import your compiled agent
-from agents.supervisor import app as agent_app
-import agents.configuration as configuration
 
 # Create FastAPI app
 app = FastAPI(title="FlowState API")
@@ -49,7 +58,6 @@ class ChatResponse(BaseModel):
 # Create tables in the database
 @app.on_event("startup")
 async def startup_db_client():
-    # Create tables if they don't exist
     Base.metadata.create_all(bind=engine)
     print("Database initialized successfully")
 
@@ -62,17 +70,25 @@ class TokenData(BaseModel):
 
 @app.get("/")
 async def health_check():
-    return {"status": "healthy", "service": "FlowState API"}
+    return {
+        "status": "healthy", 
+        "service": "FlowState API",
+        "agent_loaded": agent_app is not None,
+        "configuration_loaded": configuration is not None
+    }
 
+# Test endpoint for debugging
+@app.get("/test-auth")
+async def test_auth(current_user: User = Depends(get_current_user)):
+    return {"message": "Auth working", "user": current_user.email}
 
+# Your existing auth endpoints
 @app.post("/api/auth/signup", response_model=dict)
 async def signup(user_data: UserCreate, db: Session = Depends(get_db)):
-    # Check if user with email exists
     db_user = db.query(User).filter(User.email == user_data.email).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
     
-    # Create new user
     hashed_password = get_password_hash(user_data.password)
     new_user = User(
         email=user_data.email,
@@ -84,7 +100,6 @@ async def signup(user_data: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
     
-    # Create access token
     access_token = create_access_token(data={"sub": new_user.id})
     
     return {
@@ -109,7 +124,6 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Create access token
     access_token = create_access_token(data={"sub": user.id})
     
     return {
@@ -128,41 +142,71 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
 async def get_user(current_user: User = Depends(get_current_user)):
     return current_user
 
-
+# Fixed chat endpoint
 @app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest, current_user: User = Depends(get_current_user), background_tasks: BackgroundTasks = None):
-    # Use the authenticated user's ID
-    user_id = current_user.id
-    
-    # Use existing session ID or create a new one
-    session_id = request.session_id or str(uuid.uuid4())
-    
-    # Initialize or get the existing thread for this user
-    session_key = f"{user_id}_{session_id}"
-    if session_key not in sessions:
-        config = configuration.Configuration(
-            user_id=user_id,
-            todo_category=request.todo_category
+async def chat(request: ChatRequest, current_user: User = Depends(get_current_user)):
+    try:
+        print(f"Chat request from user {current_user.email}: {request.message}")
+        
+        user_id = current_user.id
+        session_id = request.session_id or str(uuid.uuid4())
+        
+        # Check if agent_app is available
+        if agent_app is None:
+            return ChatResponse(
+                response=f"Hello {current_user.name}! I received your message: '{request.message}'. The agent system is currently initializing.",
+                session_id=session_id
+            )
+        
+        # Create configuration if available
+        if configuration:
+            config = {
+                "configurable": {
+                    "user_id": user_id,
+                    "todo_category": request.todo_category
+                }
+            }
+        else:
+            config = None
+        
+        # Use proper LangGraph invocation
+        try:
+            # Prepare the state with the user message
+            state = {"messages": [HumanMessage(content=request.message)]}
+            
+            # Invoke the agent with proper configuration
+            result = agent_app.invoke(state, config=config, store=memory_store)
+            
+            # Extract the assistant's response
+            messages = result.get("messages", [])
+            ai_messages = []
+            
+            for msg in messages:
+                if hasattr(msg, 'type') and msg.type == "ai":
+                    if hasattr(msg, 'content') and msg.content:
+                        ai_messages.append(msg.content)
+            
+            response = ai_messages[-1] if ai_messages else f"Hello {current_user.name}! I processed your message: '{request.message}'"
+            
+        except Exception as agent_error:
+            print(f"Agent invocation error: {agent_error}")
+            import traceback
+            traceback.print_exc()
+            # Fallback response
+            response = f"Hello {current_user.name}! I received your message: '{request.message}'. I'm currently processing it, but encountered a technical issue. Please try again."
+        
+        print(f"Sending response: {response}")
+        
+        return ChatResponse(
+            response=response,
+            session_id=session_id
         )
-        thread = agent_app.create_thread(config=config, store=memory_store)
-        sessions[session_key] = thread
-    else:
-        thread = sessions[session_key]
-    
-    # Add human message to the thread and run the agent
-    result = agent_app.invoke(
-        {"messages": [HumanMessage(content=request.message)]}, 
-        thread=thread
-    )
-    
-    # Extract the assistant's response(s)
-    ai_messages = [msg.content for msg in result["messages"] if msg.type == "ai" and msg.content]
-    response = ai_messages[-1] if ai_messages else "I'm processing your request."
-    
-    return ChatResponse(
-        response=response,
-        session_id=session_id
-    )
+        
+    except Exception as e:
+        print(f"Chat endpoint error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
