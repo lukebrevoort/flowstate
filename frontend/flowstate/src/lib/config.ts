@@ -17,6 +17,6 @@ const prodConfig: Config = {
 };
 
 // Determine which configuration to use based on environment
-const config: Config = process.env.NODE_ENV === 'production' ? prodConfig : devConfig;
+const config: Config = prodConfig; // process.env.NODE_ENV === 'production' ? prodConfig : devConfig;
 
 export default config;

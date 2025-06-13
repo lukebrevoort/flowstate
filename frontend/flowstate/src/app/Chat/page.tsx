@@ -99,6 +99,7 @@ function Chat() {
     }
   };
 
+  // Update the handleSubmit function
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!message.trim() || isLoading || !threadId || !isConnected) return;
@@ -110,49 +111,22 @@ function Chat() {
     // Add user message to chat
     setChatHistory(prev => [...prev, { role: 'user', content: userMessage }]);
     
-    // Define assistantMessageId outside try block to make it accessible in catch block
-    const assistantMessageId = Date.now().toString();
-    
     try {
-      // Add a temporary assistant message that will be updated as we receive chunks
+      // Send message and get response
+      const response = await sendMessage(threadId, userMessage);
+      
+      // Add assistant response to chat
       setChatHistory(prev => [...prev, { 
         role: 'assistant', 
-        content: '',
-        id: assistantMessageId
+        content: response
       }]);
-      
-      // Send message to LangGraph backend using the correct format
-      await sendMessage(threadId, userMessage);
-      
-      // Function to handle streaming response updates
-      const handleChunk = (chunk: any) => {
-        if (chunk.type === 'text') {
-          setChatHistory(prev => 
-            prev.map(msg => 
-              msg.id === assistantMessageId 
-                ? { ...msg, content: msg.content + (typeof chunk.content === 'string' ? chunk.content : JSON.stringify(chunk.content)) }
-                : msg
-            )
-          );
-        } else if (chunk.type === 'tool_use') {
-          // For now, we'll just log tool use events, but in the future
-          // we could add special UI components for different tool responses
-          console.log('Tool use:', chunk);
-        }
-      };
-      
-      // Start streaming the response from the LangGraph backend
-      await streamResponse(threadId, handleChunk);
       
     } catch (error) {
       console.error('Chat error:', error);
-      setChatHistory(prev => [
-        ...prev.filter(msg => msg.id !== assistantMessageId),
-        { 
-          role: 'system', 
-          content: `Error: ${error instanceof Error ? error.message : 'Failed to process your request'}`
-        }
-      ]);
+      setChatHistory(prev => [...prev, { 
+        role: 'system', 
+        content: `Error: ${error instanceof Error ? error.message : 'Failed to process your request'}`
+      }]);
     } finally {
       setIsLoading(false);
     }

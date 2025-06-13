@@ -130,20 +130,24 @@ async def get_user(current_user: User = Depends(get_current_user)):
 
 
 @app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
+async def chat(request: ChatRequest, current_user: User = Depends(get_current_user), background_tasks: BackgroundTasks = None):
+    # Use the authenticated user's ID
+    user_id = current_user.id
+    
     # Use existing session ID or create a new one
     session_id = request.session_id or str(uuid.uuid4())
     
-    # Initialize or get the existing thread
-    if session_id not in sessions:
+    # Initialize or get the existing thread for this user
+    session_key = f"{user_id}_{session_id}"
+    if session_key not in sessions:
         config = configuration.Configuration(
-            user_id=request.user_id,
+            user_id=user_id,
             todo_category=request.todo_category
         )
         thread = agent_app.create_thread(config=config, store=memory_store)
-        sessions[session_id] = thread
+        sessions[session_key] = thread
     else:
-        thread = sessions[session_id]
+        thread = sessions[session_key]
     
     # Add human message to the thread and run the agent
     result = agent_app.invoke(
