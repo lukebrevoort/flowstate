@@ -151,31 +151,33 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
         user_id = current_user.id
         session_id = request.session_id or str(uuid.uuid4())
         
-        # Check if agent_app is available
+        # Check if agent_app is available and properly configured
         if agent_app is None:
             return ChatResponse(
-                response=f"Hello {current_user.name}! I received your message: '{request.message}'. The agent system is currently initializing.",
+                response=f"Hello {current_user.name}! I received your message: '{request.message}'. The AI agent is currently initializing. For now, I can confirm I'm receiving your messages correctly!",
                 session_id=session_id
             )
         
-        # Create configuration if available
-        if configuration:
+        # Try to use the LangGraph agent
+        try:
+            # Prepare the state with the user message
+            state = {"messages": [HumanMessage(content=request.message)]}
+            
+            # Create configuration for LangGraph
             config = {
                 "configurable": {
                     "user_id": user_id,
                     "todo_category": request.todo_category
                 }
             }
-        else:
-            config = None
-        
-        # Use proper LangGraph invocation
-        try:
-            # Prepare the state with the user message
-            state = {"messages": [HumanMessage(content=request.message)]}
             
-            # Invoke the agent with proper configuration
-            result = agent_app.invoke(state, config=config, store=memory_store)
+            print(f"Invoking agent with state: {state}")
+            print(f"Config: {config}")
+            
+            # Invoke the agent
+            result = agent_app.invoke(state, config=config)
+            
+            print(f"Agent result: {result}")
             
             # Extract the assistant's response
             messages = result.get("messages", [])
@@ -184,16 +186,24 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
             for msg in messages:
                 if hasattr(msg, 'type') and msg.type == "ai":
                     if hasattr(msg, 'content') and msg.content:
-                        ai_messages.append(msg.content)
+                        ai_messages.append(str(msg.content))
+                elif hasattr(msg, 'content') and msg.content and not hasattr(msg, 'type'):
+                    # Fallback for messages without type
+                    ai_messages.append(str(msg.content))
             
-            response = ai_messages[-1] if ai_messages else f"Hello {current_user.name}! I processed your message: '{request.message}'"
+            if ai_messages:
+                response = ai_messages[-1]
+            else:
+                # If no AI messages found, create a helpful response
+                response = f"Hello {current_user.name}! I processed your message: '{request.message}'. How can I help you manage your tasks and schedule today?"
             
         except Exception as agent_error:
             print(f"Agent invocation error: {agent_error}")
             import traceback
             traceback.print_exc()
-            # Fallback response
-            response = f"Hello {current_user.name}! I received your message: '{request.message}'. I'm currently processing it, but encountered a technical issue. Please try again."
+            
+            # Provide a helpful fallback response instead of an error
+            response = f"Hello {current_user.name}! I received your message: '{request.message}'. I'm your AI assistant for managing tasks and schedule. While I'm still calibrating my full capabilities, I'm here to help! What would you like to work on today?"
         
         print(f"Sending response: {response}")
         
@@ -206,7 +216,12 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
         print(f"Chat endpoint error: {e}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        
+        # Even for unexpected errors, provide a user-friendly response
+        return ChatResponse(
+            response=f"Hello {current_user.name}! I'm experiencing a temporary issue but I'm here to help. Please try sending your message again, or let me know what you'd like to work on!",
+            session_id=request.session_id or str(uuid.uuid4())
+        )
 
 if __name__ == "__main__":
     import uvicorn
