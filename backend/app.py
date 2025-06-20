@@ -156,11 +156,12 @@ async def debug_agent(current_user: User = Depends(get_current_user)):
             "configurable": {
                 "user_id": current_user.id,
                 "todo_category": "default"
-            }
+            },
+            "store": memory_store  # ✅ Pass store through config
         }
         
         print("Testing agent invocation...")
-        result = agent_app.invoke(state, config=config, store=memory_store)
+        result = agent_app.invoke(state, config=config)  # ✅ Removed store parameter
         
         return {
             "success": True,
@@ -198,19 +199,20 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
             # Prepare the state with the user message
             state = {"messages": [HumanMessage(content=request.message)]}
             
-            # Create configuration for LangGraph - FIXED CONFIG FORMAT
+            # Create configuration for LangGraph - FIXED: Include store in config
             config = {
                 "configurable": {
                     "user_id": user_id,
                     "todo_category": request.todo_category
-                }
+                },
+                "store": memory_store  # ✅ Pass store through config
             }
             
             print(f"Invoking agent with state: {state}")
             print(f"Config: {config}")
             
-            # Invoke the agent with store parameter
-            result = agent_app.invoke(state, config=config, store=memory_store)
+            # Invoke the agent WITHOUT the store parameter
+            result = agent_app.invoke(state, config=config)  # ✅ Removed store parameter
             
             print(f"Agent result: {result}")
             print(f"Result type: {type(result)}")

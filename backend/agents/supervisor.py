@@ -447,5 +447,7 @@ builder.add_conditional_edges(
     }
 )
 
+
+
 # Define the flow of the memory extraction process
-app = orchestrator_agent.compile(name="Orchestrator Supervisor")
+app = orchestrator_agent.compile(name="Orchestrator Supervisor", checkpointer=MemorySaver(), store=InMemoryStore())
