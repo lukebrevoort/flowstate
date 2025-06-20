@@ -141,9 +141,7 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
 @app.get("/api/auth/user", response_model=UserResponse)
 async def get_user(current_user: User = Depends(get_current_user)):
     return current_user
-
-
-# Agent debugging endpoint
+    
 @app.post("/debug-agent")
 async def debug_agent(current_user: User = Depends(get_current_user)):
     try:
@@ -151,20 +149,23 @@ async def debug_agent(current_user: User = Depends(get_current_user)):
             return {"error": "Agent not loaded"}
         
         # Simple test invocation
+        test_thread_id = f"debug_{uuid.uuid4()}"  # ✅ Generate a thread_id
         state = {"messages": [HumanMessage(content="Hello, test message")]}
         config = {
             "configurable": {
                 "user_id": current_user.id,
-                "todo_category": "default"
+                "todo_category": "default",
+                "thread_id": test_thread_id  # ✅ Add the missing thread_id
             },
-            "store": memory_store  # ✅ Pass store through config
+            "store": memory_store
         }
         
         print("Testing agent invocation...")
-        result = agent_app.invoke(state, config=config)  # ✅ Removed store parameter
+        result = agent_app.invoke(state, config=config)
         
         return {
             "success": True,
+            "thread_id": test_thread_id,
             "result_type": str(type(result)),
             "result_keys": list(result.keys()) if isinstance(result, dict) else "Not a dict",
             "message_count": len(result.get("messages", [])) if isinstance(result, dict) else 0,
@@ -199,26 +200,27 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
             # Prepare the state with the user message
             state = {"messages": [HumanMessage(content=request.message)]}
             
-            # Create configuration for LangGraph - FIXED: Include store in config
+            # Create configuration for LangGraph - FIXED: Include thread_id
             config = {
                 "configurable": {
                     "user_id": user_id,
-                    "todo_category": request.todo_category
+                    "todo_category": request.todo_category,
+                    "thread_id": session_id  # ✅ Add the missing thread_id
                 },
-                "store": memory_store  # ✅ Pass store through config
+                "store": memory_store
             }
             
             print(f"Invoking agent with state: {state}")
             print(f"Config: {config}")
             
-            # Invoke the agent WITHOUT the store parameter
-            result = agent_app.invoke(state, config=config)  # ✅ Removed store parameter
+            # Invoke the agent
+            result = agent_app.invoke(state, config=config)
             
             print(f"Agent result: {result}")
             print(f"Result type: {type(result)}")
             print(f"Result keys: {result.keys() if isinstance(result, dict) else 'Not a dict'}")
             
-            # Extract the assistant's response - IMPROVED EXTRACTION
+            # Extract the assistant's response
             if isinstance(result, dict):
                 messages = result.get("messages", [])
                 print(f"Found {len(messages)} messages in result")
