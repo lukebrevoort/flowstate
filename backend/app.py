@@ -142,7 +142,43 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
 async def get_user(current_user: User = Depends(get_current_user)):
     return current_user
 
-# Fixed chat endpoint
+
+# Agent debugging endpoint
+@app.post("/debug-agent")
+async def debug_agent(current_user: User = Depends(get_current_user)):
+    try:
+        if agent_app is None:
+            return {"error": "Agent not loaded"}
+        
+        # Simple test invocation
+        state = {"messages": [HumanMessage(content="Hello, test message")]}
+        config = {
+            "configurable": {
+                "user_id": current_user.id,
+                "todo_category": "default"
+            }
+        }
+        
+        print("Testing agent invocation...")
+        result = agent_app.invoke(state, config=config, store=memory_store)
+        
+        return {
+            "success": True,
+            "result_type": str(type(result)),
+            "result_keys": list(result.keys()) if isinstance(result, dict) else "Not a dict",
+            "message_count": len(result.get("messages", [])) if isinstance(result, dict) else 0,
+            "result_sample": str(result)[:500] + "..." if len(str(result)) > 500 else str(result)
+        }
+        
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+# Chat endpoint
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, current_user: User = Depends(get_current_user)):
     try:
@@ -158,12 +194,11 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
                 session_id=session_id
             )
         
-        # Try to use the LangGraph agent
         try:
             # Prepare the state with the user message
             state = {"messages": [HumanMessage(content=request.message)]}
             
-            # Create configuration for LangGraph
+            # Create configuration for LangGraph - FIXED CONFIG FORMAT
             config = {
                 "configurable": {
                     "user_id": user_id,
@@ -174,27 +209,40 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
             print(f"Invoking agent with state: {state}")
             print(f"Config: {config}")
             
-            # Invoke the agent
-            result = agent_app.invoke(state, config=config)
+            # Invoke the agent with store parameter
+            result = agent_app.invoke(state, config=config, store=memory_store)
             
             print(f"Agent result: {result}")
+            print(f"Result type: {type(result)}")
+            print(f"Result keys: {result.keys() if isinstance(result, dict) else 'Not a dict'}")
             
-            # Extract the assistant's response
-            messages = result.get("messages", [])
-            ai_messages = []
-            
-            for msg in messages:
-                if hasattr(msg, 'type') and msg.type == "ai":
+            # Extract the assistant's response - IMPROVED EXTRACTION
+            if isinstance(result, dict):
+                messages = result.get("messages", [])
+                print(f"Found {len(messages)} messages in result")
+                
+                # Look for the last AI message with content
+                ai_response = None
+                for msg in reversed(messages):  # Check from last to first
+                    print(f"Message type: {type(msg)}, has content: {hasattr(msg, 'content')}")
                     if hasattr(msg, 'content') and msg.content:
-                        ai_messages.append(str(msg.content))
-                elif hasattr(msg, 'content') and msg.content and not hasattr(msg, 'type'):
-                    # Fallback for messages without type
-                    ai_messages.append(str(msg.content))
-            
-            if ai_messages:
-                response = ai_messages[-1]
+                        # Check if it's an AI message
+                        if hasattr(msg, 'type') and msg.type == "ai":
+                            ai_response = str(msg.content)
+                            print(f"Found AI response: {ai_response}")
+                            break
+                        elif hasattr(msg, '__class__') and 'AI' in msg.__class__.__name__:
+                            ai_response = str(msg.content)
+                            print(f"Found AI response by class name: {ai_response}")
+                            break
+                
+                if ai_response:
+                    response = ai_response
+                else:
+                    print("No AI messages found, creating default response")
+                    response = f"Hello {current_user.name}! I processed your message: '{request.message}'. How can I help you manage your tasks and schedule today?"
             else:
-                # If no AI messages found, create a helpful response
+                print(f"Unexpected result format: {type(result)}")
                 response = f"Hello {current_user.name}! I processed your message: '{request.message}'. How can I help you manage your tasks and schedule today?"
             
         except Exception as agent_error:

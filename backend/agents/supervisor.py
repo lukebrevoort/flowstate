@@ -158,13 +158,27 @@ def validate_messages(messages):
     return cleaned
 
 class ValidatedChatAnthropic(ChatAnthropic):
-    def invoke(self, messages, **kwargs):
-        validated_messages = validate_messages(messages)
-        return super().invoke(validated_messages, **kwargs)
+    def invoke(self, input, config=None, **kwargs):
+        # Handle both direct messages and input dict
+        if isinstance(input, list):
+            validated_input = validate_messages(input)
+        elif isinstance(input, dict) and "messages" in input:
+            validated_input = {**input, "messages": validate_messages(input["messages"])}
+        else:
+            validated_input = input
+            
+        return super().invoke(validated_input, config=config, **kwargs)
     
-    async def ainvoke(self, messages, config=None, **kwargs):
-        validated_messages = validate_messages(messages)
-        return await super().ainvoke(validated_messages, config, **kwargs)
+    async def ainvoke(self, input, config=None, **kwargs):
+        # Handle both direct messages and input dict
+        if isinstance(input, list):
+            validated_input = validate_messages(input)
+        elif isinstance(input, dict) and "messages" in input:
+            validated_input = {**input, "messages": validate_messages(input["messages"])}
+        else:
+            validated_input = input
+            
+        return await super().ainvoke(validated_input, config=config, **kwargs)
 
 
 # Initialize the model
