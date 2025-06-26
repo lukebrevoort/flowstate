@@ -5,19 +5,19 @@ werkzeug==2.3.7
 gunicorn==21.2.0
 trustcall
 
-# FastAPI
-fastapi>=0.104.0
+# FastAPI - Performance optimized
+fastapi==0.104.1
 uvicorn[standard]==0.24.0
 pydantic>=2.0.0
 pydantic[email]>=2.0.0
 
-# Database
+# Database with connection pooling
 sqlalchemy==2.0.23
 psycopg2-binary==2.9.9
 
-# Authentication - Fixed bcrypt version
-python-jose[cryptography]>=3.3.0
-passlib[bcrypt]>=1.7.4
+# Authentication - Optimized bcrypt
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
 bcrypt==4.1.2
 
 # API clients
@@ -59,8 +59,7 @@ python-dotenv==1.0.0
 tqdm==4.66.1
 numpy==1.26.2
 httpx==0.25.2
-python-multipart>=0.0.6
 
-# Preformance and optimization
+# Performance and optimization - FIXED VERSION CONFLICT
 python-multipart==0.0.6
-orjson==3.9.11
+orjson>=3.10.1  # ✅ Updated to satisfy langgraph-sdk requirement
