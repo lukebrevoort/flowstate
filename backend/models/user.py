@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, String, Integer, DateTime
+from sqlalchemy import Boolean, Column, String, Integer, DateTime, Index
 from sqlalchemy.sql import func
 from db import Base
 from pydantic import BaseModel, EmailStr
@@ -15,6 +15,10 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     notion_connected = Column(Boolean, default=False)
     google_calendar_connected = Column(Boolean, default=False)
+
+    __table_args__ = (
+        Index('ix_user_email_active', 'email', 'is_active'),  # ✅ Composite index
+    )
 
 # Pydantic models for request validation
 class UserCreate(BaseModel):

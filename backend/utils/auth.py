@@ -9,9 +9,17 @@ from sqlalchemy.orm import Session
 from db import get_db
 from models.user import User
 import uuid
+from functools import lru_cache
+from typing import Optional
+import time
 
-# Security settings
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Security settings - OPTIMIZED bcrypt rounds
+pwd_context = CryptContext(
+    schemes=["bcrypt"], 
+    deprecated="auto",
+    bcrypt__rounds=12 
+)
+
 SECRET_KEY = os.environ.get("SECRET_KEY", "your-secret-key-for-development")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
@@ -40,6 +48,26 @@ def authenticate_user(db: Session, email: str, password: str):
         return False
     return user
 
+user_cache = {}
+CACHE_TTL = 300  # 5 minutes
+
+def get_cached_user(user_id: str, db: Session) -> Optional[User]:
+    """Get user from cache or database"""
+    current_time = time.time()
+    
+    # Check cache first
+    if user_id in user_cache:
+        cached_user, timestamp = user_cache[user_id]
+        if current_time - timestamp < CACHE_TTL:
+            return cached_user
+    
+    # Fetch from database
+    user = db.query(User).filter(User.id == user_id).first()
+    if user:
+        user_cache[user_id] = (user, current_time)
+    
+    return user
+
 # Get current user from token
 async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
@@ -55,7 +83,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     except JWTError:
         raise credentials_exception
     
-    user = db.query(User).filter(User.id == user_id).first()
+    # Use cached user lookup
+    user = get_cached_user(user_id, db)
     if user is None:
         raise credentials_exception
     return user

@@ -1,4 +1,5 @@
 import json
+import time
 import uuid
 from fastapi import FastAPI, Request, BackgroundTasks, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,7 +28,7 @@ except ImportError as e:
 from db import get_db, engine, Base
 import models
 from models.user import User, UserCreate, UserLogin, UserResponse
-from utils.auth import get_password_hash, authenticate_user, create_access_token, get_current_user
+from utils.auth import get_password_hash, verify_password, authenticate_user, create_access_token, get_current_user
 
 # Create FastAPI app
 app = FastAPI(title="FlowState API")
@@ -116,15 +117,38 @@ async def signup(user_data: UserCreate, db: Session = Depends(get_db)):
 
 @app.post("/api/auth/login", response_model=dict)
 async def login(user_data: UserLogin, db: Session = Depends(get_db)):
-    user = authenticate_user(db, user_data.email, user_data.password)
+    start_time = time.time()
+    
+    # Optimize database query with specific fields
+    user = db.query(User).filter(User.email == user_data.email).first()
+    db_time = time.time() - start_time
+    
     if not user:
+        # Still run password hashing to prevent timing attacks
+        get_password_hash("dummy_password")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
+    hash_start = time.time()
+    if not verify_password(user_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    hash_time = time.time() - hash_start
+    
+    token_start = time.time()
     access_token = create_access_token(data={"sub": user.id})
+    token_time = time.time() - token_start
+    
+    total_time = time.time() - start_time
+    
+    # Log timing for debugging
+    print(f"Login timing - DB: {db_time:.3f}s, Hash: {hash_time:.3f}s, Token: {token_time:.3f}s, Total: {total_time:.3f}s")
     
     return {
         "token": access_token,

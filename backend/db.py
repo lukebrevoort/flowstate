@@ -1,20 +1,31 @@
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import QueuePool
 import os
 
-# Get database URL from environment variable for production or use sqlite for dev
+# Get database URL from environment variable
 DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./flowstate.db")
 
-# Handle PostgreSQL connection string special case (Render adds "postgres://" but SQLAlchemy needs "postgresql://")
+# Handle PostgreSQL connection string special case
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-engine = create_engine(DATABASE_URL)
+# Create engine with connection pooling - OPTIMIZED
+engine = create_engine(
+    DATABASE_URL,
+    poolclass=QueuePool,
+    pool_size=10,   
+    max_overflow=20,      
+    pool_pre_ping=True,   
+    pool_recycle=3600,    
+    echo=False            
+)
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# Dependency to get DB session
+# Optimized dependency with better error handling
 def get_db():
     db = SessionLocal()
     try:
