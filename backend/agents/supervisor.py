@@ -182,7 +182,11 @@ class ValidatedChatAnthropic(ChatAnthropic):
 
 
 # Initialize the model
-model = ChatAnthropic(model="claude-3-5-haiku-latest", temperature=0)
+model = ValidatedChatAnthropic(
+    model="claude-3-5-haiku-latest", 
+    temperature=0,
+    streaming=True  # Enable streaming
+)
 
 ## Create the Trustcall extractors for updating the user profile and ToDo list
 profile_extractor = create_extractor(
@@ -406,7 +410,7 @@ project_manager_handoff = create_supervisor_handoff_tool(
 # scheduler_agent
 orchestrator_agent = create_supervisor(
     [project_management_agent],
-    model=ValidatedChatAnthropic(model="claude-3-5-haiku-latest", temperature=0),
+    model=model,
     add_handoff_back_messages=True,
     tools=[
         scheduler_handoff,
@@ -462,3 +466,70 @@ builder.add_conditional_edges(
 
 # Define the flow of the memory extraction process
 app = orchestrator_agent.compile(name="Orchestrator Supervisor", checkpointer=MemorySaver(), store=InMemoryStore())
+
+async def stream_response(user_input: str, config: dict):
+    """Stream responses from the supervisor agent"""
+    
+    # Create the initial state
+    initial_state = {
+        "messages": [HumanMessage(content=user_input)]
+    }
+    
+    # Stream the response
+    async for chunk in app.astream(
+        initial_state,
+        config=config,
+        stream_mode="messages"  # Stream individual messages
+    ):
+        # Filter for AI messages with content
+        if chunk.get("messages"):
+            for message in chunk["messages"]:
+                if isinstance(message, AIMessage) and message.content:
+                    # Yield content chunks
+                    yield {
+                        "type": "message",
+                        "content": message.content,
+                        "agent": getattr(message, 'name', 'supervisor')
+                    }
+                elif message.tool_calls:
+                    # Yield tool call information
+                    yield {
+                        "type": "tool_call",
+                        "tools": [tool["name"] for tool in message.tool_calls],
+                        "agent": getattr(message, 'name', 'supervisor')
+                    }
+
+# Alternative streaming with different modes
+async def stream_events(user_input: str, config: dict):
+    """Stream events from the supervisor agent"""
+    
+    initial_state = {
+        "messages": [HumanMessage(content=user_input)]
+    }
+    
+    async for event in app.astream_events(
+        initial_state,
+        config=config,
+        version="v2"
+    ):
+        # Handle different event types
+        if event["event"] == "on_chat_model_stream":
+            if event["data"]["chunk"].content:
+                yield {
+                    "type": "content",
+                    "data": event["data"]["chunk"].content,
+                    "agent": event.get("name", "supervisor")
+                }
+        elif event["event"] == "on_tool_start":
+            yield {
+                "type": "tool_start",
+                "tool": event["name"],
+                "agent": event.get("tags", {}).get("agent", "supervisor")
+            }
+        elif event["event"] == "on_tool_end":
+            yield {
+                "type": "tool_end",
+                "tool": event["name"],
+                "result": event["data"]["output"],
+                "agent": event.get("tags", {}).get("agent", "supervisor")
+            }

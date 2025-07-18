@@ -8,6 +8,8 @@ from typing import Dict, List, Any, Optional
 from langchain_core.messages import HumanMessage
 from langgraph.store.memory import InMemoryStore
 from sqlalchemy.orm import Session
+from fastapi.responses import StreamingResponse
+from agents.supervisor import stream_response, stream_events
 
 # Import your compiled agent
 try:
@@ -367,6 +369,73 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
             response=f"Hello {current_user.name}! I'm experiencing a temporary issue but I'm here to help. Please try sending your message again, or let me know what you'd like to work on!",
             session_id=request.session_id or str(uuid.uuid4())
         )
+    
+@app.post("/chat/stream")
+async def stream_chat(request: ChatRequest, current_user: User = Depends(get_current_user)):
+    user_input = request.message
+    session_id = request.session_id or str(uuid.uuid4())
+    
+    config = {
+        "configurable": {
+            "user_id": current_user.id,
+            "todo_category": request.todo_category,
+            "thread_id": session_id
+        },
+        "store": memory_store
+    }
+
+    async def generate():
+        try:
+            async for chunk in stream_response(user_input, config):
+                yield f"data: {json.dumps(chunk)}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            error_msg = {"type": "error", "content": str(e), "agent": "system"}
+            yield f"data: {json.dumps(error_msg)}\n\n"
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
+
+@app.post("/chat/events")
+async def stream_events_endpoint(request: ChatRequest, current_user: User = Depends(get_current_user)):
+    user_input = request.message
+    session_id = request.session_id or str(uuid.uuid4())
+    
+    config = {
+        "configurable": {
+            "user_id": current_user.id,
+            "todo_category": request.todo_category,
+            "thread_id": session_id
+        },
+        "store": memory_store
+    }
+    
+    async def generate():
+        try:
+            async for event in stream_events(user_input, config):
+                yield f"data: {json.dumps(event)}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            error_msg = {"type": "error", "content": str(e), "agent": "system"}
+            yield f"data: {json.dumps(error_msg)}\n\n"
+            yield "data: [DONE]\n\n"
+    
+    return StreamingResponse(
+        generate(),
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
+
 
 if __name__ == "__main__":
     import uvicorn
