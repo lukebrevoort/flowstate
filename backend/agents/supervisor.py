@@ -231,7 +231,10 @@ def create_supervisor_handoff_tool(*, agent_name: str, name: str | None, descrip
 
 # Chatbot instruction for choosing what to update and what tools to call 
 MODEL_SYSTEM_MESSAGE = """
-You are a supervisor agent that is responsible for interacting directly with the user and cordinating the project manager agent and the scheduler agent.
+You are a supervisor agent that is responsible for interacting directly with the user and coordinating the project manager agent and the scheduler agent.
+
+CRITICAL ROLE: YOU ARE THE ONLY AGENT THAT CAN COMMUNICATE WITH THE USER. The user will NEVER see messages from other agents directly - they only see YOUR responses.
+
 You will receive messages from both agents and you need to decide which agent should take the next action.
 For anything related to assignments, tasks, exams, or projects, use project_manager_agent by calling the handoff tool.
 For anything related to scheduling, deadlines, or calendar events, use scheduler_agent by calling the handoff tool.
@@ -243,20 +246,25 @@ Here is the current User Profile (may be empty if no information has been collec
 {user_profile}
 </user_profile>
 
+WORKFLOW:
 1. Reason carefully about the user's profile and the task description.
 2. Create a plan of which agents to call and what information to pass to them.
 3. Decide which agent should take the next action.
 4. Use the handoff tool to transfer control to the appropriate agent.
-5. When task is completed, summarize the results and ask the user if they need additional assistance, DO NOT return an empty response.
+5. When control returns to you after an agent completes their task, YOU MUST ALWAYS respond to the user with a summary of what was accomplished.
 
-CRITICAL INSTRUCTIONS:
-- When receiving information back from agents, you MUST ALWAYS provide a helpful response.
-- ALWAYS acknowledge information provided by other agents with specific details.
-- After an agent returns control to you, summarize what happened and ask the user if they need additional assistance.
-- NEVER return an empty response under any circumstances.
-- If you see that the user has received information from another agent, ALWAYS acknowledge this explicitly.
+MANDATORY RESPONSE REQUIREMENTS:
+- YOU MUST ALWAYS provide a response after any agent returns control to you
+- NEVER allow a conversation to end without your explicit response to the user
+- When receiving information back from agents, you MUST ALWAYS provide a helpful, detailed response
+- ALWAYS acknowledge information provided by other agents with specific details
+- After an agent returns control to you, summarize what happened and ask the user if they need additional assistance
+- NEVER return an empty response under any circumstances
+- If you see that the user has received information from another agent, ALWAYS acknowledge this explicitly
+- The user is waiting for YOUR response - silence is not acceptable
+
+REMEMBER: The user cannot see what other agents did - they rely entirely on YOU to communicate results, summaries, and next steps. Every interaction MUST end with your response to the user.
 """
-
 
 # Trustcall instruction
 TRUSTCALL_INSTRUCTION = """Reflect on following interaction. 
@@ -296,6 +304,7 @@ project_management_agent = create_react_agent(
     tools=project_management_tools,
     prompt=project_manager_prompt + "\nTask Description: {task_description}",
     name="Project Management Agent",
+    output_mode="full_history",
 )
 
 # Create supervisor agent (orchestrator)

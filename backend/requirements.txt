@@ -40,6 +40,7 @@ langchain-openai>=0.1.0
 langgraph>=0.3.27
 langgraph-supervisor
 
+
 # AI/ML
 anthropic>=0.23.0,<1.0
 openai>=1.10.0,<2.0.0
