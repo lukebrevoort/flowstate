@@ -249,6 +249,16 @@ export default function Login() {
                   {error}
                 </div>
               )}
+
+              {/* Development backdoor info */}
+              <div className="mt-6 p-4 bg-yellow-100 border-2 border-yellow-400 rounded-lg">
+                <div className="text-center text-yellow-800">
+                  <p className="font-bold text-sm mb-2">🔓 DEVELOPMENT MODE</p>
+                  <p className="text-xs">Test Credentials:</p>
+                  <p className="text-xs font-mono">Email: test@flowstate.dev</p>
+                  <p className="text-xs font-mono">Password: testpass123</p>
+                </div>
+              </div>
             </form>
           </div>
         </div>
