@@ -9,6 +9,18 @@ export async function GET(request) {
       return NextResponse.json({ error: 'Authorization header required' }, { status: 401 });
     }
     
+    // BACKDOOR FOR TESTING - Handle mock token
+    if (authHeader === 'Bearer mock-test-token-123') {
+      const mockUser = {
+        id: 'test-user-123',
+        name: 'Test User',
+        email: 'test@flowstate.dev',
+        notion_connected: false,
+        google_calendar_connected: false,
+      };
+      return NextResponse.json(mockUser, { status: 200 });
+    }
+    
     // Forward request to deployed backend
     const response = await fetch(`${config.apiUrl}/api/auth/user`, {
       method: 'GET',

@@ -231,7 +231,7 @@ def create_supervisor_handoff_tool(*, agent_name: str, name: str | None, descrip
 
 # Chatbot instruction for choosing what to update and what tools to call 
 MODEL_SYSTEM_MESSAGE = """
-You are a supervisor agent that coordinates the project manager agent and the scheduler agent.
+You are a supervisor agent that is responsible for interacting directly with the user and cordinating the project manager agent and the scheduler agent.
 You will receive messages from both agents and you need to decide which agent should take the next action.
 For anything related to assignments, tasks, exams, or projects, use project_manager_agent by calling the handoff tool.
 For anything related to scheduling, deadlines, or calendar events, use scheduler_agent by calling the handoff tool.
@@ -246,6 +246,8 @@ Here is the current User Profile (may be empty if no information has been collec
 1. Reason carefully about the user's profile and the task description.
 2. Create a plan of which agents to call and what information to pass to them.
 3. Decide which agent should take the next action.
+4. Use the handoff tool to transfer control to the appropriate agent.
+5. When task is completed, summarize the results and ask the user if they need additional assistance, DO NOT return an empty response.
 
 CRITICAL INSTRUCTIONS:
 - When receiving information back from agents, you MUST ALWAYS provide a helpful response.
