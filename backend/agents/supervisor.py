@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from trustcall import create_extractor
 
+from langgraph_supervisor.handoff import create_forward_message_tool
 from typing import Literal, Optional, TypedDict
 
 from typing import Annotated, Dict, List, Literal, TypedDict, Optional, Any
@@ -307,7 +308,7 @@ project_management_agent = create_react_agent(
     model=model,
     tools=project_management_tools,
     prompt=project_manager_prompt + "\nTask Description: {task_description}",
-    name="Project Management Agent",
+    name="PMAgent",
 )
 
 # Create supervisor agent (orchestrator)
@@ -407,6 +408,9 @@ project_manager_handoff = create_supervisor_handoff_tool(
 # Modify the orchestrator_agent definition
 # Currently, only using project management to avoid OAuth issues with Google Calendar
 # scheduler_agent
+
+forwarding_tool = create_forward_message_tool("PMAgent")
+
 orchestrator_agent = create_supervisor(
     [project_management_agent],
     model=model,
@@ -414,31 +418,71 @@ orchestrator_agent = create_supervisor(
     tools=[
         scheduler_handoff,
         project_manager_handoff,
+        forwarding_tool,
     ],
     output_mode="full_history",
     supervisor_name="Orchestrator Supervisor",
     prompt=MODEL_SYSTEM_MESSAGE,
 )
 
-# Need to figure out why the ai is repsonding with null after running,
-#Also need to fix these handoff tools to not run two seperate runs but instead
-# a single run with the handoff tool
-
-
 # Create the graph + all nodes
 builder = StateGraph(MessagesState, config_schema=configuration.Configuration)
 
-def should_continue(state):
-    last_msg = state["messages"][-1]
+# Define the chatbot node (orchestrator agent)
+def call_chatbot(state: MessagesState, config: RunnableConfig, store: BaseStore):
+    """Main chatbot node that handles user interactions"""
+    # Get user profile for context
+    user_profile = get_user_profile(store, config)
     
-    # Terminate on empty non-final messages
-    if isinstance(last_msg, AIMessage) and not last_msg.content:
-        if len(state["messages"]) > 1:
-            return END
-            
-    if last_msg.tool_calls:
+    # Format the system message with current user profile
+    formatted_system_message = MODEL_SYSTEM_MESSAGE.format(user_profile=user_profile)
+    
+    # Prepare messages with system context
+    messages = [SystemMessage(content=formatted_system_message)] + state["messages"]
+    
+    # Invoke the orchestrator agent
+    response = orchestrator_agent.invoke({"messages": messages}, config=config)
+    
+    return {"messages": response["messages"]}
+
+# Define the respond node
+def respond(state: MessagesState):
+    """Generate a final response to the user"""
+    last_message = state["messages"][-1]
+    
+    # If the last message is from an AI and has content, use it as the response
+    if isinstance(last_message, AIMessage) and last_message.content:
+        response_content = last_message.content
+    else:
+        # Fallback: generate a response based on recent context
+        recent_messages = state["messages"][-3:] if len(state["messages"]) >= 3 else state["messages"]
+        context_prompt = "Please provide a helpful response based on the conversation context."
+        response = model.invoke([HumanMessage(content=context_prompt)] + recent_messages)
+        response_content = response.content
+    
+    return {"messages": [AIMessage(content=response_content)]}
+
+# Define the function that determines whether to continue or not
+def should_continue(state: MessagesState):
+    """Determine the next step in the conversation flow"""
+    messages = state["messages"]
+    last_message = messages[-1]
+    
+    # Check if last message is an AI message without content (but not the final message)
+    if isinstance(last_message, AIMessage) and not last_message.content:
+        if len(messages) > 1:
+            return "respond"
+    
+    # If there are tool calls, go to tools
+    if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
         return "tools"
-    return "__end__"
+    
+    # If it's an AI message with content, we can respond
+    if isinstance(last_message, AIMessage) and last_message.content:
+        return "respond"
+    
+    # Default to respond
+    return "respond"
 
 class ValidationState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
@@ -447,24 +491,64 @@ def final_validation(state: ValidationState):
     """Last-chance message validation"""
     return {"messages": validate_messages(state["messages"])}
 
-builder.add_node("validation", final_validation)
-builder.add_edge("tools", "validation")
-builder.add_edge("validation", "chatbot")
+# Create tools for updating profile and instructions
+@tool
+def update_user_profile(
+    profile_update: Annotated[str, "Instructions for updating the user's profile"],
+    state: Annotated[MessagesState, InjectedState],
+    tool_call_id: Annotated[str, InjectedToolCallId],
+):
+    """Update the user's profile based on conversation context"""
+    return {"messages": [ToolMessage(content="Profile update initiated", tool_call_id=tool_call_id)]}
 
-# Add to your existing builder setup
+@tool  
+def update_user_instructions(
+    instruction_update: Annotated[str, "Instructions for updating user preferences"],
+    state: Annotated[MessagesState, InjectedState], 
+    tool_call_id: Annotated[str, InjectedToolCallId],
+):
+    """Update user instructions based on feedback"""
+    return {"messages": [ToolMessage(content="Instructions update initiated", tool_call_id=tool_call_id)]}
+
+# Create supervisor tools list
+supervisor_tools = [
+    scheduler_handoff,
+    project_manager_handoff,
+    update_user_profile,
+    update_user_instructions
+]
+
+# Create the graph + all nodes
+builder = StateGraph(MessagesState, config_schema=configuration.Configuration)
+
+# Add all nodes to the graph
+builder.add_node("chatbot", call_chatbot)
+builder.add_node("tools", ToolNode(supervisor_tools))
+builder.add_node("respond", respond)
+builder.add_node("validation", final_validation)
+
+# Set the entry point
+builder.set_entry_point("chatbot")
+
+# Add conditional edges from chatbot
 builder.add_conditional_edges(
     "chatbot",
     should_continue,
     {
         "tools": "tools",
-        "__end__": END
-    }
+        "respond": "respond",
+    },
 )
 
+# Add edges
+builder.add_edge("tools", "validation")
+builder.add_edge("validation", "chatbot")
+builder.add_edge("respond", END)
 
 
-# Define the flow of the memory extraction process
-app = orchestrator_agent.compile(name="Orchestrator Supervisor", checkpointer=MemorySaver(), store=InMemoryStore())
+
+# Compile the graph
+app = orchestrator_agent.compile(name="Orchestrator Supervisor")
 
 async def stream_response(user_input: str, config: dict):
     """Stream responses from the supervisor agent"""
