@@ -308,7 +308,6 @@ project_management_agent = create_react_agent(
     tools=project_management_tools,
     prompt=project_manager_prompt + "\nTask Description: {task_description}",
     name="Project Management Agent",
-    output_mode="full_history",
 )
 
 # Create supervisor agent (orchestrator)
