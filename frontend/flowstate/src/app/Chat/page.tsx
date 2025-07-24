@@ -6,6 +6,7 @@ import { useState, FormEvent, useEffect, useRef } from "react";
 import { useAuth } from '@/contexts/AuthContext';
 import { useLangGraph } from '@/contexts/LangGraphContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import parse from 'html-react-parser';
 
 // Message type definition
 type Message = {
@@ -41,6 +42,62 @@ function Chat() {
     isConnected 
   } = useLangGraph();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Handler functions for interactive buttons in agent responses
+  const handleCreateAssignment = () => {
+    // Add your logic for creating a new assignment
+    console.log('Create assignment clicked');
+    // You can trigger a new message or API call here
+    if (threadId && isConnected) {
+      handleSubmitMessage("I want to create a new assignment");
+    }
+  };
+
+  const handleCheckCourses = () => {
+    // Add your logic for checking/reviewing courses
+    console.log('Check courses clicked');
+    if (threadId && isConnected) {
+      handleSubmitMessage("Show me my courses");
+    }
+  };
+
+  const handleDatabaseSetup = () => {
+    // Add your logic for database setup
+    console.log('Database setup clicked');
+    if (threadId && isConnected) {
+      handleSubmitMessage("Help me set up my database");
+    }
+  };
+
+  // Helper function to send a message programmatically
+  const handleSubmitMessage = async (messageText: string) => {
+    if (!messageText.trim() || isLoading || !threadId || !isConnected) return;
+    
+    setIsLoading(true);
+    
+    // Add user message to chat
+    setChatHistory(prev => [...prev, { role: 'user', content: messageText }]);
+    
+    try {
+      // Send message and get response
+      const response = await sendMessage(threadId, messageText);
+      
+      // Add assistant response to chat
+      setChatHistory(prev => [...prev, { 
+        role: 'assistant', 
+        content: response
+      }]);
+      
+    } catch (error) {
+      console.error('Chat error:', error);
+      setChatHistory(prev => [...prev, { 
+        role: 'system', 
+        content: `Error: ${error instanceof Error ? error.message : 'Failed to process your request'}`
+      }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Scroll to bottom of messages
   const scrollToBottom = () => {
@@ -132,6 +189,56 @@ function Chat() {
     }
   };
 
+  // Function to render JSX content from agent responses
+  const renderMessageContent = (content: string) => {
+    // Check if the content contains JSX/HTML elements
+    if (content.includes('<') && content.includes('>')) {
+      try {
+        // Parse the HTML/JSX content and inject handler functions
+        const parsed = parse(content, {
+          replace: (domNode: any) => {
+            // Handle button elements and inject onClick handlers
+            if (domNode.type === 'tag' && domNode.name === 'button') {
+              const onClick = domNode.attribs?.onclick;
+              let clickHandler = undefined;
+              
+              // Map onClick handlers to our functions
+              if (onClick?.includes('handleCreateAssignment')) {
+                clickHandler = handleCreateAssignment;
+              } else if (onClick?.includes('handleCheckCourses')) {
+                clickHandler = handleCheckCourses;
+              } else if (onClick?.includes('handleDatabaseSetup')) {
+                clickHandler = handleDatabaseSetup;
+              }
+              
+              return (
+                <button
+                  onClick={clickHandler}
+                  className="bg-flowstate-accent text-white px-4 py-2 rounded-lg hover:opacity-80 transition-opacity mx-1 my-1"
+                >
+                  {domNode.children?.[0]?.data || 'Button'}
+                </button>
+              );
+            }
+          }
+        });
+        
+        return (
+          <div className="agent-response-content">
+            {parsed}
+          </div>
+        );
+      } catch (error) {
+        console.error('Error parsing JSX content:', error);
+        // Fallback to plain text if parsing fails
+        return <div>{content}</div>;
+      }
+    } else {
+      // Regular text content
+      return <div>{content}</div>;
+    }
+  };
+
   // Render chat messages
   const renderChatHistory = () => {
     return chatHistory.map((msg, index) => (
@@ -151,7 +258,11 @@ function Chat() {
               : 'mr-auto'
         }`}
       >
-        {msg.content || (msg.role === 'assistant' && isLoading ? '...' : '')}
+        {msg.role === 'assistant' ? (
+          renderMessageContent(msg.content || (isLoading ? '...' : ''))
+        ) : (
+          msg.content || ''
+        )}
       </div>
     ));
   };
@@ -192,6 +303,59 @@ function Chat() {
 
   return (
     <div className="min-h-screen w-full bg-flowstate-bg flex flex-col">
+      <style jsx>{`
+        .agent-response-content {
+          color: #1E1E1E;
+        }
+        
+        .agent-response-content h2 {
+          font-size: 1.5rem;
+          font-weight: bold;
+          margin-bottom: 0.75rem;
+          color: #1E1E1E;
+        }
+        
+        .agent-response-content h3 {
+          font-size: 1.25rem;
+          font-weight: 600;
+          margin-bottom: 0.5rem;
+          margin-top: 1rem;
+          color: #1E1E1E;
+        }
+        
+        .agent-response-content p {
+          margin-bottom: 0.75rem;
+          line-height: 1.6;
+          color: #1E1E1E;
+        }
+        
+        .agent-response-content ul {
+          margin-bottom: 0.75rem;
+          padding-left: 1.25rem;
+        }
+        
+        .agent-response-content li {
+          margin-bottom: 0.25rem;
+          color: #1E1E1E;
+        }
+        
+        .agent-response-content .suggestion-box {
+          background-color: rgba(139, 107, 89, 0.1);
+          padding: 1rem;
+          border-radius: 12px;
+          margin: 1rem 0;
+        }
+        
+        .agent-response-content .help-text {
+          font-style: italic;
+          color: #665F5D;
+          margin-top: 1rem;
+        }
+        
+        .agent-response-content .assignment-check-container {
+          max-width: 100%;
+        }
+      `}</style>
       {/* Header */}
       <header className="w-full h-[89px] bg-flowstate-header shadow-header flex items-center justify-between px-[100px] max-lg:px-10 max-sm:px-5 relative">
         <div className="flex items-center gap-[10px]">

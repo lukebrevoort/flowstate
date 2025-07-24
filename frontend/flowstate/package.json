@@ -12,6 +12,7 @@
   "dependencies": {
     "@langchain/langgraph-sdk": "^0.0.74",
     "framer-motion": "^12.6.3",
+    "html-react-parser": "^5.2.6",
     "next": "15.2.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
