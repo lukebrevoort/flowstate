@@ -21,6 +21,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 
 from agents.project_manager import tools as project_management_tools, project_manager_prompt
 #from agents.scheduler import tools as scheduler_tools, scheduler_prompt
+from agents.response import response_prompt
 
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
 from anthropic._exceptions import OverloadedError
@@ -236,39 +237,43 @@ def create_supervisor_handoff_tool(*, agent_name: str, name: str | None, descrip
 
 # Chatbot instruction for choosing what to update and what tools to call 
 MODEL_SYSTEM_MESSAGE = """
-You are a supervisor agent that is responsible for interacting directly with the user and coordinating the project manager agent and the scheduler agent.
+You are a supervisor agent responsible for orchestrating user interactions through specialized sub-agents. Your role is to coordinate between agents and ensure every user interaction concludes with a properly formatted response.
 
-CRITICAL ROLE: YOU ARE THE ONLY AGENT THAT CAN COMMUNICATE WITH THE USER. The user will NEVER see messages from other agents directly - they only see YOUR responses.
+AVAILABLE AGENTS:
+- Project Manager Agent (PMAgent): Handles assignments, tasks, exams, projects, Notion database operations, subtask creation, progress tracking, and time estimation
+- Response Agent (ResponseAgent): Generates final JSX-formatted responses for the frontend UI (REQUIRED for all interactions)
 
-You will receive messages from both agents and you need to decide which agent should take the next action.
-For anything related to assignments, tasks, exams, or projects, use project_manager_agent by calling the handoff tool.
-For anything related to scheduling, deadlines, or calendar events, use scheduler_agent by calling the handoff tool.
+AGENT ROUTING RULES:
+- For assignments, tasks, exams, projects, Notion operations, subtasks, progress updates, or time estimates → use Project-Management-Handoff-Tool
+- After gathering ALL necessary information from sub-agents → ALWAYS use Response-Agent-Handoff-Tool (MANDATORY FINAL STEP)
 
-You have a long term memory which keeps track of the user's profile (general information about them).
+You have access to long-term memory tracking the user's profile:
 
-Here is the current User Profile (may be empty if no information has been collected yet):
 <user_profile>
 {user_profile}
 </user_profile>
 
-WORKFLOW:
-1. Reason carefully about the user's profile and the task description.
-2. Create a plan of which agents to call and what information to pass to them.
-3. Decide which agent should take the next action.
-4. Use the handoff tool to transfer control to the appropriate agent.
-5. When control returns to you after an agent completes their task, YOU MUST ALWAYS respond to the user with a summary of what was accomplished.
+MANDATORY WORKFLOW:
+1. Analyze the user's request and profile context
+2. Route to appropriate specialized agent(s) with detailed task descriptions
+3. Collect and process information from sub-agents
+4. ALWAYS hand off to Response Agent as the final step - NO EXCEPTIONS
+5. The Response Agent will generate the properly formatted JSX response for the frontend
 
-MANDATORY RESPONSE REQUIREMENTS:
-- YOU MUST ALWAYS provide a response after any agent returns control to you
-- NEVER allow a conversation to end without your explicit response to the user
-- When receiving information back from agents, you MUST ALWAYS provide a helpful, detailed response
-- ALWAYS acknowledge information provided by other agents with specific details
-- After an agent returns control to you, summarize what happened and ask the user if they need additional assistance
-- NEVER return an empty response under any circumstances
-- If you see that the user has received information from another agent, ALWAYS acknowledge this explicitly
-- The user is waiting for YOUR response - silence is not acceptable
+CRITICAL REQUIREMENTS:
+- NEVER provide direct responses to users - you are an orchestrator only
+- ALWAYS conclude every interaction by routing to the Response Agent
+- The Response Agent is the ONLY agent that communicates directly with users
+- Pass comprehensive context to the Response Agent including all sub-agent results
+- Ensure task descriptions to sub-agents are detailed and include relevant user profile information
+- If no specialized processing is needed, still route to Response Agent for proper formatting
 
-REMEMBER: The user cannot see what other agents did - they rely entirely on YOU to communicate results, summaries, and next steps. Every interaction MUST end with your response to the user.
+HANDOFF PROTOCOL:
+- When routing to PMAgent: Include specific details about assignments, deadlines, Notion requirements
+- When routing to ResponseAgent: Include all gathered information, user context, and specify the JSX formatting requirements
+- Task descriptions should be comprehensive and include relevant user profile details
+
+Remember: You are the conductor of the orchestra - coordinate the agents but let the Response Agent handle all user-facing communication in the proper JSX format for the frontend.
 """
 
 # Trustcall instruction
@@ -309,6 +314,13 @@ project_management_agent = create_react_agent(
     tools=project_management_tools,
     prompt=project_manager_prompt + "\nTask Description: {task_description}",
     name="PMAgent",
+)
+
+response_agent = create_react_agent(
+    model=model,
+    tools=[],
+    prompt=response_prompt + "\nTask Description: {task_description}\nUser Profile: {user_profile}",
+    name="ResponseAgent",
 )
 
 # Create supervisor agent (orchestrator)
@@ -399,68 +411,36 @@ scheduler_handoff = create_supervisor_handoff_tool(
 )
 
 project_manager_handoff = create_supervisor_handoff_tool(
-    agent_name="Project Management Agent", 
+    agent_name="PMAgent", 
     name="Project-Management-Handoff-Tool",
     description="Handoff to the Project Management Agent for assignment and task related actions"
 )
+
+response_agent_handoff = create_supervisor_handoff_tool(
+    agent_name="ResponseAgent", 
+    name="Response-Agent-Handoff-Tool",
+    description="Handoff to the Response Agent for final responses and user interaction once all information has been gathered"
+)
+
 
 
 # Modify the orchestrator_agent definition
 # Currently, only using project management to avoid OAuth issues with Google Calendar
 # scheduler_agent
 
-forwarding_tool = create_forward_message_tool("PMAgent")
 
 orchestrator_agent = create_supervisor(
-    [project_management_agent],
+    [project_management_agent, response_agent],
     model=model,
-    add_handoff_back_messages=True,
     tools=[
-        scheduler_handoff,
         project_manager_handoff,
-        forwarding_tool,
+        response_agent_handoff,
     ],
     output_mode="full_history",
     supervisor_name="Orchestrator Supervisor",
     prompt=MODEL_SYSTEM_MESSAGE,
 )
 
-# Create the graph + all nodes
-builder = StateGraph(MessagesState, config_schema=configuration.Configuration)
-
-# Define the chatbot node (orchestrator agent)
-def call_chatbot(state: MessagesState, config: RunnableConfig, store: BaseStore):
-    """Main chatbot node that handles user interactions"""
-    # Get user profile for context
-    user_profile = get_user_profile(store, config)
-    
-    # Format the system message with current user profile
-    formatted_system_message = MODEL_SYSTEM_MESSAGE.format(user_profile=user_profile)
-    
-    # Prepare messages with system context
-    messages = [SystemMessage(content=formatted_system_message)] + state["messages"]
-    
-    # Invoke the orchestrator agent
-    response = orchestrator_agent.invoke({"messages": messages}, config=config)
-    
-    return {"messages": response["messages"]}
-
-# Define the respond node
-def respond(state: MessagesState):
-    """Generate a final response to the user"""
-    last_message = state["messages"][-1]
-    
-    # If the last message is from an AI and has content, use it as the response
-    if isinstance(last_message, AIMessage) and last_message.content:
-        response_content = last_message.content
-    else:
-        # Fallback: generate a response based on recent context
-        recent_messages = state["messages"][-3:] if len(state["messages"]) >= 3 else state["messages"]
-        context_prompt = "Please provide a helpful response based on the conversation context."
-        response = model.invoke([HumanMessage(content=context_prompt)] + recent_messages)
-        response_content = response.content
-    
-    return {"messages": [AIMessage(content=response_content)]}
 
 # Define the function that determines whether to continue or not
 def should_continue(state: MessagesState):
@@ -509,41 +489,6 @@ def update_user_instructions(
 ):
     """Update user instructions based on feedback"""
     return {"messages": [ToolMessage(content="Instructions update initiated", tool_call_id=tool_call_id)]}
-
-# Create supervisor tools list
-supervisor_tools = [
-    scheduler_handoff,
-    project_manager_handoff,
-    update_user_profile,
-    update_user_instructions
-]
-
-# Create the graph + all nodes
-builder = StateGraph(MessagesState, config_schema=configuration.Configuration)
-
-# Add all nodes to the graph
-builder.add_node("chatbot", call_chatbot)
-builder.add_node("tools", ToolNode(supervisor_tools))
-builder.add_node("respond", respond)
-builder.add_node("validation", final_validation)
-
-# Set the entry point
-builder.set_entry_point("chatbot")
-
-# Add conditional edges from chatbot
-builder.add_conditional_edges(
-    "chatbot",
-    should_continue,
-    {
-        "tools": "tools",
-        "respond": "respond",
-    },
-)
-
-# Add edges
-builder.add_edge("tools", "validation")
-builder.add_edge("validation", "chatbot")
-builder.add_edge("respond", END)
 
 
 

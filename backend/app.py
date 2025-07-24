@@ -322,18 +322,24 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
                 
                 # Look for the last AI message with content
                 ai_response = None
-                for msg in reversed(messages):  # Check from last to first
-                    print(f"Message type: {type(msg)}, has content: {hasattr(msg, 'content')}")
+                ai_messages = []
+                for msg in messages:
                     if hasattr(msg, 'content') and msg.content:
                         # Check if it's an AI message
                         if hasattr(msg, 'type') and msg.type == "ai":
-                            ai_response = str(msg.content)
-                            print(f"Found AI response: {ai_response}")
-                            break
+                            ai_messages.append(str(msg.content))
+                            print(f"Found AI message: {msg.content}")
                         elif hasattr(msg, '__class__') and 'AI' in msg.__class__.__name__:
-                            ai_response = str(msg.content)
-                            print(f"Found AI response by class name: {ai_response}")
-                            break
+                            ai_messages.append(str(msg.content))
+                            print(f"Found AI message by class name: {msg.content}")
+                
+                # Get the second to last AI message if available, through response agent
+                if len(ai_messages) >= 2:
+                    ai_response = ai_messages[-2]
+                    print(f"Using second to last AI response: {ai_response}")
+                elif len(ai_messages) >= 1:
+                    ai_response = ai_messages[-1]
+                    print(f"Only one AI message found, using it: {ai_response}")
                 
                 if ai_response:
                     response = ai_response
