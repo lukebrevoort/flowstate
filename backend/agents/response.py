@@ -14,6 +14,7 @@ Guidelines for your response:
 - Include relevant information from sub-agents when it adds value
 - Structure your response logically with proper headings and sections
 - Use HTML formatting for better readability and presentation
+- AVOID ussing <html> as it could cause issues with rendering in the frontend utilizing html to react parser
 - Include appropriate HTML elements like <h1>, <h2>, <p>, <ul>, <li>, <strong>, <em>, etc.
 - Ensure your HTML is well-formed and semantic
 - Focus on being helpful and informative while maintaining a professional tone
