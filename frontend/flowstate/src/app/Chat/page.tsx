@@ -6,7 +6,9 @@ import { useState, FormEvent, useEffect, useRef } from "react";
 import { useAuth } from '@/contexts/AuthContext';
 import { useLangGraph } from '@/contexts/LangGraphContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
-import parse from 'html-react-parser';
+import JsxParser from 'react-jsx-parser';
+import Typography from '@/components/Typography';
+import Button from '@/components/Button';
 
 // Message type definition
 type Message = {
@@ -191,51 +193,78 @@ function Chat() {
 
   // Function to render JSX content from agent responses
   const renderMessageContent = (content: string) => {
-    // Check if the content contains JSX/HTML elements
-    if (content.includes('<') && content.includes('>')) {
+    // Check if the content contains JSX elements (React Fragment or component tags)
+    if (content.includes('<>') || content.includes('<Typography') || content.includes('<Button')) {
       try {
-        // Parse the HTML/JSX content and inject handler functions
-        const parsed = parse(content, {
-          replace: (domNode: any) => {
-            // Handle button elements and inject onClick handlers
-            if (domNode.type === 'tag' && domNode.name === 'button') {
-              const onClick = domNode.attribs?.onclick;
-              let clickHandler = undefined;
-              
-              // Map onClick handlers to our functions
-              if (onClick?.includes('handleCreateAssignment')) {
-                clickHandler = handleCreateAssignment;
-              } else if (onClick?.includes('handleCheckCourses')) {
-                clickHandler = handleCheckCourses;
-              } else if (onClick?.includes('handleDatabaseSetup')) {
-                clickHandler = handleDatabaseSetup;
-              }
-              
-              return (
-                <button
-                  onClick={clickHandler}
-                  className="bg-flowstate-accent text-white px-4 py-2 rounded-lg hover:opacity-80 transition-opacity mx-1 my-1"
-                >
-                  {domNode.children?.[0]?.data || 'Button'}
-                </button>
-              );
-            }
-          }
-        });
+        // For now, let's use a more robust approach by creating a custom JSX evaluator
+        // This is a simplified version - in production you might want to use a more secure parser
         
+        // Replace function calls in onClick handlers with actual functions
+        let processedContent = content
+          .replace(/onClick={\(\) => handleCreateAssignment\(\)}/g, `onClick={() => handleCreateAssignment()}`)
+          .replace(/onClick={\(\) => handleCheckCourses\(\)}/g, `onClick={() => handleCheckCourses()}`)
+          .replace(/onClick={\(\) => handleDatabaseSetup\(\)}/g, `onClick={() => handleDatabaseSetup()}`);
+
+        try {
+          // Use JsxParser with any casting for components
+          return (
+            <div className="agent-response-content">
+              <JsxParser
+                jsx={processedContent}
+                components={{
+                  Typography: Typography as any,
+                  Button: Button as any,
+                }}
+                bindings={{
+                  handleCreateAssignment,
+                  handleCheckCourses,
+                  handleDatabaseSetup,
+                }}
+              />
+            </div>
+          );
+        } catch (jsxError) {
+          // If JSX parsing fails, try to render with basic HTML parsing as fallback
+          console.warn('JSX parsing failed, attempting fallback:', jsxError);
+          
+          // Simple replacement of JSX-like components with HTML for basic display
+          const htmlContent = processedContent
+            .replace(/<Typography variant="([^"]*)" className="([^"]*)">/g, '<div class="$2">')
+            .replace(/<Typography variant="([^"]*)">/g, '<div>')
+            .replace(/<\/Typography>/g, '</div>')
+            .replace(/<Button[^>]*>/g, '<button class="bg-flowstate-accent text-white px-4 py-2 rounded-md">')
+            .replace(/<\/Button>/g, '</button>')
+            .replace(/<>/g, '<div>')
+            .replace(/<\/>/g, '</div>');
+          
+          return (
+            <div 
+              className="agent-response-content"
+              dangerouslySetInnerHTML={{ __html: htmlContent }}
+            />
+          );
+        }
+      } catch (error) {
+        console.error('Error processing JSX content:', error);
+        // Final fallback to plain text
         return (
-          <div className="agent-response-content">
-            {parsed}
+          <div className="p-4 bg-red-50 border border-red-200 rounded-md">
+            <Typography variant="p" className="text-red-600 mb-2">
+              Error rendering response
+            </Typography>
+            <Typography variant="p" className="text-gray-600 text-sm">
+              {content}
+            </Typography>
           </div>
         );
-      } catch (error) {
-        console.error('Error parsing JSX content:', error);
-        // Fallback to plain text if parsing fails
-        return <div>{content}</div>;
       }
     } else {
       // Regular text content
-      return <div>{content}</div>;
+      return (
+        <Typography variant="p" className="text-gray-800">
+          {content}
+        </Typography>
+      );
     }
   };
 

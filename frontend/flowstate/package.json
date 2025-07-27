@@ -15,7 +15,8 @@
     "html-react-parser": "^5.2.6",
     "next": "15.2.4",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-jsx-parser": "^2.4.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
