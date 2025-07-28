@@ -142,6 +142,7 @@ export const LangGraphProvider: React.FC<LangGraphProviderProps> = ({ children }
       }
 
       const decoder = new TextDecoder();
+      let finalResponse = '';
 
       try {
         while (true) {
@@ -156,8 +157,12 @@ export const LangGraphProvider: React.FC<LangGraphProviderProps> = ({ children }
               const data = line.slice(6);
               
               if (data === '[DONE]') {
-                // Streaming complete - just call onComplete without final response
-                onComplete('');
+                // Streaming complete
+                if (finalResponse) {
+                  onComplete(finalResponse);
+                } else {
+                  onComplete('');
+                }
                 return;
               }
 
@@ -178,6 +183,13 @@ export const LangGraphProvider: React.FC<LangGraphProviderProps> = ({ children }
                     tool: stepData.tool,
                     timestamp: stepData.timestamp
                   });
+                }
+
+                // Check if this is the final response
+                if (stepData.type === 'final_response') {
+                  console.log('Received final response:', stepData.content); // Debug log
+                  finalResponse = stepData.content;
+                  // Don't call onComplete here, wait for [DONE]
                 }
                 
               } catch (parseError) {

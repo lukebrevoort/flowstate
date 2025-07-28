@@ -109,10 +109,10 @@ function Chat() {
           console.log('Adding step to AgentLoadingCard:', step); // Debug log
           addStep(step);
         },
-        // onComplete callback - handle completion without adding empty response
+        // onComplete callback - handle final response from streaming
         (response: string) => {
-          // Only add response to chat if it's not empty
-          // Since we removed final_response from streaming, we'll handle responses separately
+          console.log('Chat received final response:', response); // Debug log
+          // Add response to chat if it's not empty
           if (response && response.trim()) {
             setChatHistory(prev => [...prev, { 
               role: 'assistant', 
@@ -221,10 +221,10 @@ function Chat() {
           console.log('Adding step to AgentLoadingCard:', step); // Debug log
           addStep(step);
         },
-        // onComplete callback - handle completion without adding empty response
+        // onComplete callback - handle final response from streaming
         (response: string) => {
-          // Only add response to chat if it's not empty
-          // Since we removed final_response from streaming, we'll handle responses separately
+          console.log('Chat received final response:', response); // Debug log
+          // Add response to chat if it's not empty
           if (response && response.trim()) {
             setChatHistory(prev => [...prev, { 
               role: 'assistant', 

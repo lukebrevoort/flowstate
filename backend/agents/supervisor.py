@@ -525,10 +525,20 @@ async def stream_response(user_input: str, config: dict):
             continue
             
         print(f"Processing node: {node_name}")  # Debug log
+        
+        # Extract actual node name from tuple if needed
+        actual_node_name = node_name[0] if isinstance(node_name, tuple) and len(node_name) > 0 else str(node_name)
+        print(f"Actual node name: {actual_node_name}")  # Debug log
             
         # Handle supervisor routing decisions
-        if "Orchestrator Supervisor" in node_name:
-            messages = node_update.get("messages", [])
+        if "Orchestrator Supervisor" in actual_node_name:
+            # Check if this is agent data or final state data
+            if 'agent' in node_update:
+                agent_data = node_update['agent']
+                messages = agent_data.get("messages", [])
+            else:
+                messages = node_update.get("messages", [])
+                
             if messages and hasattr(messages[-1], 'tool_calls') and messages[-1].tool_calls:
                 tool_calls = messages[-1].tool_calls
                 for tool_call in tool_calls:
@@ -549,8 +559,14 @@ async def stream_response(user_input: str, config: dict):
                         }
         
         # Handle sub-agent actions
-        elif "PMAgent" in node_name:
-            messages = node_update.get("messages", [])
+        elif "PMAgent" in actual_node_name:
+            # Check if this is agent data or final state data
+            if 'agent' in node_update:
+                agent_data = node_update['agent']
+                messages = agent_data.get("messages", [])
+            else:
+                messages = node_update.get("messages", [])
+                
             if messages:
                 last_message = messages[-1]
                 
@@ -581,16 +597,32 @@ async def stream_response(user_input: str, config: dict):
                         "timestamp": datetime.now().isoformat()
                     }
         
-        # Handle Response Agent - just show completion step, no final response capture
-        elif "ResponseAgent" in node_name:
-            messages = node_update.get("messages", [])
+        # Handle Response Agent - capture the final response AND show completion step
+        elif "ResponseAgent" in actual_node_name:
+            # Check if this is agent data or final state data
+            if 'agent' in node_update:
+                agent_data = node_update['agent']
+                messages = agent_data.get("messages", [])
+            else:
+                messages = node_update.get("messages", [])
+                
             if messages:
                 last_message = messages[-1]
                 if hasattr(last_message, 'content') and last_message.content:
+                    # Show completion step
                     yield {
                         "type": "completion",
                         "agent": "Response Agent",
                         "message": "Formatting response for display...",
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    
+                    # Yield the final response for the chat
+                    yield {
+                        "type": "final_response",
+                        "agent": "Response Agent",
+                        "message": "Response ready",
+                        "content": last_message.content,
                         "timestamp": datetime.now().isoformat()
                     }
 
