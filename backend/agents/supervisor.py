@@ -497,12 +497,12 @@ app = orchestrator_agent.compile(name="Orchestrator Supervisor")
 async def stream_response(user_input: str, config: dict):
     """Stream agent steps and tool calls for AgentLoadingCard"""
     
+    print(f"stream_response called with input: {user_input}")  # Debug log
+    
     # Create the initial state
     initial_state = {
         "messages": [HumanMessage(content=user_input)]
     }
-    
-    final_response = None
     
     # Stream with updates mode and include subgraphs
     async for chunk in app.astream(
@@ -511,15 +511,20 @@ async def stream_response(user_input: str, config: dict):
         stream_mode="updates",  # Stream updates instead of messages
         subgraphs=True  # Include subgraph updates
     ):
+        print(f"Received chunk: {chunk}")  # Debug log
+        
         # Process updates from different nodes
         # With stream_mode="updates", chunk is a tuple (node_name, node_update)
         if isinstance(chunk, tuple) and len(chunk) == 2:
             node_name, node_update = chunk
         else:
+            print(f"Skipping non-tuple chunk: {chunk}")
             continue
             
         if node_name == "__start__":
             continue
+            
+        print(f"Processing node: {node_name}")  # Debug log
             
         # Handle supervisor routing decisions
         if "Orchestrator Supervisor" in node_name:
@@ -576,31 +581,18 @@ async def stream_response(user_input: str, config: dict):
                         "timestamp": datetime.now().isoformat()
                     }
         
-        # Handle Response Agent
+        # Handle Response Agent - just show completion step, no final response capture
         elif "ResponseAgent" in node_name:
             messages = node_update.get("messages", [])
             if messages:
                 last_message = messages[-1]
                 if hasattr(last_message, 'content') and last_message.content:
-                    # Capture the final response content
-                    final_response = last_message.content
-                    
                     yield {
                         "type": "completion",
                         "agent": "Response Agent",
                         "message": "Formatting response for display...",
                         "timestamp": datetime.now().isoformat()
                     }
-    
-    # After all streaming is complete, yield the final response
-    if final_response:
-        yield {
-            "type": "final_response",
-            "agent": "Response Agent",
-            "message": "Response ready",
-            "content": final_response,
-            "timestamp": datetime.now().isoformat()
-        }
 
 async def stream_events(user_input: str, config: dict):
     """Stream detailed events from the supervisor agent for debugging"""

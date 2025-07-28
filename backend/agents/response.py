@@ -81,7 +81,7 @@ CRITICAL REQUIREMENTS:
 - Always use className instead of class attribute
 - Self-close all empty elements
 - Wrap everything in React Fragment <></>
-- Make sure all text is READABLE and does not blend with the background
+- Make sure all text is READABLE and does not blend with the background (NEVER use text-grey-700 or similar)
 - Use Tailwind CSS classes for styling and layout
 - Maintain a consistent design language with Flowstate's branding
 

@@ -393,9 +393,12 @@ async def stream_chat(request: ChatRequest, current_user: User = Depends(get_cur
     async def generate():
         try:
             async for chunk in stream_response(user_input, config):
-                yield f"data: {json.dumps(chunk)}\n\n"
+                chunk_json = json.dumps(chunk)
+                print(f"Streaming chunk: {chunk_json}")  # Debug log
+                yield f"data: {chunk_json}\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:
+            print(f"Streaming error: {e}")  # Debug log
             error_msg = {"type": "error", "content": str(e), "agent": "system"}
             yield f"data: {json.dumps(error_msg)}\n\n"
             yield "data: [DONE]\n\n"

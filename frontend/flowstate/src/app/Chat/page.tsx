@@ -106,14 +106,19 @@ function Chat() {
         messageText,
         // onStep callback - adds steps to the loading card
         (step: AgentStep) => {
+          console.log('Adding step to AgentLoadingCard:', step); // Debug log
           addStep(step);
         },
-        // onComplete callback - adds final response to chat
+        // onComplete callback - handle completion without adding empty response
         (response: string) => {
-          setChatHistory(prev => [...prev, { 
-            role: 'assistant', 
-            content: response
-          }]);
+          // Only add response to chat if it's not empty
+          // Since we removed final_response from streaming, we'll handle responses separately
+          if (response && response.trim()) {
+            setChatHistory(prev => [...prev, { 
+              role: 'assistant', 
+              content: response
+            }]);
+          }
           handleComplete();
         }
       );
@@ -213,14 +218,19 @@ function Chat() {
         userMessage,
         // onStep callback - adds steps to the loading card
         (step: AgentStep) => {
+          console.log('Adding step to AgentLoadingCard:', step); // Debug log
           addStep(step);
         },
-        // onComplete callback - adds final response to chat
+        // onComplete callback - handle completion without adding empty response
         (response: string) => {
-          setChatHistory(prev => [...prev, { 
-            role: 'assistant', 
-            content: response
-          }]);
+          // Only add response to chat if it's not empty
+          // Since we removed final_response from streaming, we'll handle responses separately
+          if (response && response.trim()) {
+            setChatHistory(prev => [...prev, { 
+              role: 'assistant', 
+              content: response
+            }]);
+          }
           handleComplete();
         }
       );

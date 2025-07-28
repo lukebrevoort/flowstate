@@ -142,7 +142,6 @@ export const LangGraphProvider: React.FC<LangGraphProviderProps> = ({ children }
       }
 
       const decoder = new TextDecoder();
-      let finalResponse = '';
 
       try {
         while (true) {
@@ -157,10 +156,8 @@ export const LangGraphProvider: React.FC<LangGraphProviderProps> = ({ children }
               const data = line.slice(6);
               
               if (data === '[DONE]') {
-                // Streaming complete
-                if (finalResponse) {
-                  onComplete(finalResponse);
-                }
+                // Streaming complete - just call onComplete without final response
+                onComplete('');
                 return;
               }
 
@@ -173,6 +170,7 @@ export const LangGraphProvider: React.FC<LangGraphProviderProps> = ({ children }
 
                 // Check if this is an agent step for the loading card
                 if (stepData.type && ['routing', 'action', 'tool', 'completion'].includes(stepData.type)) {
+                  console.log('Received agent step:', stepData); // Debug log
                   onStep({
                     type: stepData.type,
                     agent: stepData.agent,
@@ -180,13 +178,6 @@ export const LangGraphProvider: React.FC<LangGraphProviderProps> = ({ children }
                     tool: stepData.tool,
                     timestamp: stepData.timestamp
                   });
-                }
-
-                // Check if this is the final response
-                if (stepData.type === 'final_response') {
-                  finalResponse = stepData.content;
-                  onComplete(finalResponse);
-                  return;
                 }
                 
               } catch (parseError) {

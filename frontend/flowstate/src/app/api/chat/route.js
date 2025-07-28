@@ -16,8 +16,8 @@ export async function POST(request) {
     console.log('Token found:', token ? 'Yes' : 'No');
     
     // Forward request to deployed backend
-    console.log('Sending request to:', `${config.apiUrl}/chat`);
-    const response = await fetch(`${config.apiUrl}/chat`, {
+    console.log('Sending request to:', `${config.apiUrl}/api/chat`);
+    const response = await fetch(`${config.apiUrl}/api/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
