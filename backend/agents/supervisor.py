@@ -512,79 +512,85 @@ async def stream_response(user_input: str, config: dict):
         subgraphs=True  # Include subgraph updates
     ):
         # Process updates from different nodes
-        for node_name, node_update in chunk.items():
-            if node_name == "__start__":
-                continue
-                
-            # Handle supervisor routing decisions
-            if "Orchestrator Supervisor" in node_name:
-                if hasattr(node_update.get("messages", [{}])[-1], 'tool_calls'):
-                    tool_calls = node_update["messages"][-1].tool_calls
-                    for tool_call in tool_calls:
-                        if "Handoff" in tool_call["name"]:
-                            # Extract target agent from tool name
-                            if "Project-Management" in tool_call["name"]:
-                                target_agent = "Project Management Agent"
-                            elif "Response-Agent" in tool_call["name"]:
-                                target_agent = "Response Agent"
-                            else:
-                                target_agent = "Agent"
-                            
-                            yield {
-                                "type": "routing",
-                                "agent": "Main Agent",
-                                "message": f"Routing request to {target_agent}...",
-                                "timestamp": datetime.now().isoformat()
-                            }
+        # With stream_mode="updates", chunk is a tuple (node_name, node_update)
+        if isinstance(chunk, tuple) and len(chunk) == 2:
+            node_name, node_update = chunk
+        else:
+            continue
             
-            # Handle sub-agent actions
-            elif "PMAgent" in node_name:
-                messages = node_update.get("messages", [])
-                if messages:
-                    last_message = messages[-1]
-                    
-                    # Check for tool calls
-                    if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
-                        for tool_call in last_message.tool_calls:
-                            yield {
-                                "type": "tool",
-                                "agent": "Project Management Agent",
-                                "message": tool_call["name"],
-                                "tool": tool_call["name"],
-                                "timestamp": datetime.now().isoformat()
-                            }
-                    
-                    # Check for AI message content indicating actions
-                    elif hasattr(last_message, 'content') and last_message.content:
-                        # Determine if this is an action or completion based on content
-                        content = last_message.content.lower()
-                        if any(word in content for word in ["getting", "retrieving", "checking", "analyzing", "processing"]):
-                            step_type = "action"
+        if node_name == "__start__":
+            continue
+            
+        # Handle supervisor routing decisions
+        if "Orchestrator Supervisor" in node_name:
+            messages = node_update.get("messages", [])
+            if messages and hasattr(messages[-1], 'tool_calls') and messages[-1].tool_calls:
+                tool_calls = messages[-1].tool_calls
+                for tool_call in tool_calls:
+                    if "Handoff" in tool_call["name"]:
+                        # Extract target agent from tool name
+                        if "Project-Management" in tool_call["name"]:
+                            target_agent = "Project Management Agent"
+                        elif "Response-Agent" in tool_call["name"]:
+                            target_agent = "Response Agent"
                         else:
-                            step_type = "completion"
+                            target_agent = "Agent"
                         
                         yield {
-                            "type": step_type,
+                            "type": "routing",
+                            "agent": "Main Agent",
+                            "message": f"Routing request to {target_agent}...",
+                            "timestamp": datetime.now().isoformat()
+                        }
+        
+        # Handle sub-agent actions
+        elif "PMAgent" in node_name:
+            messages = node_update.get("messages", [])
+            if messages:
+                last_message = messages[-1]
+                
+                # Check for tool calls
+                if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
+                    for tool_call in last_message.tool_calls:
+                        yield {
+                            "type": "tool",
                             "agent": "Project Management Agent",
-                            "message": last_message.content[:100] + "..." if len(last_message.content) > 100 else last_message.content,
+                            "message": tool_call["name"],
+                            "tool": tool_call["name"],
                             "timestamp": datetime.now().isoformat()
                         }
-            
-            # Handle Response Agent
-            elif "ResponseAgent" in node_name:
-                messages = node_update.get("messages", [])
-                if messages:
-                    last_message = messages[-1]
-                    if hasattr(last_message, 'content') and last_message.content:
-                        # Capture the final response content
-                        final_response = last_message.content
-                        
-                        yield {
-                            "type": "completion",
-                            "agent": "Response Agent",
-                            "message": "Formatting response for display...",
-                            "timestamp": datetime.now().isoformat()
-                        }
+                
+                # Check for AI message content indicating actions
+                elif hasattr(last_message, 'content') and last_message.content:
+                    # Determine if this is an action or completion based on content
+                    content = last_message.content.lower()
+                    if any(word in content for word in ["getting", "retrieving", "checking", "analyzing", "processing"]):
+                        step_type = "action"
+                    else:
+                        step_type = "completion"
+                    
+                    yield {
+                        "type": step_type,
+                        "agent": "Project Management Agent",
+                        "message": last_message.content[:100] + "..." if len(last_message.content) > 100 else last_message.content,
+                        "timestamp": datetime.now().isoformat()
+                    }
+        
+        # Handle Response Agent
+        elif "ResponseAgent" in node_name:
+            messages = node_update.get("messages", [])
+            if messages:
+                last_message = messages[-1]
+                if hasattr(last_message, 'content') and last_message.content:
+                    # Capture the final response content
+                    final_response = last_message.content
+                    
+                    yield {
+                        "type": "completion",
+                        "agent": "Response Agent",
+                        "message": "Formatting response for display...",
+                        "timestamp": datetime.now().isoformat()
+                    }
     
     # After all streaming is complete, yield the final response
     if final_response:

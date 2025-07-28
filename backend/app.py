@@ -276,7 +276,7 @@ async def debug_agent(current_user: User = Depends(get_current_user)):
         }
 
 # Chat endpoint
-@app.post("/chat", response_model=ChatResponse)
+@app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, current_user: User = Depends(get_current_user)):
     try:
         print(f"Chat request from user {current_user.email}: {request.message}")
@@ -376,7 +376,7 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
             session_id=request.session_id or str(uuid.uuid4())
         )
     
-@app.post("/chat/stream")
+@app.post("/api/chat/stream")
 async def stream_chat(request: ChatRequest, current_user: User = Depends(get_current_user)):
     user_input = request.message
     session_id = request.session_id or str(uuid.uuid4())
@@ -409,7 +409,7 @@ async def stream_chat(request: ChatRequest, current_user: User = Depends(get_cur
         }
     )
 
-@app.post("/chat/events")
+@app.post("/api/chat/events")
 async def stream_events_endpoint(request: ChatRequest, current_user: User = Depends(get_current_user)):
     user_input = request.message
     session_id = request.session_id or str(uuid.uuid4())
