@@ -9,6 +9,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import JsxParser from 'react-jsx-parser';
 import Typography from '@/components/Typography';
 import Button from '@/components/Button';
+import AgentLoadingCard, { AgentStep } from '@/components/AgentLoadingCard';
 
 // Message type definition
 type Message = {
@@ -33,10 +34,13 @@ function Chat() {
   const [isLoading, setIsLoading] = useState(false);
   const [threadId, setThreadId] = useState<string | null>(null);
   const { user } = useAuth();
+  // For Streaming Updates to User
+  const [steps, setSteps] = useState<AgentStep[]>([]);
+  const [isComplete, setIsComplete] = useState(false);
+
   const { 
     createThread, 
     sendMessage, 
-    streamResponse, 
     getThreadHistory, 
     resetThread,
     loading: langGraphLoading,
@@ -44,6 +48,16 @@ function Chat() {
     isConnected 
   } = useLangGraph();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+
+  // Add step to agent loading card
+  const addStep = (step: AgentStep) => {
+  setSteps(prev => [...prev, step]);
+};
+  // Clear steps when conversation is reset
+  const handleComplete = () => {
+    setIsComplete(true);
+  };
 
   // Handler functions for interactive buttons in agent responses
   const handleCreateAssignment = () => {
@@ -503,7 +517,13 @@ function Chat() {
           
           {isLoading && !chatHistory.some(msg => msg.role === 'assistant' && msg.id) && (
             <div className="flex justify-center items-center my-4">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-flowstate-accent"></div>
+              {/* Show loading card only if no assistant message is present */}
+              <AgentLoadingCard 
+                steps={steps}
+                isComplete={isComplete}
+                onComplete={() => console.log('Task completed!')}
+                stepDuration={3000} // 3 seconds per step
+              />
             </div>
           )}
         </div>

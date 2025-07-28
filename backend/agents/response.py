@@ -81,6 +81,9 @@ CRITICAL REQUIREMENTS:
 - Always use className instead of class attribute
 - Self-close all empty elements
 - Wrap everything in React Fragment <></>
+- Make sure all text is READABLE and does not blend with the background
+- Use Tailwind CSS classes for styling and layout
+- Maintain a consistent design language with Flowstate's branding
 
 IMPORTANT: You are the final step in the response pipeline. Your JSX output will be parsed and displayed to the user.
 """
