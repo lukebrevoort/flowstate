@@ -45,7 +45,7 @@ Example Response Format:
   <Typography variant="h2" className="text-flowstate-primary mb-4 font-semibold">
     Response Title
   </Typography>
-  <Typography variant="p" className="text-gray-700 mb-6 leading-relaxed">
+  <Typography variant="p" className="text-gray-600 mb-6 leading-relaxed">
     Your detailed response content goes here.
   </Typography>
   <div className="bg-gray-50 p-4 rounded-lg mb-6">
