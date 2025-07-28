@@ -9,8 +9,7 @@ from langgraph_supervisor.handoff import create_forward_message_tool
 from typing import Literal, Optional, TypedDict
 
 from typing import Annotated, Dict, List, Literal, TypedDict, Optional, Any
-import os
-import datetime 
+import os 
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
@@ -496,40 +495,109 @@ def update_user_instructions(
 app = orchestrator_agent.compile(name="Orchestrator Supervisor")
 
 async def stream_response(user_input: str, config: dict):
-    """Stream responses from the supervisor agent"""
+    """Stream agent steps and tool calls for AgentLoadingCard"""
     
     # Create the initial state
     initial_state = {
         "messages": [HumanMessage(content=user_input)]
     }
     
-    # Stream the response
+    final_response = None
+    
+    # Stream with updates mode and include subgraphs
     async for chunk in app.astream(
         initial_state,
         config=config,
-        stream_mode="messages"  # Stream individual messages
+        stream_mode="updates",  # Stream updates instead of messages
+        subgraphs=True  # Include subgraph updates
     ):
-        # Filter for AI messages with content
-        if chunk.get("messages"):
-            for message in chunk["messages"]:
-                if isinstance(message, AIMessage) and message.content:
-                    # Yield content chunks
-                    yield {
-                        "type": "message",
-                        "content": message.content,
-                        "agent": getattr(message, 'name', 'supervisor')
-                    }
-                elif message.tool_calls:
-                    # Yield tool call information
-                    yield {
-                        "type": "tool_call",
-                        "tools": [tool["name"] for tool in message.tool_calls],
-                        "agent": getattr(message, 'name', 'supervisor')
-                    }
+        # Process updates from different nodes
+        for node_name, node_update in chunk.items():
+            if node_name == "__start__":
+                continue
+                
+            # Handle supervisor routing decisions
+            if "Orchestrator Supervisor" in node_name:
+                if hasattr(node_update.get("messages", [{}])[-1], 'tool_calls'):
+                    tool_calls = node_update["messages"][-1].tool_calls
+                    for tool_call in tool_calls:
+                        if "Handoff" in tool_call["name"]:
+                            # Extract target agent from tool name
+                            if "Project-Management" in tool_call["name"]:
+                                target_agent = "Project Management Agent"
+                            elif "Response-Agent" in tool_call["name"]:
+                                target_agent = "Response Agent"
+                            else:
+                                target_agent = "Agent"
+                            
+                            yield {
+                                "type": "routing",
+                                "agent": "Main Agent",
+                                "message": f"Routing request to {target_agent}...",
+                                "timestamp": datetime.now().isoformat()
+                            }
+            
+            # Handle sub-agent actions
+            elif "PMAgent" in node_name:
+                messages = node_update.get("messages", [])
+                if messages:
+                    last_message = messages[-1]
+                    
+                    # Check for tool calls
+                    if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
+                        for tool_call in last_message.tool_calls:
+                            yield {
+                                "type": "tool",
+                                "agent": "Project Management Agent",
+                                "message": tool_call["name"],
+                                "tool": tool_call["name"],
+                                "timestamp": datetime.now().isoformat()
+                            }
+                    
+                    # Check for AI message content indicating actions
+                    elif hasattr(last_message, 'content') and last_message.content:
+                        # Determine if this is an action or completion based on content
+                        content = last_message.content.lower()
+                        if any(word in content for word in ["getting", "retrieving", "checking", "analyzing", "processing"]):
+                            step_type = "action"
+                        else:
+                            step_type = "completion"
+                        
+                        yield {
+                            "type": step_type,
+                            "agent": "Project Management Agent",
+                            "message": last_message.content[:100] + "..." if len(last_message.content) > 100 else last_message.content,
+                            "timestamp": datetime.now().isoformat()
+                        }
+            
+            # Handle Response Agent
+            elif "ResponseAgent" in node_name:
+                messages = node_update.get("messages", [])
+                if messages:
+                    last_message = messages[-1]
+                    if hasattr(last_message, 'content') and last_message.content:
+                        # Capture the final response content
+                        final_response = last_message.content
+                        
+                        yield {
+                            "type": "completion",
+                            "agent": "Response Agent",
+                            "message": "Formatting response for display...",
+                            "timestamp": datetime.now().isoformat()
+                        }
+    
+    # After all streaming is complete, yield the final response
+    if final_response:
+        yield {
+            "type": "final_response",
+            "agent": "Response Agent",
+            "message": "Response ready",
+            "content": final_response,
+            "timestamp": datetime.now().isoformat()
+        }
 
-# Alternative streaming with different modes
 async def stream_events(user_input: str, config: dict):
-    """Stream events from the supervisor agent"""
+    """Stream detailed events from the supervisor agent for debugging"""
     
     initial_state = {
         "messages": [HumanMessage(content=user_input)]
@@ -540,24 +608,36 @@ async def stream_events(user_input: str, config: dict):
         config=config,
         version="v2"
     ):
-        # Handle different event types
-        if event["event"] == "on_chat_model_stream":
-            if event["data"]["chunk"].content:
+        # Handle different event types for more granular control
+        if event["event"] == "on_chain_start":
+            # Agent starting
+            agent_name = event.get("name", "Unknown Agent")
+            if agent_name != "RunnableSequence":  # Filter out generic sequences
                 yield {
-                    "type": "content",
-                    "data": event["data"]["chunk"].content,
-                    "agent": event.get("name", "supervisor")
+                    "type": "routing",
+                    "agent": "Main Agent",
+                    "message": f"Starting {agent_name}...",
+                    "timestamp": datetime.now().isoformat()
                 }
+        
         elif event["event"] == "on_tool_start":
+            # Tool execution starting
+            tool_name = event["name"]
             yield {
-                "type": "tool_start",
-                "tool": event["name"],
-                "agent": event.get("tags", {}).get("agent", "supervisor")
+                "type": "tool", 
+                "agent": event.get("tags", {}).get("agent", "Agent"),
+                "message": tool_name,
+                "tool": tool_name,
+                "timestamp": datetime.now().isoformat()
             }
-        elif event["event"] == "on_tool_end":
-            yield {
-                "type": "tool_end",
-                "tool": event["name"],
-                "result": event["data"]["output"],
-                "agent": event.get("tags", {}).get("agent", "supervisor")
-            }
+        
+        elif event["event"] == "on_chain_end":
+            # Agent completing
+            agent_name = event.get("name", "Unknown Agent")
+            if agent_name != "RunnableSequence" and "Agent" in agent_name:
+                yield {
+                    "type": "completion",
+                    "agent": agent_name,
+                    "message": f"Completed processing with {agent_name}",
+                    "timestamp": datetime.now().isoformat()
+                }

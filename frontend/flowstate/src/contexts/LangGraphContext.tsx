@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useAuth } from './AuthContext';
 import config from '@/lib/config';
-import { error } from 'console';
+import { AgentStep } from '@/components/AgentLoadingCard';
 
 // Message type definition for LangGraph messages
 type LangGraphMessage = {
@@ -17,9 +17,9 @@ interface LangGraphContextType {
   error: string | null;
   createThread: () => Promise<string>;
   sendMessage: (threadId: string, content: string) => Promise<string>;
+  sendMessageWithStreaming: (threadId: string, content: string, onStep: (step: AgentStep) => void, onComplete: (response: string) => void) => Promise<void>;
   getThreadHistory: (threadId: string) => Promise<LangGraphMessage[]>;
   resetThread: () => Promise<string>;
-  streamResponse?: (threadId: string, handleChunk: (chunk: any) => void) => Promise<void>;
 }
 
 const LangGraphContext = createContext<LangGraphContextType | undefined>(undefined);
@@ -39,6 +39,7 @@ interface LangGraphProviderProps {
 export const LangGraphProvider: React.FC<LangGraphProviderProps> = ({ children }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -47,9 +48,11 @@ export const LangGraphProvider: React.FC<LangGraphProviderProps> = ({ children }
         // Test connection to your deployed backend
         const response = await fetch(`${config.apiUrl}/`);
         setIsConnected(response.ok);
+        setError(null);
       } catch (error) {
         console.error('LangGraph connection failed:', error);
         setIsConnected(false);
+        setError('Connection failed');
       } finally {
         setLoading(false);
       }
@@ -103,6 +106,105 @@ export const LangGraphProvider: React.FC<LangGraphProviderProps> = ({ children }
     }
   };
 
+  const sendMessageWithStreaming = async (
+    threadId: string, 
+    content: string, 
+    onStep: (step: AgentStep) => void, 
+    onComplete: (response: string) => void
+  ): Promise<void> => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const response = await fetch('/api/chat/stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          message: content,
+          session_id: threadId,
+          user_id: user?.id || "default_user",
+          todo_category: "default"
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to start streaming');
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No reader available');
+      }
+
+      const decoder = new TextDecoder();
+      let finalResponse = '';
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              
+              if (data === '[DONE]') {
+                // Streaming complete
+                if (finalResponse) {
+                  onComplete(finalResponse);
+                }
+                return;
+              }
+
+              try {
+                const stepData = JSON.parse(data);
+                
+                if (stepData.type === 'error') {
+                  throw new Error(stepData.content);
+                }
+
+                // Check if this is an agent step for the loading card
+                if (stepData.type && ['routing', 'action', 'tool', 'completion'].includes(stepData.type)) {
+                  onStep({
+                    type: stepData.type,
+                    agent: stepData.agent,
+                    message: stepData.message,
+                    tool: stepData.tool,
+                    timestamp: stepData.timestamp
+                  });
+                }
+
+                // Check if this is the final response
+                if (stepData.type === 'final_response') {
+                  finalResponse = stepData.content;
+                  onComplete(finalResponse);
+                  return;
+                }
+                
+              } catch (parseError) {
+                console.warn('Failed to parse streaming data:', data);
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+    } catch (error) {
+      console.error('Error in streaming message:', error);
+      throw error;
+    }
+  };
+
   const getThreadHistory = async (threadId: string): Promise<LangGraphMessage[]> => {
     // For now, return empty array since we're using stateless chat
     // In the future, you could implement message history retrieval from your backend
@@ -113,28 +215,15 @@ export const LangGraphProvider: React.FC<LangGraphProviderProps> = ({ children }
     return await createThread();
   };
 
-  // Optional streaming support for future enhancement
-  const streamResponse = async (threadId: string, handleChunk: (chunk: any) => void): Promise<void> => {
-    // For now, we'll just send the message normally and call handleChunk once
-    // In the future, you could implement Server-Sent Events for real streaming
-    try {
-      const response = await sendMessage(threadId, "");
-      handleChunk({ type: 'text', content: response });
-    } catch (error) {
-      console.error('Error in stream response:', error);
-      throw error;
-    }
-  };
-
   const value = {
     isConnected,
     loading,
+    error,
     createThread,
     sendMessage,
+    sendMessageWithStreaming,
     getThreadHistory,
-    error: null,
     resetThread,
-    streamResponse,
   };
 
   return <LangGraphContext.Provider value={value}>{children}</LangGraphContext.Provider>;

@@ -40,7 +40,8 @@ function Chat() {
 
   const { 
     createThread, 
-    sendMessage, 
+    sendMessage,
+    sendMessageWithStreaming, 
     getThreadHistory, 
     resetThread,
     loading: langGraphLoading,
@@ -91,18 +92,31 @@ function Chat() {
     
     setIsLoading(true);
     
+    // Reset agent steps and completion state for new request
+    setSteps([]);
+    setIsComplete(false);
+    
     // Add user message to chat
     setChatHistory(prev => [...prev, { role: 'user', content: messageText }]);
     
     try {
-      // Send message and get response
-      const response = await sendMessage(threadId, messageText);
-      
-      // Add assistant response to chat
-      setChatHistory(prev => [...prev, { 
-        role: 'assistant', 
-        content: response
-      }]);
+      // Use streaming with AgentLoadingCard
+      await sendMessageWithStreaming(
+        threadId, 
+        messageText,
+        // onStep callback - adds steps to the loading card
+        (step: AgentStep) => {
+          addStep(step);
+        },
+        // onComplete callback - adds final response to chat
+        (response: string) => {
+          setChatHistory(prev => [...prev, { 
+            role: 'assistant', 
+            content: response
+          }]);
+          handleComplete();
+        }
+      );
       
     } catch (error) {
       console.error('Chat error:', error);
@@ -110,6 +124,7 @@ function Chat() {
         role: 'system', 
         content: `Error: ${error instanceof Error ? error.message : 'Failed to process your request'}`
       }]);
+      setIsComplete(true); // Mark as complete even on error
     } finally {
       setIsLoading(false);
     }
@@ -164,15 +179,18 @@ function Chat() {
     try {
       setIsLoading(true);
       setChatHistory([]);
+      setSteps([]); // Reset agent steps
+      setIsComplete(false); // Reset completion state
       const newThreadId = await resetThread();
       setThreadId(newThreadId);
       setIsLoading(false);
     } catch (error) {
       console.error('Failed to create new conversation:', error);
+      setIsLoading(false);
     }
   };
 
-  // Update the handleSubmit function
+  // Update the handleSubmit function to use streaming
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!message.trim() || isLoading || !threadId || !isConnected) return;
@@ -181,18 +199,31 @@ function Chat() {
     setMessage(""); // Clear input immediately
     setIsLoading(true);
     
+    // Reset agent steps and completion state for new request
+    setSteps([]);
+    setIsComplete(false);
+    
     // Add user message to chat
     setChatHistory(prev => [...prev, { role: 'user', content: userMessage }]);
     
     try {
-      // Send message and get response
-      const response = await sendMessage(threadId, userMessage);
-      
-      // Add assistant response to chat
-      setChatHistory(prev => [...prev, { 
-        role: 'assistant', 
-        content: response
-      }]);
+      // Use streaming with AgentLoadingCard
+      await sendMessageWithStreaming(
+        threadId, 
+        userMessage,
+        // onStep callback - adds steps to the loading card
+        (step: AgentStep) => {
+          addStep(step);
+        },
+        // onComplete callback - adds final response to chat
+        (response: string) => {
+          setChatHistory(prev => [...prev, { 
+            role: 'assistant', 
+            content: response
+          }]);
+          handleComplete();
+        }
+      );
       
     } catch (error) {
       console.error('Chat error:', error);
@@ -200,6 +231,7 @@ function Chat() {
         role: 'system', 
         content: `Error: ${error instanceof Error ? error.message : 'Failed to process your request'}`
       }]);
+      setIsComplete(true); // Mark as complete even on error
     } finally {
       setIsLoading(false);
     }
@@ -515,16 +547,21 @@ function Chat() {
             </>
           )}
           
-          {isLoading && !chatHistory.some(msg => msg.role === 'assistant' && msg.id) && (
-            <div className="flex justify-center items-center my-4">
-              {/* Show loading card only if no assistant message is present */}
+          {/* Show AgentLoadingCard when processing a request */}
+          {isLoading && (
+            <>
               <AgentLoadingCard 
                 steps={steps}
                 isComplete={isComplete}
-                onComplete={() => console.log('Task completed!')}
-                stepDuration={3000} // 3 seconds per step
+                onComplete={() => {
+                  console.log('Agent processing completed!');
+                  // This will be called when the loading card finishes its display
+                }}
+                stepDuration={2500} // 2.5 seconds per step
+                className="my-6"
               />
-            </div>
+              <div ref={messagesEndRef} />
+            </>
           )}
         </div>
 
