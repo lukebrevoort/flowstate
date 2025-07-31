@@ -121,7 +121,7 @@ const AgentLoadingCard: React.FC<AgentLoadingCardProps> = ({
           <div className="p-2 rounded-full bg-flowstate-accent mx-auto mb-3 w-fit">
             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
           </div>
-          <p className="text-gray-500">Waiting for agent steps...</p>
+          <p className="text-gray-500">Processing Your Request...</p>
         </div>
       </div>
     );

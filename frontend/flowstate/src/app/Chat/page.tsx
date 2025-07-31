@@ -61,12 +61,12 @@ function Chat() {
   };
 
   // Handler functions for interactive buttons in agent responses
-  const handleCreateAssignment = () => {
-    // Add your logic for creating a new assignment
-    console.log('Create assignment clicked');
+  const handleCheckAssignments = () => {
+    // Add your logic for checking current assignments
+    console.log('Check assignments clicked');
     // You can trigger a new message or API call here
     if (threadId && isConnected) {
-      handleSubmitMessage("I want to create a new assignment");
+      handleSubmitMessage("What assignments do I have coming up?");
     }
   };
 
@@ -78,11 +78,11 @@ function Chat() {
     }
   };
 
-  const handleDatabaseSetup = () => {
-    // Add your logic for database setup
-    console.log('Database setup clicked');
+  const handleCheckSchedule = () => {
+    // Add your logic for checking the schedule
+    console.log('Check schedule clicked');
     if (threadId && isConnected) {
-      handleSubmitMessage("Help me set up my database");
+      handleSubmitMessage("What does my schedule look like for this week?");
     }
   };
 
@@ -257,9 +257,9 @@ function Chat() {
         
         // Replace function calls in onClick handlers with actual functions
         let processedContent = content
-          .replace(/onClick={\(\) => handleCreateAssignment\(\)}/g, `onClick={() => handleCreateAssignment()}`)
+          .replace(/onClick={\(\) => handleCheckAssignments\(\)}/g, `onClick={() => handleCreateAssignment()}`)
           .replace(/onClick={\(\) => handleCheckCourses\(\)}/g, `onClick={() => handleCheckCourses()}`)
-          .replace(/onClick={\(\) => handleDatabaseSetup\(\)}/g, `onClick={() => handleDatabaseSetup()}`);
+          .replace(/onClick={\(\) => handleCheckSchedule\(\)}/g, `onClick={() => handleCheckSchedule()}`);
 
         try {
           // Use JsxParser with any casting for components
@@ -272,9 +272,9 @@ function Chat() {
                   Button: Button as any,
                 }}
                 bindings={{
-                  handleCreateAssignment,
+                  handleCheckAssignments,
                   handleCheckCourses,
-                  handleDatabaseSetup,
+                  handleCheckSchedule,
                 }}
               />
             </div>

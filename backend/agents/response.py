@@ -21,6 +21,7 @@ Flowstate Design System:
 - Primary colors: text-flowstate-primary, bg-flowstate-primary
 - Accent colors: text-flowstate-accent, bg-flowstate-accent
 - Header color: bg-flowstate-header
+- Text color: text-flowstate-body
 - Use consistent spacing: mb-4, mt-6, p-4, space-y-4
 - Responsive design: max-w-md, w-full, flex, grid
 
@@ -36,23 +37,23 @@ JSX Structure Guidelines:
 
 Interactive Button Guidelines:
 When suggesting actions, use these specific onClick handlers that exist in the frontend:
-- handleCreateAssignment() - for creating new assignments
+- handleCheckAssignments() - for checking current assignments
 - handleCheckCourses() - for reviewing courses
-- handleDatabaseSetup() - for database-related actions
+- handleCheckSchedule() - for checking the schedule
 
 Example Response Format:
 <>
   <Typography variant="h2" className="text-flowstate-primary mb-4 font-semibold">
     Response Title
   </Typography>
-  <Typography variant="p" className="text-gray-600 mb-6 leading-relaxed">
+  <Typography variant="p" className="text-flowstate-body mb-6 leading-relaxed">
     Your detailed response content goes here.
   </Typography>
   <div className="bg-gray-50 p-4 rounded-lg mb-6">
     <Typography variant="h3" className="text-flowstate-accent mb-2">
       Important Note
     </Typography>
-    <Typography variant="p" className="text-gray-600">
+    <Typography variant="p" className="text-flowstate-body">
       Additional context or information.
     </Typography>
   </div>
