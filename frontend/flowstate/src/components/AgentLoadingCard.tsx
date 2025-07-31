@@ -33,51 +33,9 @@ const AgentLoadingCard: React.FC<AgentLoadingCardProps> = ({
   const [showStep, setShowStep] = useState(true);
   const [internalComplete, setInternalComplete] = useState(isComplete);
 
-  // Default steps for demo/testing
-  const defaultSteps: AgentStep[] = [
-    {
-      type: 'routing',
-      agent: 'Main Agent',
-      message: "Routing request to Project Management Agent...",
-      timestamp: new Date().toLocaleTimeString()
-    },
-    {
-      type: 'action',
-      agent: 'Project Management Agent',
-      message: "Getting current time as reference point...",
-      timestamp: new Date().toLocaleTimeString()
-    },
-    {
-      type: 'tool',
-      agent: 'Project Management Agent',
-      message: "get_current_time",
-      tool: 'get_current_time',
-      timestamp: new Date().toLocaleTimeString()
-    },
-    {
-      type: 'action',
-      agent: 'Project Management Agent',
-      message: "Retrieving assignments for the next month...",
-      timestamp: new Date().toLocaleTimeString()
-    },
-    {
-      type: 'tool',
-      agent: 'Project Management Agent',
-      message: "get_assignments_in_date_range",
-      tool: 'get_assignments_in_date_range',
-      timestamp: new Date().toLocaleTimeString()
-    },
-    {
-      type: 'completion',
-      agent: 'Project Management Agent',
-      message: "Processing 8 assignments by priority...",
-      timestamp: new Date().toLocaleTimeString()
-    }
-  ];
-
 // Always use the most up-to-date steps - use memo to recalculate when steps change
   const activeSteps = useMemo(() => {
-    const result = steps.length > 0 ? steps : defaultSteps;
+    const result = steps.length > 0 ? steps : [];
     console.log('activeSteps recalculated:', result);
     return result;
   }, [steps]);
@@ -111,12 +69,6 @@ const AgentLoadingCard: React.FC<AgentLoadingCardProps> = ({
     // If we have no steps yet, wait
     if (steps.length === 0) return;
     
-    // If we have steps but activeSteps is using defaults, force re-render
-    if (steps.length > 0 && activeSteps === defaultSteps) {
-      console.log('Forcing re-render with real steps');
-      return;
-    }
-
     const interval = setInterval(() => {
       if (currentStep < activeSteps.length - 1) {
         // Fade out current step
@@ -136,7 +88,7 @@ const AgentLoadingCard: React.FC<AgentLoadingCardProps> = ({
     }, stepDuration);
 
     return () => clearInterval(interval);
-  }, [currentStep, activeSteps.length, internalComplete, stepDuration, transitionDuration, onComplete, steps.length, activeSteps, defaultSteps]);
+  }, [currentStep, activeSteps.length, internalComplete, stepDuration, transitionDuration, onComplete, steps.length, activeSteps]);
 
   const getStepIcon = (type: AgentStep['type']) => {
     switch (type) {
@@ -161,45 +113,6 @@ const AgentLoadingCard: React.FC<AgentLoadingCardProps> = ({
     setCurrentStep(activeSteps.length - 1);
     setInternalComplete(true);
   };
-
-  if (internalComplete) {
-    return (
-      <div className={`max-w-md mx-auto ${className}`}>
-        <div className="bg-flowstate-bg border border-gray-200 rounded-xl shadow-header overflow-hidden">
-          <div className="px-6 py-4 bg-flowstate-header">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-full bg-flowstate-accent">
-                <CheckCircle className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-flowstate-dark">Task Completed</h3>
-                <p className="text-sm text-gray-600">Ready to display results</p>
-              </div>
-            </div>
-          </div>
-          <div className="px-6 py-4">
-            <button 
-              onClick={onComplete}
-              className="w-full px-4 py-2 bg-flowstate-accent hover:bg-flowstate-accent text-white text-sm font-medium rounded-lg transition-colors"
-            >
-              View Results
-            </button>
-          </div>
-        </div>
-        
-        {showDemo && (
-          <div className="mt-4 p-3 bg-gray-100 rounded-lg">
-            <button
-              onClick={resetDemo}
-              className="px-3 py-1 bg-white border border-gray-300 text-sm rounded hover:bg-gray-50"
-            >
-              Restart Demo
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  }
 
   if (activeSteps.length === 0) {
     return (
