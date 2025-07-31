@@ -499,175 +499,210 @@ async def stream_response(user_input: str, config: dict):
     
     print(f"stream_response called with input: {user_input}")  # Debug log
     
-    # Create the initial state
-    initial_state = {
-        "messages": [HumanMessage(content=user_input)]
-    }
-    
-    # Stream with updates mode and include subgraphs
-    async for chunk in app.astream(
-        initial_state,
-        config=config,
-        stream_mode="updates",  # Stream updates instead of messages
-        subgraphs=True  # Include subgraph updates
-    ):
-        print(f"Received chunk: {chunk}")  # Debug log
+    try:
+        # Create the initial state
+        initial_state = {
+            "messages": [HumanMessage(content=user_input)]
+        }
         
-        # Process updates from different nodes
-        # With stream_mode="updates", chunk is a tuple (node_name, node_update)
-        if isinstance(chunk, tuple) and len(chunk) == 2:
-            node_name, node_update = chunk
-        else:
-            print(f"Skipping non-tuple chunk: {chunk}")
-            continue
-            
-        if node_name == "__start__":
-            continue
-            
-        print(f"Processing node: {node_name}")  # Debug log
-        
-        # Extract actual node name from tuple if needed
-        actual_node_name = node_name[0] if isinstance(node_name, tuple) and len(node_name) > 0 else str(node_name)
-        print(f"Actual node name: {actual_node_name}")  # Debug log
-            
-        # Handle supervisor routing decisions
-        if "Orchestrator Supervisor" in actual_node_name:
-            # Check if this is agent data or final state data
-            if 'agent' in node_update:
-                agent_data = node_update['agent']
-                messages = agent_data.get("messages", [])
-            else:
-                messages = node_update.get("messages", [])
+        # Stream with updates mode and include subgraphs
+        async for chunk in app.astream(
+            initial_state,
+            config=config,
+            stream_mode="updates",  # Stream updates instead of messages
+            subgraphs=True  # Include subgraph updates
+        ):
+            try:
+                print(f"Received chunk: {chunk}")  # Debug log
                 
-            if messages and hasattr(messages[-1], 'tool_calls') and messages[-1].tool_calls:
-                tool_calls = messages[-1].tool_calls
-                for tool_call in tool_calls:
-                    if "Handoff" in tool_call["name"]:
-                        # Extract target agent from tool name
-                        if "Project-Management" in tool_call["name"]:
-                            target_agent = "Project Management Agent"
-                        elif "Response-Agent" in tool_call["name"]:
-                            target_agent = "Response Agent"
+                # Safely handle chunk structure
+                if not isinstance(chunk, (tuple, list)) or len(chunk) < 2:
+                    print(f"Skipping malformed chunk: {chunk}")
+                    continue
+                    
+                node_name, node_update = chunk[0], chunk[1]
+                
+                if node_name == "__start__" or node_name == "__end__":
+                    continue
+                
+                # Safely extract node name
+                if isinstance(node_name, tuple):
+                    actual_node_name = str(node_name[0]) if len(node_name) > 0 else "Unknown"
+                else:
+                    actual_node_name = str(node_name)
+                
+                print(f"Processing node: {actual_node_name}")  # Debug log
+                
+                # Safely extract messages from node_update
+                messages = []
+                if isinstance(node_update, dict):
+                    if 'agent' in node_update and isinstance(node_update['agent'], dict):
+                        messages = node_update['agent'].get("messages", [])
+                    else:
+                        messages = node_update.get("messages", [])
+                
+                if not messages:
+                    continue
+                
+                last_message = messages[-1] if messages else None
+                if not last_message:
+                    continue
+                
+                # Handle supervisor routing decisions
+                if "Orchestrator Supervisor" in actual_node_name or "supervisor" in actual_node_name.lower():
+                    if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
+                        for tool_call in last_message.tool_calls:
+                            tool_name = tool_call.get("name", "")
+                            if "Handoff" in tool_name:
+                                # Extract target agent from tool name
+                                if "Project-Management" in tool_name:
+                                    target_agent = "Project Management Agent"
+                                elif "Response-Agent" in tool_name:
+                                    target_agent = "Response Agent"
+                                else:
+                                    target_agent = "Agent"
+                                
+                                yield {
+                                    "type": "routing",
+                                    "agent": "Main Agent", 
+                                    "message": f"Routing request to {target_agent}...",
+                                    "timestamp": datetime.now().isoformat()
+                                }
+                
+                # Handle sub-agent actions
+                elif "PMAgent" in actual_node_name:
+                    # Check for tool calls
+                    if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
+                        for tool_call in last_message.tool_calls:
+                            tool_name = tool_call.get("name", "Unknown Tool")
+                            yield {
+                                "type": "tool",
+                                "agent": "Project Management Agent",
+                                "message": tool_name,
+                                "tool": tool_name,
+                                "timestamp": datetime.now().isoformat()
+                            }
+                    
+                    # Check for AI message content
+                    elif hasattr(last_message, 'content') and last_message.content:
+                        content = str(last_message.content).lower()
+                        if any(word in content for word in ["getting", "retrieving", "checking", "analyzing", "processing"]):
+                            step_type = "action"
                         else:
-                            target_agent = "Agent"
+                            step_type = "completion"
+                        
+                        message_content = str(last_message.content)
+                        truncated_content = message_content[:100] + "..." if len(message_content) > 100 else message_content
                         
                         yield {
-                            "type": "routing",
-                            "agent": "Main Agent",
-                            "message": f"Routing request to {target_agent}...",
-                            "timestamp": datetime.now().isoformat()
-                        }
-        
-        # Handle sub-agent actions
-        elif "PMAgent" in actual_node_name:
-            # Check if this is agent data or final state data
-            if 'agent' in node_update:
-                agent_data = node_update['agent']
-                messages = agent_data.get("messages", [])
-            else:
-                messages = node_update.get("messages", [])
-                
-            if messages:
-                last_message = messages[-1]
-                
-                # Check for tool calls
-                if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
-                    for tool_call in last_message.tool_calls:
-                        yield {
-                            "type": "tool",
+                            "type": step_type,
                             "agent": "Project Management Agent",
-                            "message": tool_call["name"],
-                            "tool": tool_call["name"],
+                            "message": truncated_content,
                             "timestamp": datetime.now().isoformat()
                         }
                 
-                # Check for AI message content indicating actions
-                elif hasattr(last_message, 'content') and last_message.content:
-                    # Determine if this is an action or completion based on content
-                    content = last_message.content.lower()
-                    if any(word in content for word in ["getting", "retrieving", "checking", "analyzing", "processing"]):
-                        step_type = "action"
-                    else:
-                        step_type = "completion"
-                    
-                    yield {
-                        "type": step_type,
-                        "agent": "Project Management Agent",
-                        "message": last_message.content[:100] + "..." if len(last_message.content) > 100 else last_message.content,
-                        "timestamp": datetime.now().isoformat()
-                    }
-        
-        # Handle Response Agent - capture the final response AND show completion step
-        elif "ResponseAgent" in actual_node_name:
-            # Check if this is agent data or final state data
-            if 'agent' in node_update:
-                agent_data = node_update['agent']
-                messages = agent_data.get("messages", [])
-            else:
-                messages = node_update.get("messages", [])
+                # Handle Response Agent
+                elif "ResponseAgent" in actual_node_name:
+                    if hasattr(last_message, 'content') and last_message.content:
+                        # Show completion step
+                        yield {
+                            "type": "completion",
+                            "agent": "Response Agent",
+                            "message": "Formatting response for display...",
+                            "timestamp": datetime.now().isoformat()
+                        }
+                        
+                        # Yield the final response for the chat
+                        yield {
+                            "type": "final_response",
+                            "agent": "Response Agent",
+                            "message": "Response ready",
+                            "content": str(last_message.content),
+                            "timestamp": datetime.now().isoformat()
+                        }
+            
+            except Exception as chunk_error:
+                print(f"Error processing chunk {chunk}: {chunk_error}")
+                # Continue processing other chunks instead of failing completely
+                continue
                 
-            if messages:
-                last_message = messages[-1]
-                if hasattr(last_message, 'content') and last_message.content:
-                    # Show completion step
-                    yield {
-                        "type": "completion",
-                        "agent": "Response Agent",
-                        "message": "Formatting response for display...",
-                        "timestamp": datetime.now().isoformat()
-                    }
-                    
-                    # Yield the final response for the chat
-                    yield {
-                        "type": "final_response",
-                        "agent": "Response Agent",
-                        "message": "Response ready",
-                        "content": last_message.content,
-                        "timestamp": datetime.now().isoformat()
-                    }
+    except GeneratorExit:
+        print("Stream generator was closed early")
+        return
+    except Exception as e:
+        print(f"Error in stream_response: {e}")
+        # Yield an error message instead of crashing
+        yield {
+            "type": "error",
+            "agent": "System",
+            "message": f"Streaming error: {str(e)}",
+            "timestamp": datetime.now().isoformat()
+        }
 
 async def stream_events(user_input: str, config: dict):
     """Stream detailed events from the supervisor agent for debugging"""
     
-    initial_state = {
-        "messages": [HumanMessage(content=user_input)]
-    }
-    
-    async for event in app.astream_events(
-        initial_state,
-        config=config,
-        version="v2"
-    ):
-        # Handle different event types for more granular control
-        if event["event"] == "on_chain_start":
-            # Agent starting
-            agent_name = event.get("name", "Unknown Agent")
-            if agent_name != "RunnableSequence":  # Filter out generic sequences
-                yield {
-                    "type": "routing",
-                    "agent": "Main Agent",
-                    "message": f"Starting {agent_name}...",
-                    "timestamp": datetime.now().isoformat()
-                }
+    try:
+        initial_state = {
+            "messages": [HumanMessage(content=user_input)]
+        }
         
-        elif event["event"] == "on_tool_start":
-            # Tool execution starting
-            tool_name = event["name"]
-            yield {
-                "type": "tool", 
-                "agent": event.get("tags", {}).get("agent", "Agent"),
-                "message": tool_name,
-                "tool": tool_name,
-                "timestamp": datetime.now().isoformat()
-            }
-        
-        elif event["event"] == "on_chain_end":
-            # Agent completing
-            agent_name = event.get("name", "Unknown Agent")
-            if agent_name != "RunnableSequence" and "Agent" in agent_name:
-                yield {
-                    "type": "completion",
-                    "agent": agent_name,
-                    "message": f"Completed processing with {agent_name}",
-                    "timestamp": datetime.now().isoformat()
-                }
+        async for event in app.astream_events(
+            initial_state,
+            config=config,
+            version="v2"
+        ):
+            try:
+                # Handle different event types for more granular control
+                if event.get("event") == "on_chain_start":
+                    # Agent starting
+                    agent_name = event.get("name", "Unknown Agent")
+                    if agent_name != "RunnableSequence":  # Filter out generic sequences
+                        yield {
+                            "type": "routing",
+                            "agent": "Main Agent",
+                            "message": f"Starting {agent_name}...",
+                            "timestamp": datetime.now().isoformat()
+                        }
+                
+                elif event.get("event") == "on_tool_start":
+                    # Tool execution starting
+                    tool_name = event.get("name", "Unknown Tool")
+                    agent_name = "Agent"
+                    if "tags" in event and isinstance(event["tags"], dict):
+                        agent_name = event["tags"].get("agent", "Agent")
+                    
+                    yield {
+                        "type": "tool", 
+                        "agent": agent_name,
+                        "message": tool_name,
+                        "tool": tool_name,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                
+                elif event.get("event") == "on_chain_end":
+                    # Agent completing
+                    agent_name = event.get("name", "Unknown Agent")
+                    if agent_name != "RunnableSequence" and "Agent" in agent_name:
+                        yield {
+                            "type": "completion",
+                            "agent": agent_name,
+                            "message": f"Completed processing with {agent_name}",
+                            "timestamp": datetime.now().isoformat()
+                        }
+            
+            except Exception as event_error:
+                print(f"Error processing event {event}: {event_error}")
+                continue
+                
+    except GeneratorExit:
+        print("Event stream generator was closed early")
+        return
+    except Exception as e:
+        print(f"Error in stream_events: {e}")
+        yield {
+            "type": "error",
+            "agent": "System",
+            "message": f"Event streaming error: {str(e)}",
+            "timestamp": datetime.now().isoformat()
+        }
