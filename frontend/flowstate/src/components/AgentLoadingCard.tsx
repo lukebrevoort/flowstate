@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Bot, Zap, Clock, CheckCircle, ArrowRight } from 'lucide-react';
 
 // Types
@@ -75,7 +75,29 @@ const AgentLoadingCard: React.FC<AgentLoadingCardProps> = ({
     }
   ];
 
-  const activeSteps = steps.length > 0 ? steps : defaultSteps;
+// Always use the most up-to-date steps - use memo to recalculate when steps change
+  const activeSteps = useMemo(() => {
+    const result = steps.length > 0 ? steps : defaultSteps;
+    console.log('activeSteps recalculated:', result);
+    return result;
+  }, [steps]);
+
+  // Debug logs to track what's happening
+  useEffect(() => {
+    console.log('AgentLoadingCard - steps prop:', steps);
+    console.log('AgentLoadingCard - activeSteps:', activeSteps);
+    console.log('AgentLoadingCard - steps.length:', steps.length);
+  }, [steps, activeSteps]);
+
+  // Reset when new steps come in
+  useEffect(() => {
+    if (steps.length > 0) {
+      console.log('New steps received, resetting to step 0');
+      setCurrentStep(0);
+      setInternalComplete(false);
+      setShowStep(true);
+    }
+  }, [steps]);
 
   // Handle external completion state changes
   useEffect(() => {
@@ -84,7 +106,16 @@ const AgentLoadingCard: React.FC<AgentLoadingCardProps> = ({
 
   // Handle step progression
   useEffect(() => {
-    if (internalComplete || activeSteps.length === 0) return;
+    if (internalComplete) return;
+    
+    // If we have no steps yet, wait
+    if (steps.length === 0) return;
+    
+    // If we have steps but activeSteps is using defaults, force re-render
+    if (steps.length > 0 && activeSteps === defaultSteps) {
+      console.log('Forcing re-render with real steps');
+      return;
+    }
 
     const interval = setInterval(() => {
       if (currentStep < activeSteps.length - 1) {
@@ -105,7 +136,7 @@ const AgentLoadingCard: React.FC<AgentLoadingCardProps> = ({
     }, stepDuration);
 
     return () => clearInterval(interval);
-  }, [currentStep, activeSteps.length, internalComplete, stepDuration, transitionDuration, onComplete]);
+  }, [currentStep, activeSteps.length, internalComplete, stepDuration, transitionDuration, onComplete, steps.length, activeSteps, defaultSteps]);
 
   const getStepIcon = (type: AgentStep['type']) => {
     switch (type) {
@@ -174,13 +205,28 @@ const AgentLoadingCard: React.FC<AgentLoadingCardProps> = ({
     return (
       <div className={`max-w-md mx-auto ${className}`}>
         <div className="bg-flowstate-bg border border-gray-200 rounded-xl shadow-header p-6 text-center">
-          <p className="text-gray-500">No steps to display</p>
+          <div className="p-2 rounded-full bg-flowstate-accent mx-auto mb-3 w-fit">
+            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          </div>
+          <p className="text-gray-500">Waiting for agent steps...</p>
         </div>
       </div>
     );
   }
 
   const currentStepData = activeSteps[currentStep];
+
+  // Safety check - if currentStepData is undefined, don't render
+  if (!currentStepData) {
+    console.log('currentStepData is undefined, currentStep:', currentStep, 'activeSteps.length:', activeSteps.length);
+    return (
+      <div className={`max-w-md mx-auto ${className}`}>
+        <div className="bg-flowstate-bg border border-gray-200 rounded-xl shadow-header p-6 text-center">
+          <p className="text-gray-500">Loading steps...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`max-w-md mx-auto ${className}`}>
@@ -235,47 +281,16 @@ const AgentLoadingCard: React.FC<AgentLoadingCardProps> = ({
             </div>
           </div>
 
-          {/* Progress indicator */}
-          <div className="mt-6 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <div className="flex gap-1">
-                <div className="w-2 h-2 bg-flowstate-accent rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <div className="w-2 h-2 bg-flowstate-accent rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <div className="w-2 h-2 bg-flowstate-accent rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-              </div>
-              <span>Step {currentStep + 1} of {activeSteps.length}</span>
-            </div>
-            
-            {/* Progress bar */}
-            <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-flowstate-accent transition-all duration-500 ease-out"
-                style={{ width: `${((currentStep + 1) / activeSteps.length) * 100}%` }}
-              />
+          {/* Simple loading indicator */}
+          <div className="mt-6 flex justify-center">
+            <div className="flex gap-1">
+              <div className="w-2 h-2 bg-flowstate-accent rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+              <div className="w-2 h-2 bg-flowstate-accent rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+              <div className="w-2 h-2 bg-flowstate-accent rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
             </div>
           </div>
         </div>
       </div>
-
-      {/* Demo Controls */}
-      {showDemo && (
-        <div className="mt-4 p-3 bg-gray-100 rounded-lg">
-          <div className="flex gap-2">
-            <button
-              onClick={resetDemo}
-              className="px-3 py-1 bg-white border border-gray-300 text-sm rounded hover:bg-gray-50"
-            >
-              Restart
-            </button>
-            <button
-              onClick={completeInstantly}
-              className="px-3 py-1 bg-white border border-gray-300 text-sm rounded hover:bg-gray-50"
-            >
-              Complete
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
