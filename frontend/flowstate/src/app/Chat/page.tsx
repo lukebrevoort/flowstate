@@ -252,14 +252,12 @@ function Chat() {
     // Check if the content contains JSX elements (React Fragment or component tags)
     if (content.includes('<>') || content.includes('<Typography') || content.includes('<Button')) {
       try {
-        // For now, let's use a more robust approach by creating a custom JSX evaluator
-        // This is a simplified version - in production you might want to use a more secure parser
-        
         // Replace function calls in onClick handlers with actual functions
         let processedContent = content
-          .replace(/onClick={\(\) => handleCheckAssignments\(\)}/g, `onClick={() => handleCreateAssignment()}`)
-          .replace(/onClick={\(\) => handleCheckCourses\(\)}/g, `onClick={() => handleCheckCourses()}`)
-          .replace(/onClick={\(\) => handleCheckSchedule\(\)}/g, `onClick={() => handleCheckSchedule()}`);
+          .replace(/onClick={\(\) => handleCheckAssignments\(\)}/g, `onClick={handleCheckAssignments}`)
+          .replace(/onClick={\(\) => handleCheckCourses\(\)}/g, `onClick={handleCheckCourses}`)
+          .replace(/onClick={\(\) => handleCheckSchedule\(\)}/g, `onClick={handleCheckSchedule}`)
+          .replace(/onClick={\(\) => handleCreateAssignment\(\)}/g, `onClick={handleCreateAssignment}`);
 
         try {
           // Use JsxParser with any casting for components
@@ -280,25 +278,82 @@ function Chat() {
             </div>
           );
         } catch (jsxError) {
-          // If JSX parsing fails, try to render with basic HTML parsing as fallback
-          console.warn('JSX parsing failed, attempting fallback:', jsxError);
+          console.warn('JSX parsing failed, attempting manual button parsing:', jsxError);
           
-          // Simple replacement of JSX-like components with HTML for basic display
-          const htmlContent = processedContent
-            .replace(/<Typography variant="([^"]*)" className="([^"]*)">/g, '<div class="$2">')
-            .replace(/<Typography variant="([^"]*)">/g, '<div>')
-            .replace(/<\/Typography>/g, '</div>')
-            .replace(/<Button[^>]*>/g, '<button class="bg-flowstate-accent text-white px-4 py-2 rounded-md">')
-            .replace(/<\/Button>/g, '</button>')
-            .replace(/<>/g, '<div>')
-            .replace(/<\/>/g, '</div>');
-          
-          return (
-            <div 
-              className="agent-response-content"
-              dangerouslySetInnerHTML={{ __html: htmlContent }}
-            />
-          );
+          // Custom button parsing for HTML fallback
+          const createClickHandler = (message: string) => () => {
+            if (threadId && isConnected) {
+              handleSubmitMessage(message);
+            }
+          };
+
+          // Parse the content and create interactive buttons
+          const parseAndCreateButtons = (htmlContent: string) => {
+            const buttonRegex = /<button[^>]*>(.*?)<\/button>/g;
+            const buttons: { text: string; message: string }[] = [];
+            let match;
+
+            while ((match = buttonRegex.exec(htmlContent)) !== null) {
+              const buttonText = match[1];
+              let message = "";
+              
+              // Map button text to appropriate messages
+              if (buttonText.toLowerCase().includes('assignment')) {
+                message = "What assignments do I have coming up?";
+              } else if (buttonText.toLowerCase().includes('course')) {
+                message = "Show me my courses";
+              } else if (buttonText.toLowerCase().includes('schedule')) {
+                message = "What does my schedule look like for this week?";
+              } else {
+                message = buttonText; // fallback to button text
+              }
+              
+              buttons.push({ text: buttonText, message });
+            }
+
+            // Remove button tags from content and replace with placeholders
+            let contentWithoutButtons = htmlContent.replace(buttonRegex, '|||BUTTON|||');
+            
+            // Convert remaining HTML to JSX-like structure
+            contentWithoutButtons = contentWithoutButtons
+              .replace(/<Typography variant="([^"]*)" className="([^"]*)">/g, '<div className="$2">')
+              .replace(/<Typography variant="([^"]*)">/g, '<div>')
+              .replace(/<\/Typography>/g, '</div>')
+              .replace(/<>/g, '<div>')
+              .replace(/<\/>/g, '</div>');
+
+            // Split content by button placeholders and create React elements
+            const parts = contentWithoutButtons.split('|||BUTTON|||');
+            const elements: React.ReactNode[] = [];
+
+            parts.forEach((part, index) => {
+              if (part.trim()) {
+                elements.push(
+                  <div 
+                    key={`content-${index}`}
+                    dangerouslySetInnerHTML={{ __html: part }}
+                  />
+                );
+              }
+              
+              // Add button if there's one at this position
+              if (buttons[index]) {
+                elements.push(
+                  <button
+                    key={`button-${index}`}
+                    onClick={createClickHandler(buttons[index].message)}
+                    className="px-4 py-2 rounded-md font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 bg-flowstate-accent text-white hover:bg-opacity-90 focus:ring-flowstate-accent mx-1 my-1"
+                  >
+                    {buttons[index].text}
+                  </button>
+                );
+              }
+            });
+
+            return <div className="agent-response-content">{elements}</div>;
+          };
+
+          return parseAndCreateButtons(content);
         }
       } catch (error) {
         console.error('Error processing JSX content:', error);

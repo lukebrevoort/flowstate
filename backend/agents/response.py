@@ -59,10 +59,10 @@ Example Response Format:
   </div>
   <div className="flex flex-wrap gap-3">
     <Button 
-      onClick={() => handleCreateAssignment()} 
+      onClick={() => handleCheckAssignments()} 
       className="bg-flowstate-accent text-white px-4 py-2 rounded-md hover:bg-opacity-90 transition-colors"
     >
-      Create Assignment
+      Check Assignments
     </Button>
     <Button 
       onClick={() => handleCheckCourses()} 
