@@ -19,7 +19,7 @@ type Message = {
 };
 
 // Function to convert LangGraph messages to chat format
-const convertLangGraphMessages = (messages: any[]) => {
+const convertLangGraphMessages = (messages: Array<{type: string; content: string | object}>) => {
   return messages.map(msg => ({
     role: msg.type === 'user' ? 'user' : 
           msg.type === 'assistant' ? 'assistant' : 
@@ -40,7 +40,6 @@ function Chat() {
 
   const { 
     createThread, 
-    sendMessage,
     sendMessageWithStreaming, 
     getThreadHistory, 
     resetThread,
@@ -253,20 +252,22 @@ function Chat() {
     if (content.includes('<>') || content.includes('<Typography') || content.includes('<Button')) {
       try {
         // Replace function calls in onClick handlers with actual functions
-        let processedContent = content
+        const processedContent = content
           .replace(/onClick={\(\) => handleCheckAssignments\(\)}/g, `onClick={handleCheckAssignments}`)
           .replace(/onClick={\(\) => handleCheckCourses\(\)}/g, `onClick={handleCheckCourses}`)
           .replace(/onClick={\(\) => handleCheckSchedule\(\)}/g, `onClick={handleCheckSchedule}`)
           .replace(/onClick={\(\) => handleCreateAssignment\(\)}/g, `onClick={handleCreateAssignment}`);
 
         try {
-          // Use JsxParser with any casting for components
+          // Use JsxParser with explicit type suppression due to library compatibility
           return (
             <div className="agent-response-content">
               <JsxParser
                 jsx={processedContent}
                 components={{
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   Typography: Typography as any,
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   Button: Button as any,
                 }}
                 bindings={{

@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { useRouter } from 'next/navigation';
@@ -247,7 +246,7 @@ export default function Signup() {
           <div className="mt-6 p-4 bg-yellow-100 border-2 border-yellow-400 rounded-lg">
             <div className="text-center text-yellow-800">
               <p className="font-bold text-sm mb-2">🔓 DEVELOPMENT MODE</p>
-              <p className="text-xs">Use any email with 'test' in it to bypass signup</p>
+              <p className="text-xs">Use any email with &apos;test&apos; in it to bypass signup</p>
               <p className="text-xs font-mono">Example: yourname@test.com</p>
             </div>
           </div>

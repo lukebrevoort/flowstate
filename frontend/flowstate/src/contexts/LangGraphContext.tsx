@@ -192,7 +192,7 @@ export const LangGraphProvider: React.FC<LangGraphProviderProps> = ({ children }
                   // Don't call onComplete here, wait for [DONE]
                 }
                 
-              } catch (parseError) {
+              } catch {
                 console.warn('Failed to parse streaming data:', data);
               }
             }
@@ -211,6 +211,7 @@ export const LangGraphProvider: React.FC<LangGraphProviderProps> = ({ children }
   const getThreadHistory = async (threadId: string): Promise<LangGraphMessage[]> => {
     // For now, return empty array since we're using stateless chat
     // In the future, you could implement message history retrieval from your backend
+    console.log('Getting thread history for:', threadId); // Keep threadId for future use
     return [];
   };
 

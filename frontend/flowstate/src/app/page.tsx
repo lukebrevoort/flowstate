@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { motion } from "framer-motion";
 
 export default function Home() {
@@ -8,7 +9,7 @@ export default function Home() {
     <div className="relative min-h-screen w-full bg-flowstate-bg overflow-hidden">
       <header className="w-full h-[89px] bg-flowstate-header shadow-header flex items-center justify-between px-[100px] max-lg:px-[50px] max-sm:px-5">
         <div className="flex items-center gap-[10px]">
-        <a href="/" aria-label="Go to Chat">
+        <Link href="/" aria-label="Go to Chat">
           <Image
             src="/flowstate-main-logo.png"
             alt="FlowState Logo"
@@ -17,7 +18,7 @@ export default function Home() {
             className="w-[50px] h-[50px] max-sm:w-[50px] max-sm:h-[50px]"
             priority
           />
-        </a>
+        </Link>
           <motion.div
             initial={{ opacity: 0, x: -40 }}
             animate={{ opacity: 1, x: 0 }}

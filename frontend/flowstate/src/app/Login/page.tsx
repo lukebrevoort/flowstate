@@ -136,7 +136,7 @@ export default function Login() {
 
             {/* Sign up link */}
             <div className="absolute right-5 top-[65px] text-[20px] max-sm:static max-sm:text-center max-sm:mb-5">
-              <span>Don't have an account? </span>
+              <span>Don&apos;t have an account? </span>
               <Link
                 href="/Signup"
                 className="font-bold cursor-pointer hover:text-flowstate-accent transition-colors"

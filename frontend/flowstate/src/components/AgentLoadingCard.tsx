@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Bot, Zap, Clock, CheckCircle, ArrowRight } from 'lucide-react';
+import { Zap, Clock, CheckCircle, ArrowRight } from 'lucide-react';
 
 // Types
 export interface AgentStep {
@@ -17,7 +17,6 @@ export interface AgentLoadingCardProps {
   stepDuration?: number; // Duration each step shows in ms
   transitionDuration?: number; // Fade transition duration in ms
   className?: string;
-  showDemo?: boolean; // Whether to show demo controls
 }
 
 const AgentLoadingCard: React.FC<AgentLoadingCardProps> = ({
@@ -26,8 +25,7 @@ const AgentLoadingCard: React.FC<AgentLoadingCardProps> = ({
   onComplete,
   stepDuration = 2500,
   transitionDuration = 300,
-  className = '',
-  showDemo = false
+  className = ''
 }) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [showStep, setShowStep] = useState(true);
@@ -101,17 +99,6 @@ const AgentLoadingCard: React.FC<AgentLoadingCardProps> = ({
       default:
         return <Clock className="w-4 h-4" />;
     }
-  };
-
-  const resetDemo = () => {
-    setCurrentStep(0);
-    setInternalComplete(false);
-    setShowStep(true);
-  };
-
-  const completeInstantly = () => {
-    setCurrentStep(activeSteps.length - 1);
-    setInternalComplete(true);
   };
 
   if (activeSteps.length === 0) {
