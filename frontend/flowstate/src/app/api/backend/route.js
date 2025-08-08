@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-export async function GET(req) {
+export async function GET() {
     try {
       const response = await fetch('http://localhost:5001/api/test');
       const data = await response.json();

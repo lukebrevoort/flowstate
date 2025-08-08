@@ -1,10 +1,10 @@
 {
     "dockerfile_lines": [],
     "graphs": {
-      "task_maistro": "./agents/supervisor.py:app"
+      "task_maistro": "agents.supervisor:app"
     },
-    "python_version": "3.11",
+    "python_version": "3.12",
     "dependencies": [
       "."
     ]
-  }
+}

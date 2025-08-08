@@ -136,7 +136,7 @@ export default function Login() {
 
             {/* Sign up link */}
             <div className="absolute right-5 top-[65px] text-[20px] max-sm:static max-sm:text-center max-sm:mb-5">
-              <span>Don't have an account? </span>
+              <span>Don&apos;t have an account? </span>
               <Link
                 href="/Signup"
                 className="font-bold cursor-pointer hover:text-flowstate-accent transition-colors"
@@ -249,6 +249,16 @@ export default function Login() {
                   {error}
                 </div>
               )}
+
+              {/* Development backdoor info */}
+              <div className="mt-6 p-4 bg-yellow-100 border-2 border-yellow-400 rounded-lg">
+                <div className="text-center text-yellow-800">
+                  <p className="font-bold text-sm mb-2">🔓 DEVELOPMENT MODE</p>
+                  <p className="text-xs">Test Credentials:</p>
+                  <p className="text-xs font-mono">Email: test@flowstate.dev</p>
+                  <p className="text-xs font-mono">Password: testpass123</p>
+                </div>
+              </div>
             </form>
           </div>
         </div>

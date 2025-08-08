@@ -38,12 +38,16 @@ logger = logging.getLogger(__name__)
 
 # Get an authenticated calendar service
 # This happens once when the module is imported
+
+# Currently, avoiding OAuth flow until deployment is ready
+"""
 try:
     service = get_calendar_service()
     logger.info("Successfully initialized calendar service")
 except Exception as e:
     logger.error(f"Failed to initialize calendar service: {str(e)}")
     service = None
+"""
 
 
 @dataclass

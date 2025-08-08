@@ -3,3 +3,4 @@ OAuthClientIDJSON.json
 token.pickle
 docker-compose.yml
 token.json
+.env.local

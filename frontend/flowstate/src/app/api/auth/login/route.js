@@ -1,11 +1,27 @@
 import { NextResponse } from 'next/server';
+import config from '@/lib/config';
 
 export async function POST(request) {
   try {
     const body = await request.json();
     
-    // Forward request to backend
-    const response = await fetch('http://localhost:5001/api/auth/login', {
+    // BACKDOOR FOR TESTING - Handle test credentials
+    if (body.email === 'test@flowstate.dev' && body.password === 'testpass123') {
+      const mockResponse = {
+        token: 'mock-test-token-123',
+        user: {
+          id: 'test-user-123',
+          name: 'Test User',
+          email: 'test@flowstate.dev',
+          notion_connected: false,
+          google_calendar_connected: false,
+        }
+      };
+      return NextResponse.json(mockResponse, { status: 200 });
+    }
+    
+    // Forward request to deployed backend
+    const response = await fetch(`${config.apiUrl}/api/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

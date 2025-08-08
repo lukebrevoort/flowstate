@@ -10,7 +10,7 @@
   --flowstate-dark: #331c16;
 }
 
-@theme inline {
+:root {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
@@ -46,6 +46,21 @@ body {
   }
   .text-flowstate-bg {
     color: var(--flowstate-bg);
+  }
+  .text-flowstate-header {
+    color: var(--flowstate-header);
+  }
+  .text-flowstate-accent {
+    color: var(--flowstate-accent);
+  }
+  .text-flowstate-primary {
+    color: var(--flowstate-dark);
+  }
+  .text-flowstate-dark {
+    color: var(--flowstate-dark);
+  }
+  .text-flowstate-body {
+    color: #333333;
   }
   .shadow-header {
     box-shadow: 0px 4px 4px 0px rgba(34, 45, 28, 0.15);

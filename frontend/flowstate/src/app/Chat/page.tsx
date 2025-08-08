@@ -6,6 +6,10 @@ import { useState, FormEvent, useEffect, useRef } from "react";
 import { useAuth } from '@/contexts/AuthContext';
 import { useLangGraph } from '@/contexts/LangGraphContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import JsxParser from 'react-jsx-parser';
+import Typography from '@/components/Typography';
+import Button from '@/components/Button';
+import AgentLoadingCard, { AgentStep } from '@/components/AgentLoadingCard';
 
 // Message type definition
 type Message = {
@@ -15,7 +19,7 @@ type Message = {
 };
 
 // Function to convert LangGraph messages to chat format
-const convertLangGraphMessages = (messages: any[]) => {
+const convertLangGraphMessages = (messages: Array<{type: string; content: string | object}>) => {
   return messages.map(msg => ({
     role: msg.type === 'user' ? 'user' : 
           msg.type === 'assistant' ? 'assistant' : 
@@ -30,10 +34,13 @@ function Chat() {
   const [isLoading, setIsLoading] = useState(false);
   const [threadId, setThreadId] = useState<string | null>(null);
   const { user } = useAuth();
+  // For Streaming Updates to User
+  const [steps, setSteps] = useState<AgentStep[]>([]);
+  const [isComplete, setIsComplete] = useState(false);
+
   const { 
     createThread, 
-    sendMessage, 
-    streamResponse, 
+    sendMessageWithStreaming, 
     getThreadHistory, 
     resetThread,
     loading: langGraphLoading,
@@ -41,6 +48,91 @@ function Chat() {
     isConnected 
   } = useLangGraph();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+
+  // Add step to agent loading card
+  const addStep = (step: AgentStep) => {
+  setSteps(prev => [...prev, step]);
+};
+  // Clear steps when conversation is reset
+  const handleComplete = () => {
+    setIsComplete(true);
+  };
+
+  // Handler functions for interactive buttons in agent responses
+  const handleCheckAssignments = () => {
+    // Add your logic for checking current assignments
+    console.log('Check assignments clicked');
+    // You can trigger a new message or API call here
+    if (threadId && isConnected) {
+      handleSubmitMessage("What assignments do I have coming up?");
+    }
+  };
+
+  const handleCheckCourses = () => {
+    // Add your logic for checking/reviewing courses
+    console.log('Check courses clicked');
+    if (threadId && isConnected) {
+      handleSubmitMessage("Show me my courses");
+    }
+  };
+
+  const handleCheckSchedule = () => {
+    // Add your logic for checking the schedule
+    console.log('Check schedule clicked');
+    if (threadId && isConnected) {
+      handleSubmitMessage("What does my schedule look like for this week?");
+    }
+  };
+
+  // Helper function to send a message programmatically
+  const handleSubmitMessage = async (messageText: string) => {
+    if (!messageText.trim() || isLoading || !threadId || !isConnected) return;
+    
+    setIsLoading(true);
+    
+    // Reset agent steps and completion state for new request
+    setSteps([]);
+    setIsComplete(false);
+    
+    // Add user message to chat
+    setChatHistory(prev => [...prev, { role: 'user', content: messageText }]);
+    
+    try {
+      // Use streaming with AgentLoadingCard
+      await sendMessageWithStreaming(
+        threadId, 
+        messageText,
+        // onStep callback - adds steps to the loading card
+        (step: AgentStep) => {
+          console.log('Adding step to AgentLoadingCard:', step); // Debug log
+          addStep(step);
+        },
+        // onComplete callback - handle final response from streaming
+        (response: string) => {
+          console.log('Chat received final response:', response); // Debug log
+          // Add response to chat if it's not empty
+          if (response && response.trim()) {
+            setChatHistory(prev => [...prev, { 
+              role: 'assistant', 
+              content: response
+            }]);
+          }
+          handleComplete();
+        }
+      );
+      
+    } catch (error) {
+      console.error('Chat error:', error);
+      setChatHistory(prev => [...prev, { 
+        role: 'system', 
+        content: `Error: ${error instanceof Error ? error.message : 'Failed to process your request'}`
+      }]);
+      setIsComplete(true); // Mark as complete even on error
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Scroll to bottom of messages
   const scrollToBottom = () => {
@@ -91,14 +183,18 @@ function Chat() {
     try {
       setIsLoading(true);
       setChatHistory([]);
+      setSteps([]); // Reset agent steps
+      setIsComplete(false); // Reset completion state
       const newThreadId = await resetThread();
       setThreadId(newThreadId);
       setIsLoading(false);
     } catch (error) {
       console.error('Failed to create new conversation:', error);
+      setIsLoading(false);
     }
   };
 
+  // Update the handleSubmit function to use streaming
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!message.trim() || isLoading || !threadId || !isConnected) return;
@@ -107,54 +203,180 @@ function Chat() {
     setMessage(""); // Clear input immediately
     setIsLoading(true);
     
+    // Reset agent steps and completion state for new request
+    setSteps([]);
+    setIsComplete(false);
+    
     // Add user message to chat
     setChatHistory(prev => [...prev, { role: 'user', content: userMessage }]);
     
-    // Define assistantMessageId outside try block to make it accessible in catch block
-    const assistantMessageId = Date.now().toString();
-    
     try {
-      // Add a temporary assistant message that will be updated as we receive chunks
-      setChatHistory(prev => [...prev, { 
-        role: 'assistant', 
-        content: '',
-        id: assistantMessageId
-      }]);
-      
-      // Send message to LangGraph backend using the correct format
-      await sendMessage(threadId, userMessage);
-      
-      // Function to handle streaming response updates
-      const handleChunk = (chunk: any) => {
-        if (chunk.type === 'text') {
-          setChatHistory(prev => 
-            prev.map(msg => 
-              msg.id === assistantMessageId 
-                ? { ...msg, content: msg.content + (typeof chunk.content === 'string' ? chunk.content : JSON.stringify(chunk.content)) }
-                : msg
-            )
-          );
-        } else if (chunk.type === 'tool_use') {
-          // For now, we'll just log tool use events, but in the future
-          // we could add special UI components for different tool responses
-          console.log('Tool use:', chunk);
+      // Use streaming with AgentLoadingCard
+      await sendMessageWithStreaming(
+        threadId, 
+        userMessage,
+        // onStep callback - adds steps to the loading card
+        (step: AgentStep) => {
+          console.log('Adding step to AgentLoadingCard:', step); // Debug log
+          addStep(step);
+        },
+        // onComplete callback - handle final response from streaming
+        (response: string) => {
+          console.log('Chat received final response:', response); // Debug log
+          // Add response to chat if it's not empty
+          if (response && response.trim()) {
+            setChatHistory(prev => [...prev, { 
+              role: 'assistant', 
+              content: response
+            }]);
+          }
+          handleComplete();
         }
-      };
-      
-      // Start streaming the response from the LangGraph backend
-      await streamResponse(threadId, handleChunk);
+      );
       
     } catch (error) {
       console.error('Chat error:', error);
-      setChatHistory(prev => [
-        ...prev.filter(msg => msg.id !== assistantMessageId),
-        { 
-          role: 'system', 
-          content: `Error: ${error instanceof Error ? error.message : 'Failed to process your request'}`
-        }
-      ]);
+      setChatHistory(prev => [...prev, { 
+        role: 'system', 
+        content: `Error: ${error instanceof Error ? error.message : 'Failed to process your request'}`
+      }]);
+      setIsComplete(true); // Mark as complete even on error
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Function to render JSX content from agent responses
+  const renderMessageContent = (content: string) => {
+    // Check if the content contains JSX elements (React Fragment or component tags)
+    if (content.includes('<>') || content.includes('<Typography') || content.includes('<Button')) {
+      try {
+        // Replace function calls in onClick handlers with actual functions
+        const processedContent = content
+          .replace(/onClick={\(\) => handleCheckAssignments\(\)}/g, `onClick={handleCheckAssignments}`)
+          .replace(/onClick={\(\) => handleCheckCourses\(\)}/g, `onClick={handleCheckCourses}`)
+          .replace(/onClick={\(\) => handleCheckSchedule\(\)}/g, `onClick={handleCheckSchedule}`)
+          .replace(/onClick={\(\) => handleCreateAssignment\(\)}/g, `onClick={handleCreateAssignment}`);
+
+        try {
+          // Use JsxParser with explicit type suppression due to library compatibility
+          return (
+            <div className="agent-response-content">
+              <JsxParser
+                jsx={processedContent}
+                components={{
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  Typography: Typography as any,
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  Button: Button as any,
+                }}
+                bindings={{
+                  handleCheckAssignments,
+                  handleCheckCourses,
+                  handleCheckSchedule,
+                }}
+              />
+            </div>
+          );
+        } catch (jsxError) {
+          console.warn('JSX parsing failed, attempting manual button parsing:', jsxError);
+          
+          // Custom button parsing for HTML fallback
+          const createClickHandler = (message: string) => () => {
+            if (threadId && isConnected) {
+              handleSubmitMessage(message);
+            }
+          };
+
+          // Parse the content and create interactive buttons
+          const parseAndCreateButtons = (htmlContent: string) => {
+            const buttonRegex = /<button[^>]*>(.*?)<\/button>/g;
+            const buttons: { text: string; message: string }[] = [];
+            let match;
+
+            while ((match = buttonRegex.exec(htmlContent)) !== null) {
+              const buttonText = match[1];
+              let message = "";
+              
+              // Map button text to appropriate messages
+              if (buttonText.toLowerCase().includes('assignment')) {
+                message = "What assignments do I have coming up?";
+              } else if (buttonText.toLowerCase().includes('course')) {
+                message = "Show me my courses";
+              } else if (buttonText.toLowerCase().includes('schedule')) {
+                message = "What does my schedule look like for this week?";
+              } else {
+                message = buttonText; // fallback to button text
+              }
+              
+              buttons.push({ text: buttonText, message });
+            }
+
+            // Remove button tags from content and replace with placeholders
+            let contentWithoutButtons = htmlContent.replace(buttonRegex, '|||BUTTON|||');
+            
+            // Convert remaining HTML to JSX-like structure
+            contentWithoutButtons = contentWithoutButtons
+              .replace(/<Typography variant="([^"]*)" className="([^"]*)">/g, '<div className="$2">')
+              .replace(/<Typography variant="([^"]*)">/g, '<div>')
+              .replace(/<\/Typography>/g, '</div>')
+              .replace(/<>/g, '<div>')
+              .replace(/<\/>/g, '</div>');
+
+            // Split content by button placeholders and create React elements
+            const parts = contentWithoutButtons.split('|||BUTTON|||');
+            const elements: React.ReactNode[] = [];
+
+            parts.forEach((part, index) => {
+              if (part.trim()) {
+                elements.push(
+                  <div 
+                    key={`content-${index}`}
+                    dangerouslySetInnerHTML={{ __html: part }}
+                  />
+                );
+              }
+              
+              // Add button if there's one at this position
+              if (buttons[index]) {
+                elements.push(
+                  <button
+                    key={`button-${index}`}
+                    onClick={createClickHandler(buttons[index].message)}
+                    className="px-4 py-2 rounded-md font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 bg-flowstate-accent text-white hover:bg-opacity-90 focus:ring-flowstate-accent mx-1 my-1"
+                  >
+                    {buttons[index].text}
+                  </button>
+                );
+              }
+            });
+
+            return <div className="agent-response-content">{elements}</div>;
+          };
+
+          return parseAndCreateButtons(content);
+        }
+      } catch (error) {
+        console.error('Error processing JSX content:', error);
+        // Final fallback to plain text
+        return (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-md">
+            <Typography variant="p" className="text-red-600 mb-2">
+              Error rendering response
+            </Typography>
+            <Typography variant="p" className="text-gray-600 text-sm">
+              {content}
+            </Typography>
+          </div>
+        );
+      }
+    } else {
+      // Regular text content
+      return (
+        <Typography variant="p" className="text-gray-800">
+          {content}
+        </Typography>
+      );
     }
   };
 
@@ -177,7 +399,11 @@ function Chat() {
               : 'mr-auto'
         }`}
       >
-        {msg.content || (msg.role === 'assistant' && isLoading ? '...' : '')}
+        {msg.role === 'assistant' ? (
+          renderMessageContent(msg.content || (isLoading ? '...' : ''))
+        ) : (
+          msg.content || ''
+        )}
       </div>
     ));
   };
@@ -218,6 +444,59 @@ function Chat() {
 
   return (
     <div className="min-h-screen w-full bg-flowstate-bg flex flex-col">
+      <style jsx>{`
+        .agent-response-content {
+          color: #1E1E1E;
+        }
+        
+        .agent-response-content h2 {
+          font-size: 1.5rem;
+          font-weight: bold;
+          margin-bottom: 0.75rem;
+          color: #1E1E1E;
+        }
+        
+        .agent-response-content h3 {
+          font-size: 1.25rem;
+          font-weight: 600;
+          margin-bottom: 0.5rem;
+          margin-top: 1rem;
+          color: #1E1E1E;
+        }
+        
+        .agent-response-content p {
+          margin-bottom: 0.75rem;
+          line-height: 1.6;
+          color: #1E1E1E;
+        }
+        
+        .agent-response-content ul {
+          margin-bottom: 0.75rem;
+          padding-left: 1.25rem;
+        }
+        
+        .agent-response-content li {
+          margin-bottom: 0.25rem;
+          color: #1E1E1E;
+        }
+        
+        .agent-response-content .suggestion-box {
+          background-color: rgba(139, 107, 89, 0.1);
+          padding: 1rem;
+          border-radius: 12px;
+          margin: 1rem 0;
+        }
+        
+        .agent-response-content .help-text {
+          font-style: italic;
+          color: #665F5D;
+          margin-top: 1rem;
+        }
+        
+        .agent-response-content .assignment-check-container {
+          max-width: 100%;
+        }
+      `}</style>
       {/* Header */}
       <header className="w-full h-[89px] bg-flowstate-header shadow-header flex items-center justify-between px-[100px] max-lg:px-10 max-sm:px-5 relative">
         <div className="flex items-center gap-[10px]">
@@ -334,10 +613,21 @@ function Chat() {
             </>
           )}
           
-          {isLoading && !chatHistory.some(msg => msg.role === 'assistant' && msg.id) && (
-            <div className="flex justify-center items-center my-4">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-flowstate-accent"></div>
-            </div>
+          {/* Show AgentLoadingCard when processing a request */}
+          {isLoading && (
+            <>
+              <AgentLoadingCard 
+                steps={steps}
+                isComplete={isComplete}
+                onComplete={() => {
+                  console.log('Agent processing completed!');
+                  // This will be called when the loading card finishes its display
+                }}
+                stepDuration={2500} // 2.5 seconds per step
+                className="my-6"
+              />
+              <div ref={messagesEndRef} />
+            </>
           )}
         </div>
 

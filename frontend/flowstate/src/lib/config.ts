@@ -12,8 +12,8 @@ const devConfig: Config = {
 
 // Production configuration
 const prodConfig: Config = {
-  apiUrl: process.env.NEXT_PUBLIC_API_URL || 'https://api.flowstate.app',
-  langGraphUrl: process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'https://langgraph.flowstate.app',
+  apiUrl: process.env.NEXT_PUBLIC_API_URL || 'https://flowstate-xqoe.onrender.com',
+  langGraphUrl: process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'https://flowstate-xqoe.onrender.com',
 };
 
 // Determine which configuration to use based on environment

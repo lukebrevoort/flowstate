@@ -1,9 +1,9 @@
 "use client"
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-// Define proper user interface
+// Update User interface to match backend response
 interface User {
-    id: number;
+    id: string; // Changed from number to string to match backend UUID
     name: string;
     email: string;
     notion_connected?: boolean;
@@ -41,14 +41,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Check if user is already logged in
         const checkAuthStatus = async () => {
             try {
-                // Get token from localStorage
                 const token = localStorage.getItem('accessToken');
                 if (!token) {
                     setLoading(false);
                     return;
                 }
                 
-                // Validate token with backend
+                // BACKDOOR FOR TESTING - Check for mock token
+                if (token === 'mock-test-token-123') {
+                    const mockUser: User = {
+                        id: 'test-user-123',
+                        name: 'Test User',
+                        email: 'test@flowstate.dev',
+                        notion_connected: false,
+                        google_calendar_connected: false,
+                    };
+                    setUser(mockUser);
+                    setLoading(false);
+                    return;
+                }
+                
                 const response = await fetch('/api/auth/user', {
                     headers: {
                         'Authorization': `Bearer ${token}`
@@ -59,7 +71,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                     const userData = await response.json();
                     setUser(userData);
                 } else {
-                    // If token is invalid, remove it
                     localStorage.removeItem('accessToken');
                 }
             } catch (error) {
@@ -76,6 +87,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const login = async (email: string, password: string) => {
         setLoading(true);
         try {
+            // BACKDOOR FOR TESTING - Remove this when database is available
+            if (email === 'test@flowstate.dev' && password === 'testpass123') {
+                // Mock user data for testing
+                const mockUser: User = {
+                    id: 'test-user-123',
+                    name: 'Test User',
+                    email: 'test@flowstate.dev',
+                    notion_connected: false,
+                    google_calendar_connected: false,
+                };
+                
+                // Set mock token
+                localStorage.setItem('accessToken', 'mock-test-token-123');
+                setUser(mockUser);
+                setLoading(false);
+                return;
+            }
+            
             const response = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: {
@@ -103,6 +132,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const signup = async (name: string, email: string, password: string) => {
         setLoading(true);
         try {
+            // BACKDOOR FOR TESTING - Allow test signup without database
+            if (email === 'test@flowstate.dev' || email.includes('test')) {
+                const mockUser: User = {
+                    id: 'test-user-123',
+                    name: name || 'Test User',
+                    email: email,
+                    notion_connected: false,
+                    google_calendar_connected: false,
+                };
+                
+                localStorage.setItem('accessToken', 'mock-test-token-123');
+                setUser(mockUser);
+                setLoading(false);
+                return;
+            }
+            
             const response = await fetch('/api/auth/signup', {
                 method: 'POST',
                 headers: {
