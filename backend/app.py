@@ -93,11 +93,12 @@ async def test_auth(current_user: User = Depends(get_current_user)):
 
 # Your existing auth endpoints
 @app.post("/api/auth/signup", response_model=dict)
-async def signup(user_data: UserCreate, db: Session = Depends(get_db)):
+async def signup(user_data: UserCreate):
+    from services.database import get_database_service
+    
     try:
         # BACKDOOR FOR TESTING - Allow test signup without database
         if user_data.email == 'test@flowstate.dev' or 'test' in user_data.email:
-            # Return mock user data for testing
             access_token = "mock-test-token-123"
             return {
                 "token": access_token,
@@ -111,34 +112,25 @@ async def signup(user_data: UserCreate, db: Session = Depends(get_db)):
                 }
             }
         
-        db_user = db.query(User).filter(User.email == user_data.email).first()
-        if db_user:
+        db_service = get_database_service()
+        
+        # Check if user already exists
+        existing_user = await db_service.get_user_by_email(user_data.email)
+        if existing_user:
             raise HTTPException(status_code=400, detail="Email already registered")
         
-        hashed_password = get_password_hash(user_data.password)
-        new_user = User(
-            email=user_data.email,
-            name=user_data.name,
-            hashed_password=hashed_password
-        )
+        # Create new user
+        new_user_data = await db_service.create_user(user_data)
         
-        db.add(new_user)
-        db.commit()
-        db.refresh(new_user)
-        
-        access_token = create_access_token(data={"sub": new_user.id})
+        # Create access token
+        access_token = create_access_token(data={"sub": new_user_data["id"]})
         
         return {
             "token": access_token,
             "token_type": "bearer",
-            "user": {
-                "id": new_user.id,
-                "name": new_user.name,
-                "email": new_user.email,
-                "notion_connected": new_user.notion_connected,
-                "google_calendar_connected": new_user.google_calendar_connected
-            }
+            "user": new_user_data
         }
+        
     except Exception as e:
         if "test" in user_data.email.lower():
             # Fallback for test users if database fails
@@ -153,10 +145,12 @@ async def signup(user_data: UserCreate, db: Session = Depends(get_db)):
                     "google_calendar_connected": False
                 }
             }
-        raise e
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/api/auth/login", response_model=dict)
-async def login(user_data: UserLogin, db: Session = Depends(get_db)):
+async def login(user_data: UserLogin):
+    from services.database import get_database_service
+    
     try:
         # BACKDOOR FOR TESTING - Allow test login without database
         if user_data.email == 'test@flowstate.dev' and user_data.password == 'testpass123':
@@ -175,48 +169,36 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
         
         start_time = time.time()
         
-        # Optimize database query with specific fields
-        user = db.query(User).filter(User.email == user_data.email).first()
-        db_time = time.time() - start_time
+        db_service = get_database_service()
         
-        if not user:
-            # Still run password hashing to prevent timing attacks
-            get_password_hash("dummy_password")
+        # Authenticate user with database service
+        user_data_dict = await db_service.authenticate_user(user_data)
+        
+        if not user_data_dict:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect email or password",
                 headers={"WWW-Authenticate": "Bearer"},
             )
         
-        hash_start = time.time()
-        if not verify_password(user_data.password, user.hashed_password):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect email or password",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        hash_time = time.time() - hash_start
-        
-        token_start = time.time()
-        access_token = create_access_token(data={"sub": user.id})
-        token_time = time.time() - token_start
+        # Create access token
+        access_token = create_access_token(data={"sub": user_data_dict["id"]})
         
         total_time = time.time() - start_time
-        
-        # Log timing for debugging
-        print(f"Login timing - DB: {db_time:.3f}s, Hash: {hash_time:.3f}s, Token: {token_time:.3f}s, Total: {total_time:.3f}s")
+        print(f"Login timing - Total: {total_time:.3f}s")
         
         return {
             "token": access_token,
             "token_type": "bearer",
             "user": {
-                "id": user.id,
-                "name": user.name,
-                "email": user.email,
-                "notion_connected": user.notion_connected,
-                "google_calendar_connected": user.google_calendar_connected
+                "id": user_data_dict["id"],
+                "name": user_data_dict["name"],
+                "email": user_data_dict["email"],
+                "notion_connected": user_data_dict["notion_connected"],
+                "google_calendar_connected": user_data_dict["google_calendar_connected"]
             }
         }
+        
     except Exception as e:
         if user_data.email == 'test@flowstate.dev':
             # Fallback for test user if database fails
@@ -231,7 +213,7 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
                     "google_calendar_connected": False
                 }
             }
-        raise e
+        raise HTTPException(status_code=401, detail="Authentication failed")
 
 @app.get("/api/auth/user", response_model=UserResponse)
 async def get_user(current_user: User = Depends(get_current_user)):

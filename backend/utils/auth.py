@@ -1,7 +1,7 @@
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Dict, Any
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 import os
@@ -10,8 +10,8 @@ from db import get_db
 from models.user import User
 import uuid
 from functools import lru_cache
-from typing import Optional
 import time
+import asyncio
 
 # Security settings - OPTIMIZED bcrypt rounds
 pwd_context = CryptContext(
@@ -101,3 +101,59 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
     if user is None:
         raise credentials_exception
     return user
+
+# Async version for database service integration
+async def get_current_user_async(token: str) -> Optional[Dict[str, Any]]:
+    """Get current user using the new database service"""
+    try:
+        # Import here to avoid circular imports
+        from services.database import get_database_service
+        
+        # Handle test token
+        if token == "mock-test-token-123":
+            return {
+                "id": "test-user-123",
+                "name": "Test User",
+                "email": "test@flowstate.dev",
+                "notion_connected": False,
+                "google_calendar_connected": False
+            }
+        
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            return None
+            
+        db_service = get_database_service()
+        user_data = await db_service.get_user_by_id(user_id)
+        return user_data
+        
+    except JWTError:
+        return None
+    except Exception as e:
+        print(f"Error getting current user: {e}")
+        return None
+
+class UserDict:
+    """User object that can be created from dictionary data"""
+    
+    def __init__(self, user_data: Dict[str, Any]):
+        self.id = user_data.get("id")
+        self.name = user_data.get("name")
+        self.email = user_data.get("email")
+        self.notion_connected = user_data.get("notion_connected", False)
+        self.google_calendar_connected = user_data.get("google_calendar_connected", False)
+
+# New dependency for async endpoints
+async def get_current_user_dependency(token: str = Depends(oauth2_scheme)) -> UserDict:
+    """FastAPI dependency for getting current user with database service"""
+    user_data = await get_current_user_async(token)
+    
+    if not user_data:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    return UserDict(user_data)

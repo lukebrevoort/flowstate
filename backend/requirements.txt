@@ -8,9 +8,9 @@ trustcall
 # FastAPI - Performance optimized
 fastapi>=0.110.0
 uvicorn[standard]>=0.27.0
-starlette>=0.36.0
-pydantic>=2.0.0
-pydantic[email]>=2.0.0
+starlette>=0.38.6
+pydantic>=2.7.4
+pydantic[email]>=2.7.4
 
 # Database with connection pooling
 sqlalchemy==2.0.23
@@ -60,8 +60,12 @@ python-dotenv==1.0.0
 # Utilities
 tqdm==4.66.1
 numpy==1.26.2
-httpx==0.25.2
+httpx>=0.25.2
 
 # Performance and optimization - FIXED VERSION CONFLICT
 python-multipart==0.0.6
 orjson>=3.10.1  # ✅ Updated to satisfy langgraph-sdk requirement
+
+# Supabase integration
+supabase>=2.4.0
+postgrest-py>=0.13.0
