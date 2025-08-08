@@ -66,6 +66,4 @@ httpx>=0.25.2
 python-multipart==0.0.6
 orjson>=3.10.1  # ✅ Updated to satisfy langgraph-sdk requirement
 
-# Supabase integration
-supabase>=2.4.0
-postgrest-py>=0.13.0
+# Supabase integration (using custom HTTP client to avoid conflicts)

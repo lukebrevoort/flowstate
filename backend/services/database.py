@@ -27,11 +27,7 @@ class DatabaseService:
         if self.use_supabase:
             try:
                 self.supabase_client = get_supabase_client()
-                if test_connection():
-                    print("✅ Database service initialized with Supabase")
-                else:
-                    print("⚠️  Falling back to SQLAlchemy")
-                    self.use_supabase = False
+                print("✅ Database service initialized with Supabase")
             except Exception as e:
                 print(f"⚠️  Supabase initialization failed: {e}")
                 print("🔧 Falling back to SQLAlchemy")
@@ -84,30 +80,25 @@ class DatabaseService:
         """Create user using Supabase Auth and Database"""
         try:
             # Use Supabase Auth for authentication
-            auth_response = self.supabase_client.auth.sign_up({
-                "email": user_data.email,
-                "password": user_data.password,
-                "options": {
-                    "data": {
-                        "name": user_data.name
-                    }
-                }
-            })
+            auth_response = await self.supabase_client.auth_signup(
+                email=user_data.email,
+                password=user_data.password,
+                user_metadata={"name": user_data.name}
+            )
             
-            if auth_response.user:
-                user_id = auth_response.user.id
+            if auth_response.get("user"):
+                user_id = auth_response["user"]["id"]
                 
                 # Store additional user data in profiles table
                 profile_data = {
                     "id": user_id,
                     "name": user_data.name,
                     "email": user_data.email,
-                    "created_at": datetime.utcnow().isoformat(),
                     "notion_connected": False,
                     "google_calendar_connected": False
                 }
                 
-                profile_response = self.supabase_client.table("profiles").insert(profile_data).execute()
+                await self.supabase_client.query("profiles", "POST", data=profile_data)
                 
                 return {
                     "id": user_id,
@@ -126,26 +117,28 @@ class DatabaseService:
     async def _authenticate_user_supabase(self, user_data: UserLogin) -> Optional[Dict[str, Any]]:
         """Authenticate user using Supabase Auth"""
         try:
-            auth_response = self.supabase_client.auth.sign_in_with_password({
-                "email": user_data.email,
-                "password": user_data.password
-            })
+            auth_response = await self.supabase_client.auth_signin(
+                email=user_data.email,
+                password=user_data.password
+            )
             
-            if auth_response.user:
-                user_id = auth_response.user.id
+            if auth_response.get("user"):
+                user_id = auth_response["user"]["id"]
                 
                 # Get additional user data from profiles table
-                profile_response = self.supabase_client.table("profiles").select("*").eq("id", user_id).execute()
+                profile_response = await self.supabase_client.query(
+                    "profiles", "GET", filters={"id": user_id}
+                )
                 
-                if profile_response.data:
-                    profile = profile_response.data[0]
+                if profile_response:
+                    profile = profile_response[0] if isinstance(profile_response, list) else profile_response
                     return {
                         "id": user_id,
                         "name": profile.get("name"),
                         "email": profile.get("email"),
                         "notion_connected": profile.get("notion_connected", False),
                         "google_calendar_connected": profile.get("google_calendar_connected", False),
-                        "access_token": auth_response.session.access_token if auth_response.session else None
+                        "access_token": auth_response.get("access_token")
                     }
             
             return None
@@ -157,10 +150,12 @@ class DatabaseService:
     async def _get_user_by_id_supabase(self, user_id: str) -> Optional[Dict[str, Any]]:
         """Get user by ID from Supabase"""
         try:
-            response = self.supabase_client.table("profiles").select("*").eq("id", user_id).execute()
+            response = await self.supabase_client.query(
+                "profiles", "GET", filters={"id": user_id}
+            )
             
-            if response.data:
-                profile = response.data[0]
+            if response and isinstance(response, list) and len(response) > 0:
+                profile = response[0]
                 return {
                     "id": profile.get("id"),
                     "name": profile.get("name"),
@@ -178,10 +173,12 @@ class DatabaseService:
     async def _get_user_by_email_supabase(self, email: str) -> Optional[Dict[str, Any]]:
         """Get user by email from Supabase"""
         try:
-            response = self.supabase_client.table("profiles").select("*").eq("email", email).execute()
+            response = await self.supabase_client.query(
+                "profiles", "GET", filters={"email": email}
+            )
             
-            if response.data:
-                profile = response.data[0]
+            if response and isinstance(response, list) and len(response) > 0:
+                profile = response[0]
                 return {
                     "id": profile.get("id"),
                     "name": profile.get("name"),
@@ -199,8 +196,10 @@ class DatabaseService:
     async def _update_user_preferences_supabase(self, user_id: str, preferences: Dict[str, Any]) -> bool:
         """Update user preferences in Supabase"""
         try:
-            response = self.supabase_client.table("profiles").update(preferences).eq("id", user_id).execute()
-            return len(response.data) > 0
+            response = await self.supabase_client.query(
+                "profiles", "PATCH", data=preferences, filters={"id": user_id}
+            )
+            return response is not None
             
         except Exception as e:
             print(f"Error updating user preferences in Supabase: {e}")
