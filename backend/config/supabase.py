@@ -139,9 +139,10 @@ async def test_connection() -> bool:
             return False
         
         client = get_supabase_client()
-        # Try a simple query to test connection
-        await client.query("profiles", "GET", filters={"id": "test"})
+        # Try a simple query to test connection - just get the first few rows without filters
+        result = await client.query("profiles", "GET")
         print("✅ Supabase connection successful")
+        print(f"   Found {len(result) if isinstance(result, list) else 'unknown'} profiles in database")
         return True
     except Exception as e:
         print(f"❌ Supabase connection failed: {e}")
