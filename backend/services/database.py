@@ -23,10 +23,12 @@ class DatabaseService:
     def __init__(self):
         self.use_supabase = self._should_use_supabase()
         self.supabase_client = None
+        self.supabase_service_client = None
         
         if self.use_supabase:
             try:
                 self.supabase_client = get_supabase_client()
+                self.supabase_service_client = get_supabase_service_client()
                 print("✅ Database service initialized with Supabase")
             except Exception as e:
                 print(f"⚠️  Supabase initialization failed: {e}")
@@ -86,27 +88,52 @@ class DatabaseService:
                 user_metadata={"name": user_data.name}
             )
             
-            if auth_response.get("user"):
-                user_id = auth_response["user"]["id"]
+            # The auth response IS the user object in Supabase
+            if auth_response and auth_response.get("id"):
+                user_id = auth_response["id"]
                 
-                # Store additional user data in profiles table
-                profile_data = {
-                    "id": user_id,
-                    "name": user_data.name,
-                    "email": user_data.email,
-                    "notion_connected": False,
-                    "google_calendar_connected": False
-                }
+                # The profile should be automatically created by the trigger function
+                # Let's wait a moment and then verify the profile was created
+                import asyncio
+                await asyncio.sleep(2)  # Give trigger time to execute
                 
-                await self.supabase_client.query("profiles", "POST", data=profile_data)
-                
-                return {
-                    "id": user_id,
-                    "name": user_data.name,
-                    "email": user_data.email,
-                    "notion_connected": False,
-                    "google_calendar_connected": False
-                }
+                # Verify the profile was created by the trigger using service client
+                try:
+                    # Use service client to check if profile exists (bypasses RLS)
+                    profile_response = await self.supabase_service_client.query(
+                        "profiles", "GET", filters={"id": user_id}
+                    )
+                    
+                    if profile_response and isinstance(profile_response, list) and len(profile_response) > 0:
+                        profile = profile_response[0]
+                        print("✅ Profile found after trigger execution")
+                        return {
+                            "id": profile.get("id"),
+                            "name": profile.get("name"),
+                            "email": profile.get("email"),
+                            "notion_connected": profile.get("notion_connected", False),
+                            "google_calendar_connected": profile.get("google_calendar_connected", False)
+                        }
+                    else:
+                        # If trigger didn't work, we need to handle this differently
+                        print("Warning: Profile not auto-created by trigger, this needs to be fixed in Supabase")
+                        return {
+                            "id": user_id,
+                            "name": user_data.name,
+                            "email": user_data.email,
+                            "notion_connected": False,
+                            "google_calendar_connected": False
+                        }
+                except Exception as profile_check_error:
+                    print(f"Profile verification failed: {profile_check_error}")
+                    # Return basic user info even if profile check fails
+                    return {
+                        "id": user_id,
+                        "name": user_data.name,
+                        "email": user_data.email,
+                        "notion_connected": False,
+                        "google_calendar_connected": False
+                    }
             else:
                 raise Exception("Failed to create user in Supabase Auth")
                 
