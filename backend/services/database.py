@@ -152,19 +152,30 @@ class DatabaseService:
             if auth_response.get("user"):
                 user_id = auth_response["user"]["id"]
                 
-                # Get additional user data from profiles table
-                profile_response = await self.supabase_client.query(
+                # Get additional user data from profiles table using service client (bypasses RLS)
+                profile_response = await self.supabase_service_client.query(
                     "profiles", "GET", filters={"id": user_id}
                 )
                 
-                if profile_response:
-                    profile = profile_response[0] if isinstance(profile_response, list) else profile_response
+                if profile_response and isinstance(profile_response, list) and len(profile_response) > 0:
+                    profile = profile_response[0]
                     return {
                         "id": user_id,
                         "name": profile.get("name"),
                         "email": profile.get("email"),
                         "notion_connected": profile.get("notion_connected", False),
                         "google_calendar_connected": profile.get("google_calendar_connected", False),
+                        "access_token": auth_response.get("access_token")
+                    }
+                else:
+                    # If no profile found, return basic user info from auth response
+                    user = auth_response["user"]
+                    return {
+                        "id": user_id,
+                        "name": user.get("user_metadata", {}).get("name", ""),
+                        "email": user.get("email"),
+                        "notion_connected": False,
+                        "google_calendar_connected": False,
                         "access_token": auth_response.get("access_token")
                     }
             
@@ -177,7 +188,8 @@ class DatabaseService:
     async def _get_user_by_id_supabase(self, user_id: str) -> Optional[Dict[str, Any]]:
         """Get user by ID from Supabase"""
         try:
-            response = await self.supabase_client.query(
+            # Use service client to bypass RLS policies
+            response = await self.supabase_service_client.query(
                 "profiles", "GET", filters={"id": user_id}
             )
             
@@ -200,7 +212,8 @@ class DatabaseService:
     async def _get_user_by_email_supabase(self, email: str) -> Optional[Dict[str, Any]]:
         """Get user by email from Supabase"""
         try:
-            response = await self.supabase_client.query(
+            # Use service client to bypass RLS policies
+            response = await self.supabase_service_client.query(
                 "profiles", "GET", filters={"email": email}
             )
             
