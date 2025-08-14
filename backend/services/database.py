@@ -1,80 +1,55 @@
 """
 Database Service Layer
-Handles both local SQLAlchemy operations and Supabase cloud database
+Handles Supabase cloud database operations
 """
 import os
 import uuid
 from typing import Optional, Dict, Any, List
 from datetime import datetime
-from sqlalchemy.orm import Session
-from sqlalchemy.exc import SQLAlchemyError
 
 from config.supabase import get_supabase_client, get_supabase_service_client, test_connection
-from models.user import User, UserCreate, UserLogin, UserResponse
+from models.user import UserCreate, UserLogin, UserResponse
 from utils.auth import get_password_hash, verify_password
-from db import get_db
 
 
 class DatabaseService:
     """
-    Unified database service that can work with both SQLAlchemy and Supabase
+    Database service that uses Supabase for all operations
     """
     
     def __init__(self):
-        self.use_supabase = self._should_use_supabase()
         self.supabase_client = None
         self.supabase_service_client = None
         
-        if self.use_supabase:
-            try:
-                self.supabase_client = get_supabase_client()
-                self.supabase_service_client = get_supabase_service_client()
-                print("✅ Database service initialized with Supabase")
-            except Exception as e:
-                print(f"⚠️  Supabase initialization failed: {e}")
-                print("🔧 Falling back to SQLAlchemy")
-                self.use_supabase = False
-    
-    def _should_use_supabase(self) -> bool:
-        """Determine if we should use Supabase based on environment"""
-        return bool(os.getenv("SUPABASE_URL") and os.getenv("SUPABASE_ANON_KEY"))
+        try:
+            self.supabase_client = get_supabase_client()
+            self.supabase_service_client = get_supabase_service_client()
+            print("✅ Database service initialized with Supabase")
+        except Exception as e:
+            print(f"❌ Supabase initialization failed: {e}")
+            raise Exception("Supabase is required for database operations")
     
     # User Management Methods
     
     async def create_user(self, user_data: UserCreate) -> Dict[str, Any]:
         """Create a new user"""
-        if self.use_supabase:
-            return await self._create_user_supabase(user_data)
-        else:
-            return await self._create_user_sqlalchemy(user_data)
+        return await self._create_user_supabase(user_data)
     
     async def authenticate_user(self, user_data: UserLogin) -> Optional[Dict[str, Any]]:
         """Authenticate user credentials"""
-        if self.use_supabase:
-            return await self._authenticate_user_supabase(user_data)
-        else:
-            return await self._authenticate_user_sqlalchemy(user_data)
+        return await self._authenticate_user_supabase(user_data)
     
     async def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
         """Get user by ID"""
-        if self.use_supabase:
-            return await self._get_user_by_id_supabase(user_id)
-        else:
-            return await self._get_user_by_id_sqlalchemy(user_id)
+        return await self._get_user_by_id_supabase(user_id)
     
     async def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
         """Get user by email"""
-        if self.use_supabase:
-            return await self._get_user_by_email_supabase(email)
-        else:
-            return await self._get_user_by_email_sqlalchemy(email)
+        return await self._get_user_by_email_supabase(email)
     
     async def update_user_preferences(self, user_id: str, preferences: Dict[str, Any]) -> bool:
         """Update user preferences"""
-        if self.use_supabase:
-            return await self._update_user_preferences_supabase(user_id, preferences)
-        else:
-            return await self._update_user_preferences_sqlalchemy(user_id, preferences)
+        return await self._update_user_preferences_supabase(user_id, preferences)
     
     # Supabase Implementation Methods
     
@@ -244,129 +219,6 @@ class DatabaseService:
         except Exception as e:
             print(f"Error updating user preferences in Supabase: {e}")
             return False
-    
-    # SQLAlchemy Implementation Methods (Fallback)
-    
-    async def _create_user_sqlalchemy(self, user_data: UserCreate) -> Dict[str, Any]:
-        """Create user using SQLAlchemy (fallback)"""
-        db_gen = get_db()
-        db = next(db_gen)
-        
-        try:
-            # Check if user exists
-            existing_user = db.query(User).filter(User.email == user_data.email).first()
-            if existing_user:
-                raise Exception("Email already registered")
-            
-            # Create new user
-            hashed_password = get_password_hash(user_data.password)
-            new_user = User(
-                email=user_data.email,
-                name=user_data.name,
-                hashed_password=hashed_password
-            )
-            
-            db.add(new_user)
-            db.commit()
-            db.refresh(new_user)
-            
-            return {
-                "id": new_user.id,
-                "name": new_user.name,
-                "email": new_user.email,
-                "notion_connected": new_user.notion_connected,
-                "google_calendar_connected": new_user.google_calendar_connected
-            }
-            
-        finally:
-            db.close()
-    
-    async def _authenticate_user_sqlalchemy(self, user_data: UserLogin) -> Optional[Dict[str, Any]]:
-        """Authenticate user using SQLAlchemy (fallback)"""
-        db_gen = get_db()
-        db = next(db_gen)
-        
-        try:
-            user = db.query(User).filter(User.email == user_data.email).first()
-            
-            if user and verify_password(user_data.password, user.hashed_password):
-                return {
-                    "id": user.id,
-                    "name": user.name,
-                    "email": user.email,
-                    "notion_connected": user.notion_connected,
-                    "google_calendar_connected": user.google_calendar_connected
-                }
-            
-            return None
-            
-        finally:
-            db.close()
-    
-    async def _get_user_by_id_sqlalchemy(self, user_id: str) -> Optional[Dict[str, Any]]:
-        """Get user by ID using SQLAlchemy (fallback)"""
-        db_gen = get_db()
-        db = next(db_gen)
-        
-        try:
-            user = db.query(User).filter(User.id == user_id).first()
-            
-            if user:
-                return {
-                    "id": user.id,
-                    "name": user.name,
-                    "email": user.email,
-                    "notion_connected": user.notion_connected,
-                    "google_calendar_connected": user.google_calendar_connected
-                }
-            
-            return None
-            
-        finally:
-            db.close()
-    
-    async def _get_user_by_email_sqlalchemy(self, email: str) -> Optional[Dict[str, Any]]:
-        """Get user by email using SQLAlchemy (fallback)"""
-        db_gen = get_db()
-        db = next(db_gen)
-        
-        try:
-            user = db.query(User).filter(User.email == email).first()
-            
-            if user:
-                return {
-                    "id": user.id,
-                    "name": user.name,
-                    "email": user.email,
-                    "notion_connected": user.notion_connected,
-                    "google_calendar_connected": user.google_calendar_connected
-                }
-            
-            return None
-            
-        finally:
-            db.close()
-    
-    async def _update_user_preferences_sqlalchemy(self, user_id: str, preferences: Dict[str, Any]) -> bool:
-        """Update user preferences using SQLAlchemy (fallback)"""
-        db_gen = get_db()
-        db = next(db_gen)
-        
-        try:
-            user = db.query(User).filter(User.id == user_id).first()
-            
-            if user:
-                for key, value in preferences.items():
-                    if hasattr(user, key):
-                        setattr(user, key, value)
-                
-                db.commit()
-                return True
-            
-            return False
-            
-        finally:
-            db.close()
 
 
 # Global database service instance

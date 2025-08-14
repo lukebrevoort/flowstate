@@ -5,9 +5,7 @@ from typing import Optional, Dict, Any
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 import os
-from sqlalchemy.orm import Session
-from db import get_db
-from models.user import User
+from models.user import UserCreate, UserLogin, UserResponse
 import uuid
 from functools import lru_cache
 import time
@@ -41,66 +39,13 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-# User authentication
-def authenticate_user(db: Session, email: str, password: str):
-    user = db.query(User).filter(User.email == email).first()
-    if not user or not verify_password(password, user.hashed_password):
-        return False
-    return user
+# User authentication - OLD SQLALCHEMY FUNCTIONS REMOVED
+# These functions have been replaced by async versions that use the DatabaseService
 
-user_cache = {}
-CACHE_TTL = 300  # 5 minutes
-
-def get_cached_user(user_id: str, db: Session) -> Optional[User]:
-    """Get user from cache or database"""
-    current_time = time.time()
-    
-    # Check cache first
-    if user_id in user_cache:
-        cached_user, timestamp = user_cache[user_id]
-        if current_time - timestamp < CACHE_TTL:
-            return cached_user
-    
-    # Fetch from database
-    user = db.query(User).filter(User.id == user_id).first()
-    if user:
-        user_cache[user_id] = (user, current_time)
-    
-    return user
-
-# Get current user from token
-def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    
-    try:
-        # BACKDOOR FOR TESTING - Handle mock token
-        if token == "mock-test-token-123":
-            # Return a mock user object for testing
-            class MockUser:
-                def __init__(self):
-                    self.id = "test-user-123"
-                    self.name = "Test User"
-                    self.email = "test@flowstate.dev"
-                    self.notion_connected = False
-                    self.google_calendar_connected = False
-            
-            return MockUser()
-        
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-    
-    user = db.query(User).filter(User.id == user_id).first()
-    if user is None:
-        raise credentials_exception
-    return user
+# Legacy functions removed:
+# - authenticate_user(db, email, password) -> use DatabaseService.authenticate_user()
+# - get_cached_user(user_id, db) -> caching now handled in DatabaseService
+# - get_current_user(db, token) -> replaced by get_current_user_dependency(token)
 
 # Async version for database service integration
 async def get_current_user_async(token: str) -> Optional[Dict[str, Any]]:

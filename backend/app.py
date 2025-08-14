@@ -7,7 +7,6 @@ from pydantic import BaseModel, EmailStr
 from typing import Dict, List, Any, Optional
 from langchain_core.messages import HumanMessage
 from langgraph.store.memory import InMemoryStore
-from sqlalchemy.orm import Session
 from fastapi.responses import StreamingResponse
 from agents.supervisor import stream_response, stream_events
 
@@ -27,10 +26,8 @@ except ImportError as e:
     configuration = None
 
 # Import authentication components
-from db import get_db, engine, Base
-import models
-from models.user import User, UserCreate, UserLogin, UserResponse
-from utils.auth import get_password_hash, verify_password, authenticate_user, create_access_token, get_current_user
+from models.user import UserCreate, UserLogin, UserResponse
+from utils.auth import get_password_hash, verify_password, create_access_token, get_current_user_dependency
 
 # Create FastAPI app
 app = FastAPI(title="FlowState API")
@@ -62,11 +59,13 @@ class ChatResponse(BaseModel):
 @app.on_event("startup")
 async def startup_db_client():
     try:
-        Base.metadata.create_all(bind=engine)
-        print("✅ Database initialized successfully")
+        # Test Supabase connection instead of creating SQLAlchemy tables
+        from config.supabase import test_connection
+        await test_connection()
+        print("✅ Supabase connection initialized successfully")
     except Exception as e:
-        print(f"⚠️  Database connection failed: {e}")
-        print("🔧 Running in database-free mode for testing")
+        print(f"⚠️  Supabase connection failed: {e}")
+        print("🔧 Running in fallback mode for testing")
         # Don't raise the exception - let the app continue without database
         pass
 
@@ -88,7 +87,7 @@ async def health_check():
 
 # Test endpoint for debugging
 @app.get("/test-auth")
-async def test_auth(current_user: User = Depends(get_current_user)):
+async def test_auth(current_user = Depends(get_current_user_dependency)):
     return {"message": "Auth working", "user": current_user.email}
 
 # Your existing auth endpoints
@@ -216,11 +215,11 @@ async def login(user_data: UserLogin):
         raise HTTPException(status_code=401, detail="Authentication failed")
 
 @app.get("/api/auth/user", response_model=UserResponse)
-async def get_user(current_user: User = Depends(get_current_user)):
+async def get_user(current_user = Depends(get_current_user_dependency)):
     return current_user
     
 @app.post("/debug-agent")
-async def debug_agent(current_user: User = Depends(get_current_user)):
+async def debug_agent(current_user = Depends(get_current_user_dependency)):
     try:
         if agent_app is None:
             return {"error": "Agent not loaded"}
@@ -259,7 +258,7 @@ async def debug_agent(current_user: User = Depends(get_current_user)):
 
 # Chat endpoint
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest, current_user: User = Depends(get_current_user)):
+async def chat(request: ChatRequest, current_user = Depends(get_current_user_dependency)):
     try:
         print(f"Chat request from user {current_user.email}: {request.message}")
         
@@ -359,7 +358,7 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
         )
     
 @app.post("/api/chat/stream")
-async def stream_chat(request: ChatRequest, current_user: User = Depends(get_current_user)):
+async def stream_chat(request: ChatRequest, current_user = Depends(get_current_user_dependency)):
     user_input = request.message
     session_id = request.session_id or str(uuid.uuid4())
     
@@ -401,7 +400,7 @@ async def stream_chat(request: ChatRequest, current_user: User = Depends(get_cur
     )
 
 @app.post("/api/chat/events")
-async def stream_events_endpoint(request: ChatRequest, current_user: User = Depends(get_current_user)):
+async def stream_events_endpoint(request: ChatRequest, current_user = Depends(get_current_user_dependency)):
     user_input = request.message
     session_id = request.session_id or str(uuid.uuid4())
     

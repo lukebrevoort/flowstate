@@ -1,24 +1,8 @@
-from sqlalchemy import Boolean, Column, String, Integer, DateTime, Index
-from sqlalchemy.sql import func
-from db import Base
+# SQLAlchemy User model removed - now using Supabase
+# The User table is now managed by Supabase with the schema in database/supabase_schema.sql
+
 from pydantic import BaseModel, EmailStr
 import uuid
-
-class User(Base):
-    __tablename__ = "users"
-
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    name = Column(String, index=True)
-    email = Column(String, unique=True, index=True)
-    hashed_password = Column(String)
-    created_at = Column(DateTime, server_default=func.now())
-    is_active = Column(Boolean, default=True)
-    notion_connected = Column(Boolean, default=False)
-    google_calendar_connected = Column(Boolean, default=False)
-
-    __table_args__ = (
-        Index('ix_user_email_active', 'email', 'is_active'),  # ✅ Composite index
-    )
 
 # Pydantic models for request validation
 class UserCreate(BaseModel):
