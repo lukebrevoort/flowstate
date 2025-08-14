@@ -628,7 +628,8 @@ async def stream_response(user_input: str, config: dict):
                 
     except GeneratorExit:
         print("Stream generator was closed early")
-        return
+        # Don't return, let the generator close naturally
+        raise
     except Exception as e:
         print(f"Error in stream_response: {e}")
         # Yield an error message instead of crashing
@@ -697,7 +698,8 @@ async def stream_events(user_input: str, config: dict):
                 
     except GeneratorExit:
         print("Event stream generator was closed early")
-        return
+        # Don't return, let the generator close naturally
+        raise
     except Exception as e:
         print(f"Error in stream_events: {e}")
         yield {

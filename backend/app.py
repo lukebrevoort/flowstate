@@ -379,8 +379,14 @@ async def stream_chat(request: ChatRequest, current_user: User = Depends(get_cur
                 print(f"Streaming chunk: {chunk_json}")  # Debug log
                 yield f"data: {chunk_json}\n\n"
             yield "data: [DONE]\n\n"
+        except GeneratorExit:
+            # Handle client disconnect gracefully
+            print("Client disconnected from stream")
+            return
         except Exception as e:
             print(f"Streaming error: {e}")  # Debug log
+            import traceback
+            traceback.print_exc()
             error_msg = {"type": "error", "content": str(e), "agent": "system"}
             yield f"data: {json.dumps(error_msg)}\n\n"
             yield "data: [DONE]\n\n"
@@ -413,7 +419,14 @@ async def stream_events_endpoint(request: ChatRequest, current_user: User = Depe
             async for event in stream_events(user_input, config):
                 yield f"data: {json.dumps(event)}\n\n"
             yield "data: [DONE]\n\n"
+        except GeneratorExit:
+            # Handle client disconnect gracefully
+            print("Client disconnected from events stream")
+            return
         except Exception as e:
+            print(f"Events streaming error: {e}")
+            import traceback
+            traceback.print_exc()
             error_msg = {"type": "error", "content": str(e), "agent": "system"}
             yield f"data: {json.dumps(error_msg)}\n\n"
             yield "data: [DONE]\n\n"
