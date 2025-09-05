@@ -183,11 +183,12 @@ class ValidatedChatAnthropic(ChatAnthropic):
         return await super().ainvoke(validated_input, config=config, **kwargs)
 
 
-# Initialize the model
+# Initialize the model - Using Sonnet for larger token limits
 model = ValidatedChatAnthropic(
-    model="claude-3-5-haiku-latest", 
+    model="claude-3-5-sonnet-20241022", 
     temperature=0,
-    streaming=True  # Enable streaming
+    streaming=True,  # Enable streaming
+    max_tokens=4096  # Increase token limit for longer responses
 )
 
 ## Create the Trustcall extractors for updating the user profile and ToDo list
