@@ -46,8 +46,8 @@ export default function Signup() {
       // Call signup function from AuthContext
       await signup(formData.name, formData.email, formData.password);
       
-      // Redirect to chat page on successful signup
-      router.push('/Chat');
+      // Redirect to OAuth page on successful signup
+      router.push('/OAuth');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred during signup');
     }

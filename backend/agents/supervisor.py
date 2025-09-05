@@ -1,4 +1,5 @@
 import uuid
+import re
 from datetime import datetime
 
 from pydantic import BaseModel, Field
@@ -613,11 +614,29 @@ async def stream_response(user_input: str, config: dict):
                         }
                         
                         # Yield the final response for the chat
+                        final_response_content = str(last_message.content)
+                        
+                        # Log response length for debugging
+                        print(f"Final response length: {len(final_response_content)} characters")
+                        
+                        # Check if JSX response appears complete
+                        if ('<>' in final_response_content or '<Typography' in final_response_content):
+                            # Basic JSX validation
+                            open_fragments = final_response_content.count('<>')
+                            close_fragments = final_response_content.count('</>')
+                            has_unclosed_quotes = bool(re.search(r'className="[^"]*$', final_response_content))
+                            has_unclosed_tags = final_response_content.endswith('<') or bool(re.search(r'<[^>]*$', final_response_content))
+                            
+                            if open_fragments != close_fragments or has_unclosed_quotes or has_unclosed_tags:
+                                print(f"⚠️ JSX appears incomplete - fragments: {open_fragments}/{close_fragments}, unclosed quotes: {has_unclosed_quotes}, unclosed tags: {has_unclosed_tags}")
+                                # Add completion warning
+                                final_response_content += '\n<!-- JSX Response may be incomplete -->'
+                        
                         yield {
                             "type": "final_response",
                             "agent": "Response Agent",
                             "message": "Response ready",
-                            "content": str(last_message.content),
+                            "content": final_response_content,
                             "timestamp": datetime.now().isoformat()
                         }
             

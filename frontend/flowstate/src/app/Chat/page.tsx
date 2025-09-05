@@ -251,6 +251,48 @@ function Chat() {
     // Check if the content contains JSX elements (React Fragment or component tags)
     if (content.includes('<>') || content.includes('<Typography') || content.includes('<Button')) {
       try {
+        // Validate JSX completeness before parsing
+        const isCompleteJSX = (jsx: string) => {
+          // Basic checks for JSX completeness
+          const openFragments = (jsx.match(/<>/g) || []).length;
+          const closeFragments = (jsx.match(/<\/>/g) || []).length;
+          const openDivs = (jsx.match(/<div[^>]*>/g) || []).length;
+          const closeDivs = (jsx.match(/<\/div>/g) || []).length;
+          const openTypography = (jsx.match(/<Typography[^>]*>/g) || []).length;
+          const closeTypography = (jsx.match(/<\/Typography>/g) || []).length;
+          
+          // Check for unclosed quotes or tags
+          const hasUnClosedQuotes = (jsx.match(/className="[^"]*$/g) || []).length > 0;
+          const hasUnClosedTags = jsx.endsWith('<') || jsx.match(/<[^>]*$/g);
+          
+          return openFragments === closeFragments && 
+                 openDivs === closeDivs && 
+                 openTypography === closeTypography &&
+                 !hasUnClosedQuotes &&
+                 !hasUnClosedTags;
+        };
+        
+        // If JSX appears incomplete, show error and fallback
+        if (!isCompleteJSX(content)) {
+          console.warn('Incomplete JSX detected:', content);
+          return (
+            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+              <Typography variant="h3" className="text-yellow-700 mb-2 font-semibold">
+                ⚠️ Response Processing Issue
+              </Typography>
+              <Typography variant="p" className="text-yellow-600 mb-3">
+                The response was interrupted during transmission. Here&apos;s what I was able to process:
+              </Typography>
+              <div className="bg-white p-3 rounded border text-sm text-gray-700 max-h-40 overflow-y-auto">
+                <pre className="whitespace-pre-wrap">{content}</pre>
+              </div>
+              <Typography variant="p" className="text-yellow-600 mt-2 text-sm">
+                Please try your request again for a complete response.
+              </Typography>
+            </div>
+          );
+        }
+
         // Replace function calls in onClick handlers with actual functions
         const processedContent = content
           .replace(/onClick={\(\) => handleCheckAssignments\(\)}/g, `onClick={handleCheckAssignments}`)

@@ -87,4 +87,12 @@ CRITICAL REQUIREMENTS:
 - Maintain a consistent design language with Flowstate's branding
 
 IMPORTANT: You are the final step in the response pipeline. Your JSX output will be parsed and displayed to the user.
+
+JSX VALIDATION REQUIREMENTS:
+- Ensure all opening tags have corresponding closing tags
+- Verify all quotes are properly closed
+- Check that className attributes are complete
+- Validate that all JSX fragments are properly terminated
+- Test that the JSX is syntactically correct before sending
+- If JSX is incomplete, add a fallback message wrapped in Typography components
 """

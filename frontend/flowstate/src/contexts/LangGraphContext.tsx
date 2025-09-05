@@ -189,6 +189,22 @@ export const LangGraphProvider: React.FC<LangGraphProviderProps> = ({ children }
                 if (stepData.type === 'final_response') {
                   console.log('Received final response:', stepData.content); // Debug log
                   finalResponse = stepData.content;
+                  
+                  // Check if response appears truncated
+                  if (finalResponse && (finalResponse.includes('<>') || finalResponse.includes('<Typography'))) {
+                    // Basic JSX completeness check
+                    const openFragments = (finalResponse.match(/<>/g) || []).length;
+                    const closeFragments = (finalResponse.match(/<\/>/g) || []).length;
+                    const hasUnClosedQuotes = (finalResponse.match(/className="[^"]*$/g) || []).length > 0;
+                    const hasUnClosedTags = finalResponse.endsWith('<') || finalResponse.match(/<[^>]*$/g);
+                    
+                    if (openFragments !== closeFragments || hasUnClosedQuotes || hasUnClosedTags) {
+                      console.warn('JSX response appears truncated, length:', finalResponse.length);
+                      // Add truncation warning to response
+                      finalResponse += '\n\n<!-- Response truncated during streaming -->';
+                    }
+                  }
+                  
                   // Don't call onComplete here, wait for [DONE]
                 }
                 
