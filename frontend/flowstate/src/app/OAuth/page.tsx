@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { useRouter } from 'next/navigation';
+import Image from "next/image";
 
 export default function OAuth() {
   const router = useRouter();
@@ -166,8 +167,8 @@ export default function OAuth() {
               <span>Connecting to Notion...</span>
             ) : (
               <div className="flex items-center">
-                <div className="w-8 h-8 mr-4 bg-black rounded flex items-center justify-center">
-                  <span className="text-white font-bold text-sm">N</span>
+                <div className="w-8 h-8 mr-4 rounded overflow-hidden">
+                  <Image src="/notion.png" alt="Notion" width={40} height={40} />
                 </div>
                 <span>Connect Notion</span>
               </div>
