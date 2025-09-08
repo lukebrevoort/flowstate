@@ -1,7 +1,6 @@
 // Notion OAuth callback API route
 import { NextRequest, NextResponse } from 'next/server';
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+import config from '@/lib/config';
 
 export async function GET(request: NextRequest) {
   try {
@@ -27,7 +26,7 @@ export async function GET(request: NextRequest) {
 
     // Forward the callback to the backend
     const response = await fetch(
-      `${BACKEND_URL}/api/oauth/notion/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`,
+      `${config.apiUrl}/api/oauth/notion/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`,
       {
         method: 'GET',
         headers: {

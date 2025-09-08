@@ -1,7 +1,6 @@
 // Notion OAuth API routes
 import { NextRequest, NextResponse } from 'next/server';
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+import config from '@/lib/config';
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,7 +15,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Forward the request to the backend
-    const response = await fetch(`${BACKEND_URL}/api/oauth/notion/authorize`, {
+    const response = await fetch(`${config.apiUrl}/api/oauth/notion/authorize`, {
       method: 'GET',
       headers: {
         'Authorization': authHeader,
