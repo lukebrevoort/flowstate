@@ -1,11 +1,11 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from "next/image";
 
-export default function OAuth() {
+function OAuthContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -350,5 +350,114 @@ export default function OAuth() {
         </div>
       </motion.div>
     </div>
+  );
+}
+
+// Loading component for Suspense fallback
+function OAuthLoading() {
+  return (
+    <div className="relative min-h-screen flex justify-center items-center p-5 overflow-hidden bg-flowstate-bg">
+      {/* Orange blur effect */}
+      <div className="absolute top-[-22px] left-[229px] w-[460px] h-[494px]">
+        <svg
+          width="728"
+          height="606"
+          viewBox="0 0 728 606"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <g filter="url(#filter0_f_48_36)">
+            <ellipse cx="364" cy="225" rx="230" ry="247" fill="#D06224" />
+          </g>
+          <defs>
+            <filter
+              id="filter0_f_48_36"
+              x="0"
+              y="-156"
+              width="728"
+              height="762"
+              filterUnits="userSpaceOnUse"
+              colorInterpolationFilters="sRGB"
+            >
+              <feFlood floodOpacity="0" result="BackgroundImageFix" />
+              <feBlend
+                mode="normal"
+                in="SourceGraphic"
+                in2="BackgroundImageFix"
+                result="shape"
+              />
+              <feGaussianBlur
+                stdDeviation="67"
+                result="effect1_foregroundBlur_48_36"
+              />
+            </filter>
+          </defs>
+        </svg>
+      </div>
+
+      {/* Green blur effect */}
+      <div className="absolute bottom-[-100px] right-0 w-[425px] h-[425px]">
+        <svg
+          width="833"
+          height="567"
+          viewBox="0 0 833 567"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <g filter="url(#filter0_f_48_26)">
+            <circle cx="416.5" cy="416.5" r="212.5" fill="#9EAB57" />
+          </g>
+          <defs>
+            <filter
+              id="filter0_f_48_26"
+              x="0"
+              y="0"
+              width="833"
+              height="833"
+              filterUnits="userSpaceOnUse"
+              colorInterpolationFilters="sRGB"
+            >
+              <feFlood floodOpacity="0" result="BackgroundImageFix" />
+              <feBlend
+                mode="normal"
+                in="SourceGraphic"
+                in2="BackgroundImageFix"
+                result="shape"
+              />
+              <feGaussianBlur
+                stdDeviation="102"
+                result="effect1_foregroundBlur_48_26"
+              />
+            </filter>
+          </defs>
+        </svg>
+      </div>
+
+      {/* Loading Container */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+        className="bg-flowstate-header rounded-[45px] p-10 w-full max-w-[610px] flex flex-col items-center relative z-10
+          max-lg:p-[30px] max-sm:p-5 max-sm:rounded-[25px]"
+      >
+        <h1 className="font-alegreya text-[48px] text-black mb-5 text-center max-sm:text-[36px]">
+          Connect Your Apps
+        </h1>
+        
+        <div className="flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-flowstate-dark"></div>
+          <span className="ml-3 font-alegreya text-[20px] text-black">Loading...</span>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+export default function OAuth() {
+  return (
+    <Suspense fallback={<OAuthLoading />}>
+      <OAuthContent />
+    </Suspense>
   );
 }
