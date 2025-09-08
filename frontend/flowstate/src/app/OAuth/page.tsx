@@ -1,31 +1,112 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState } from "react";
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from 'next/navigation';
 import Image from "next/image";
 
 export default function OAuth() {
   const router = useRouter();
-  // const { user } = useAuth(); Disabled for now as we don't use user info here
+  const searchParams = useSearchParams();
   
   const [loading, setLoading] = useState({
     notion: false,
     google: false,
   });
+  
+  const [connectionStatus, setConnectionStatus] = useState({
+    notion: false,
+    google: false,
+  });
+  
+  const [messages, setMessages] = useState({
+    success: '',
+    error: '',
+  });
+
+  // Check for URL parameters on component mount
+  useEffect(() => {
+    const success = searchParams.get('success');
+    const error = searchParams.get('error');
+    const workspace = searchParams.get('workspace');
+    
+    if (success) {
+      setMessages(prev => ({ 
+        ...prev, 
+        success: workspace ? `${success} (${workspace})` : success 
+      }));
+      // Refresh connection status
+      checkNotionStatus();
+    }
+    
+    if (error) {
+      setMessages(prev => ({ ...prev, error }));
+    }
+    
+    // Clear messages after 5 seconds
+    if (success || error) {
+      setTimeout(() => {
+        setMessages({ success: '', error: '' });
+      }, 5000);
+    }
+  }, [searchParams]);
+
+  // Check connection status on mount
+  useEffect(() => {
+    checkNotionStatus();
+  }, []);
+
+  const checkNotionStatus = async () => {
+    try {
+      // Get auth token from localStorage or your auth context
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+
+      const response = await fetch('/api/oauth/notion/status', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setConnectionStatus(prev => ({ ...prev, notion: data.connected }));
+      }
+    } catch (error) {
+      console.error('Error checking Notion status:', error);
+    }
+  };
 
   const handleNotionAuth = async () => {
     setLoading(prev => ({ ...prev, notion: true }));
     try {
-      // TODO: Implement actual Notion OAuth flow
-      // For now, just simulate a delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Get auth token from localStorage or your auth context
+      const token = localStorage.getItem('access_token');
+      if (!token) {
+        throw new Error('Please log in first');
+      }
+
+      const response = await fetch('/api/oauth/notion/authorize', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to initialize Notion OAuth');
+      }
+
+      const data = await response.json();
       
-      // This would typically redirect to Notion's OAuth URL
-      console.log("Notion OAuth would be initiated here");
+      // Redirect to Notion's OAuth page
+      window.location.href = data.auth_url;
       
     } catch (error) {
       console.error("Notion auth error:", error);
+      setMessages(prev => ({ 
+        ...prev, 
+        error: error instanceof Error ? error.message : 'Failed to connect to Notion'
+      }));
     } finally {
       setLoading(prev => ({ ...prev, notion: false }));
     }
@@ -153,17 +234,51 @@ export default function OAuth() {
         </p>
 
         <div className="w-full max-w-[400px] space-y-5">
+          {/* Success/Error Messages */}
+          {messages.success && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg text-center"
+            >
+              {messages.success}
+            </motion.div>
+          )}
+          
+          {messages.error && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg text-center"
+            >
+              {messages.error}
+            </motion.div>
+          )}
+
           {/* Notion Authentication Button */}
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={handleNotionAuth}
-            disabled={loading.notion || loading.google}
-            className={`w-full h-[60px] rounded-[35px] bg-white border-[3px] border-black flex items-center justify-center px-6
-              font-alegreya text-[24px] text-black cursor-pointer max-sm:h-[50px] max-sm:text-[20px] 
-              transition-colors hover:bg-gray-50 ${loading.notion ? 'opacity-70' : ''}`}
+            disabled={loading.notion || loading.google || connectionStatus.notion}
+            className={`w-full h-[60px] rounded-[35px] border-[3px] border-black flex items-center justify-center px-6
+              font-alegreya text-[24px] cursor-pointer max-sm:h-[50px] max-sm:text-[20px] 
+              transition-colors ${
+                connectionStatus.notion 
+                  ? 'bg-green-100 border-green-500 text-green-700' 
+                  : loading.notion 
+                    ? 'bg-gray-100 text-gray-500 opacity-70' 
+                    : 'bg-white text-black hover:bg-gray-50'
+              }`}
           >
-            {loading.notion ? (
+            {connectionStatus.notion ? (
+              <div className="flex items-center">
+                <div className="w-8 h-8 mr-4 rounded overflow-hidden">
+                  <Image src="/notion.png" alt="Notion" width={40} height={40} />
+                </div>
+                <span>✓ Notion Connected</span>
+              </div>
+            ) : loading.notion ? (
               <span>Connecting to Notion...</span>
             ) : (
               <div className="flex items-center">

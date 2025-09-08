@@ -16,6 +16,8 @@ from difflib import get_close_matches
 from langchain_anthropic import ChatAnthropic
 from dateparser import parse
 import re
+from langchain_core.runnables import RunnableConfig
+from .configuration import Configuration
 
 import logging
 
@@ -35,16 +37,23 @@ into manageable subtasks for completion. The project manager will be able to:
 6. (For the future) generate a schedule/study plan for each project 
 """
 
+def get_user_id_from_config(config: Optional[RunnableConfig] = None) -> str:
+    """Get user_id from config, with fallback to default"""
+    if config and "configurable" in config:
+        return config["configurable"].get("user_id", "default-user")
+    return "default-user"
+
 # Define the tools
 
 @tool
-def get_current_time():
+def get_current_time(config: RunnableConfig):
     """
     Get the current date and time.
     
     Returns the current date and time in a formatted string.
     """
-    notion_api = NotionAPI()
+    user_id = get_user_id_from_config(config)
+    notion_api = NotionAPI(user_id=user_id)
     current_time = datetime.now()
     time = notion_api._parse_date(current_time)
     return time
@@ -91,18 +100,19 @@ def parse_relative_datetime(date_description: str):
     return None
 
 @tool
-def retrieve_assignment(assignment_name: str):
+def retrieve_assignment(assignment_name: str, config: RunnableConfig):
     """
     Retrieve assignments from a given Notion database
 
     returns a object with all assignment information included
     """
-    notion_api = NotionAPI()
+    user_id = get_user_id_from_config(config)
+    notion_api = NotionAPI(user_id=user_id)
     assignment = notion_api.get_assignment_page(assignment_name)
     return assignment
 
 @tool
-def retrieve_all_assignments(current_time: str, end_time: str):
+def retrieve_all_assignments(current_time: str, end_time: str, config: RunnableConfig):
     """
     Retrieve all assignments from the Notion database with date filtering.
     
@@ -113,12 +123,13 @@ def retrieve_all_assignments(current_time: str, end_time: str):
     Returns:
         A list of assignment objects with details including name, due date, status, and course
     """
-    notion_api = NotionAPI()
+    user_id = get_user_id_from_config(config)
+    notion_api = NotionAPI(user_id=user_id)
     assignments = notion_api.get_all_assignments(current_time, end_time)
     return assignments
 
 @tool
-def find_assignment(query: str):
+def find_assignment(query: str, config: RunnableConfig):
     """
     Find an assignment using fuzzy matching on the name.
     
@@ -128,6 +139,8 @@ def find_assignment(query: str):
     Returns:
         The best matching assignment or a list of possible matches
     """
+    user_id = get_user_id_from_config(config)
+    notion_api = NotionAPI(user_id=user_id)
     notion_api = NotionAPI()
     assignments = notion_api.get_all_assignments()
     
@@ -159,7 +172,7 @@ def find_assignment(query: str):
     }
 
 @tool
-def create_assignment_item(assignment_dict: Dict[str, Any]):
+def create_assignment_item(assignment_dict: Dict[str, Any], config: RunnableConfig):
     """
     Create a assignment in Notion that follows the imported Assignment schema. 
     Below is an example of the schema:
@@ -181,6 +194,8 @@ def create_assignment_item(assignment_dict: Dict[str, Any]):
     returns the created assignment object
     
     """
+    user_id = get_user_id_from_config(config)
+    
     if isinstance(assignment_dict, dict):
         assignment = Assignment(
             name=assignment_dict.get('name'),
@@ -198,12 +213,12 @@ def create_assignment_item(assignment_dict: Dict[str, Any]):
     else:
         assignment = assignment_dict
         
-    notion_api = NotionAPI()
+    notion_api = NotionAPI(user_id=user_id)
     print(f"Creating assignment with due date: {assignment.due_date}"); notion_api.create_assignment(assignment)
     return assignment
 
 @tool
-def get_course_info(course_name: str = None):
+def get_course_info(course_name: str = None, config: RunnableConfig = None):
     """
     Get course information from Notion database.
     
@@ -215,7 +230,8 @@ def get_course_info(course_name: str = None):
         If course_name is provided but not found: Dict with all course names and their IDs
         If course_name is not provided: Dict with all course names and their IDs
     """
-    notion_api = NotionAPI()
+    user_id = get_user_id_from_config(config) if config else "default-user"
+    notion_api = NotionAPI(user_id=user_id)
     
     # Get mappings
     course_name_dict = notion_api._get_course_id_name_mapping()
@@ -254,7 +270,7 @@ def get_course_info(course_name: str = None):
 
 @tool
 def update_assignment(name: str, priority: str = None, status: str = None, 
-                      due_date: str = None, description: str = None) -> str:
+                      due_date: str = None, description: str = None, config: RunnableConfig = None) -> str:
     """
     Update an assignment in Notion.
     
@@ -268,6 +284,8 @@ def update_assignment(name: str, priority: str = None, status: str = None,
     Returns:
         String confirmation of update or error message
     """
+    user_id = get_user_id_from_config(config) if config else "default-user"
+    
     # Build the dictionary from the individual parameters
     assignment_dict = {'name': name}
     if priority is not None:
@@ -280,7 +298,7 @@ def update_assignment(name: str, priority: str = None, status: str = None,
         assignment_dict['description'] = description
         
     # Initialize the NotionAPI
-    notion_api = NotionAPI()
+    notion_api = NotionAPI(user_id=user_id)
     try:
         # Attempt to update the assignment
         updated_assignment = notion_api.update_assignment(assignment_dict)
@@ -357,11 +375,11 @@ Common subtasks for assignments include:
 - For projects: Research topic, Create project plan, Gather materials, Implementation, Final review
 """)
 
-def create_subtask_assignment(assignment_dict):
+@tool
+def create_subtask_assignment(assignment_dict, config: RunnableConfig):
     """
-    Create a subtask in Notion that follows the imported Assignment schema. 
-    Below is an example of the schema:
-
+    Creates assignment subtasks in notion that follow the Assignment Schema
+    
     assignment = Assignment(
         name="Midterm Research Paper",
         description="<p>Write a 10-page research paper on a topic of your choice.</p>",
@@ -374,18 +392,17 @@ def create_subtask_assignment(assignment_dict):
         group_weight=30.0,
         grade=None
     )
-
-
-    returns the created assignment object
-    
     """
+
+    user_id = get_user_id_from_config(config)
+    
     if isinstance(assignment_dict, dict):
         assignment = Assignment(
             name=assignment_dict.get('name'),
             description=assignment_dict.get('description'),
             course_id=assignment_dict.get('course_id'),
             course_name=assignment_dict.get('course_name'),
-            status=assignment_dict.get('select', 'Not started'),  # Changed from select to status to match expected input
+            status=assignment_dict.get('select', 'Not started'),  # Changed from 'select' to 'status' to match expected input
             due_date=assignment_dict.get('due_date'),
             id=assignment_dict.get('id'),
             priority=assignment_dict.get('priority', 'Medium'),
@@ -396,12 +413,12 @@ def create_subtask_assignment(assignment_dict):
     else:
         assignment = assignment_dict
         
-    notion_api = NotionAPI()
+    notion_api = NotionAPI(user_id=user_id)
     print(f"Creating assignment with due date: {assignment.due_date}"); notion_api.create_assignment(assignment)
     return assignment
 
 @tool
-def create_subtasks(assignment_dict):
+def create_subtasks(assignment_dict, config: RunnableConfig):
     """
     Create subtasks for a given assignment and add them to Notion.
 
@@ -411,6 +428,8 @@ def create_subtasks(assignment_dict):
     Returns:
         List of subtask dictionaries ready to be created in Notion.
     """
+    user_id = get_user_id_from_config(config)
+    
     try:
         chain = subtask_prompt | llm
 
@@ -491,13 +510,14 @@ def create_subtasks(assignment_dict):
         
         # Create each subtask in Notion
         for subtask in subtask_dicts:
-            create_subtask_assignment(subtask)
+            create_subtask_assignment(subtask, config)
         return subtask_dicts
     except Exception as e:
         logger.error(f"Error creating subtasks: {e}")
         return f"Failed to create subtasks: {e}"
+
 @tool
-def get_assignment_notes(assignment_name: str):
+def get_assignment_notes(assignment_name: str, config: RunnableConfig):
     """
     Get notes from an assignment by name
     
@@ -507,7 +527,8 @@ def get_assignment_notes(assignment_name: str):
     Returns:
         Notes associated with the assignment
     """
-    notion_api = NotionAPI()
+    user_id = get_user_id_from_config(config)
+    notion_api = NotionAPI(user_id=user_id)
     notes = notion_api.get_assignment_notes(assignment_name)
     
     if notes:
@@ -532,6 +553,7 @@ tools = [
     ]
 
 project_manager_prompt = ("""
+
 # Project Management Agent for Notion
 
 ## Primary Role
@@ -593,5 +615,4 @@ When working with assignments, ensure proper formatting:
 - Verify all operations completed successfully before reporting completion to the user
 
 Always maintain the context of the ongoing task and current state of the user's Notion workspace to provide continuity between operations.
-"""
-)
+""")

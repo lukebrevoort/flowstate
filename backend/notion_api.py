@@ -28,19 +28,90 @@ class NotionAPI:
     """
     Manages interaction with Notion API for syncing Canvas assignments.
     Handles rate limiting, retries, and data transformation.
+    Now supports user-specific tokens from OAuth.
     """
     
     ONE_SECOND = 1
     MAX_REQUESTS_PER_SECOND = 3
 
-    def __init__(self):
-        self.notion = Client(auth=NOTION_TOKEN)
+    def __init__(self, user_id: Optional[str] = None):
+        """
+        Initialize NotionAPI with optional user-specific token
+        
+        Args:
+            user_id: Optional user ID to fetch user-specific Notion token
+        """
+        self.user_id = user_id
+        self.user_token = None
+        
+        # If user_id is provided, try to get their token
+        if user_id:
+            self.user_token = self._get_user_token(user_id)
+        
+        # Use user token if available, otherwise fall back to system token
+        token = self.user_token or NOTION_TOKEN
+        if not token:
+            raise ValueError("No Notion token available (neither user token nor system token)")
+            
+        self.notion = Client(auth=token)
         self.database_id = NOTION_DATABASE_ID
         self.course_id_db_id = COURSE_DATABASE_ID
         self.course_id_mapping = {}  # Initialize empty
         self.course_id_name_mapping = {}  # For name→id mapping
         self.last_mapping_refresh = None
         self._refresh_course_id_mapping()  # Load on init
+    
+    def _get_user_token(self, user_id: str) -> Optional[str]:
+        """
+        Get user's Notion token from database
+        
+        Args:
+            user_id: User ID
+            
+        Returns:
+            User's Notion access token if available
+        """
+        try:
+            from config.supabase import get_supabase_client
+            import asyncio
+            
+            async def fetch_token():
+                supabase = get_supabase_client()
+                result = await supabase.query(
+                    "user_integrations",
+                    "GET",
+                    filters={
+                        "user_id": user_id,
+                        "integration_type": "notion",
+                        "is_active": True
+                    }
+                )
+                
+                if result and len(result) > 0:
+                    return result[0].get("access_token")
+                return None
+            
+            # Run async function in sync context
+            try:
+                loop = asyncio.get_event_loop()
+                return loop.run_until_complete(fetch_token())
+            except RuntimeError:
+                # No event loop running, create a new one
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    return loop.run_until_complete(fetch_token())
+                finally:
+                    loop.close()
+                    
+        except Exception as e:
+            logger.warning(f"Could not fetch user token for {user_id}: {e}")
+            return None
+    
+    @property
+    def is_using_user_token(self) -> bool:
+        """Check if currently using user-specific token"""
+        return self.user_token is not None
 
     @sleep_and_retry
     @limits(calls=MAX_REQUESTS_PER_SECOND, period=ONE_SECOND)
