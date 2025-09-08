@@ -59,7 +59,7 @@ function OAuthContent() {
   const checkNotionStatus = async () => {
     try {
       // Get auth token from localStorage or your auth context
-      const token = localStorage.getItem('access_token');
+      const token = localStorage.getItem('accessToken');
       if (!token) return;
 
       const response = await fetch('/api/oauth/notion/status', {
@@ -81,7 +81,7 @@ function OAuthContent() {
     setLoading(prev => ({ ...prev, notion: true }));
     try {
       // Get auth token from localStorage or your auth context
-      const token = localStorage.getItem('access_token');
+      const token = localStorage.getItem('accessToken');
       if (!token) {
         throw new Error('Please log in first');
       }
