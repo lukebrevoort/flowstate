@@ -18,6 +18,20 @@ export default function Signup() {
   });
   
   const [error, setError] = useState('');
+  const [showPasswordRequirements, setShowPasswordRequirements] = useState(false);
+
+  // Password validation helper
+  const getPasswordValidation = (password: string) => {
+    return {
+      minLength: password.length >= 8,
+      hasLowercase: /[a-z]/.test(password),
+      hasUppercase: /[A-Z]/.test(password),
+      hasNumber: /\d/.test(password),
+      hasSymbol: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)
+    };
+  };
+
+  const passwordValidation = getPasswordValidation(formData.password);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
@@ -34,6 +48,13 @@ export default function Signup() {
     // Basic validation
     if (!formData.name || !formData.email || !formData.password) {
       setError('All fields are required');
+      return;
+    }
+    
+    // Password strength validation
+    const isPasswordValid = Object.values(passwordValidation).every(Boolean);
+    if (!isPasswordValid) {
+      setError('Password does not meet the required criteria');
       return;
     }
     
@@ -202,9 +223,145 @@ export default function Signup() {
               placeholder="Password (min 8 characters)"
               value={formData.password}
               onChange={handleInputChange}
+              onFocus={() => setShowPasswordRequirements(true)}
+              onBlur={() => setShowPasswordRequirements(false)}
               className="w-full h-[40px] rounded-[35px] border-[3px] border-black bg-flowstate-header
                 px-5 font-alegreya text-[24px] text-[#665F5D] max-sm:text-[20px]"
             />
+            
+            {/* Password Requirements Display */}
+            {(showPasswordRequirements || formData.password.length > 0) && (
+              <motion.div
+                initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+                className="mt-3 p-3 bg-white rounded-[15px] border-[2px] border-gray-200 shadow-sm"
+              >
+                <div className="mb-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <h4 className="font-alegreya text-[14px] text-black font-semibold">
+                      Password Requirements
+                    </h4>
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ delay: 0.1 }}
+                      className="flex items-center gap-1"
+                    >
+                      <span className={`font-alegreya text-[16px] font-bold ${passwordValidation.minLength ? 'text-green-600' : 'text-gray-500'}`}>
+                        8+
+                      </span>
+                      <span className="font-alegreya text-[12px] text-gray-600">chars</span>
+                      {passwordValidation.minLength && (
+                        <motion.span
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          className="text-green-600 text-[14px]"
+                        >
+                          ✓
+                        </motion.span>
+                      )}
+                    </motion.div>
+                  </div>
+                  
+                  {/* Compact Requirements Grid */}
+                  <div className="grid grid-cols-2 gap-2 text-[12px]">
+                    <motion.div
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.1 }}
+                      className="flex items-center gap-1"
+                    >
+                      <motion.span
+                        animate={{ 
+                          backgroundColor: passwordValidation.hasLowercase ? '#10b981' : '#d1d5db',
+                          scale: passwordValidation.hasLowercase ? [1, 1.2, 1] : 1
+                        }}
+                        transition={{ duration: 0.2 }}
+                        className="w-3 h-3 rounded-full"
+                      ></motion.span>
+                      <span className={`font-alegreya ${passwordValidation.hasLowercase ? 'text-green-600' : 'text-gray-500'}`}>
+                        Lowercase
+                      </span>
+                    </motion.div>
+                    
+                    <motion.div
+                      initial={{ opacity: 0, x: 10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.15 }}
+                      className="flex items-center gap-1"
+                    >
+                      <motion.span
+                        animate={{ 
+                          backgroundColor: passwordValidation.hasUppercase ? '#10b981' : '#d1d5db',
+                          scale: passwordValidation.hasUppercase ? [1, 1.2, 1] : 1
+                        }}
+                        transition={{ duration: 0.2 }}
+                        className="w-3 h-3 rounded-full"
+                      ></motion.span>
+                      <span className={`font-alegreya ${passwordValidation.hasUppercase ? 'text-green-600' : 'text-gray-500'}`}>
+                        Uppercase
+                      </span>
+                    </motion.div>
+                    
+                    <motion.div
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.2 }}
+                      className="flex items-center gap-1"
+                    >
+                      <motion.span
+                        animate={{ 
+                          backgroundColor: passwordValidation.hasNumber ? '#10b981' : '#d1d5db',
+                          scale: passwordValidation.hasNumber ? [1, 1.2, 1] : 1
+                        }}
+                        transition={{ duration: 0.2 }}
+                        className="w-3 h-3 rounded-full"
+                      ></motion.span>
+                      <span className={`font-alegreya ${passwordValidation.hasNumber ? 'text-green-600' : 'text-gray-500'}`}>
+                        Number
+                      </span>
+                    </motion.div>
+                    
+                    <motion.div
+                      initial={{ opacity: 0, x: 10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.25 }}
+                      className="flex items-center gap-1"
+                    >
+                      <motion.span
+                        animate={{ 
+                          backgroundColor: passwordValidation.hasSymbol ? '#10b981' : '#d1d5db',
+                          scale: passwordValidation.hasSymbol ? [1, 1.2, 1] : 1
+                        }}
+                        transition={{ duration: 0.2 }}
+                        className="w-3 h-3 rounded-full"
+                      ></motion.span>
+                      <span className={`font-alegreya ${passwordValidation.hasSymbol ? 'text-green-600' : 'text-gray-500'}`}>
+                        Symbol
+                      </span>
+                    </motion.div>
+                  </div>
+                </div>
+                
+                {/* Progress Bar */}
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: '100%' }}
+                  className="w-full bg-gray-200 rounded-full h-1.5 mt-2"
+                >
+                  <motion.div
+                    initial={{ width: '0%' }}
+                    animate={{ 
+                      width: `${(Object.values(passwordValidation).filter(Boolean).length / 5) * 100}%`
+                    }}
+                    transition={{ duration: 0.3 }}
+                    className="bg-gradient-to-r from-red-400 via-yellow-400 to-green-500 h-1.5 rounded-full"
+                  ></motion.div>
+                </motion.div>
+              </motion.div>
+            )}
           </div>
 
           {/* Terms Checkbox */}
