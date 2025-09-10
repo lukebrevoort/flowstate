@@ -10,7 +10,7 @@ from typing import Dict, Optional, Any
 from urllib.parse import urlencode
 from dotenv import load_dotenv
 from fastapi import HTTPException
-from config.supabase import get_supabase_client
+from config.supabase import get_supabase_service_client
 
 load_dotenv()
 
@@ -159,10 +159,43 @@ class NotionOAuthService:
             if user_id == "test-user-123" or token_data.get("access_token", "").startswith("mock_"):
                 logger.info(f"Mock token storage for user {user_id}")
                 return True
+
+            supabase = get_supabase_service_client()
             
-            supabase = get_supabase_client()
+            # Debug: Log which key is being used
+            auth_header = supabase.headers.get('Authorization', '')
+            if 'anon' in auth_header:
+                logger.error("ERROR: Using anon key instead of service key!")
+                raise Exception("Configuration error: anon key used instead of service key")
+            else:
+                logger.info("Using service role key for token storage")
+
+            # First, verify the user exists in profiles table
+            existing_profile = await supabase.query(
+                "profiles",
+                "GET",
+                filters={"id": user_id}
+            )
             
-            # Extract relevant data from token response
+            if not existing_profile:
+                logger.warning(f"User {user_id} not found in profiles table. Creating profile...")
+                
+                # Create a basic profile for the user
+                # Note: In production, you'd want to get this info from the OAuth provider or have it from signup
+                profile_data = {
+                    "id": user_id,
+                    "email": f"user-{user_id[:8]}@oauth.local",  # Temporary email
+                    "name": "OAuth User",  # Temporary name
+                    "notion_connected": False  # Will be updated to True later
+                }
+                
+                try:
+                    await supabase.query("profiles", "POST", data=profile_data)
+                    logger.info(f"Created profile for user {user_id}")
+                except Exception as profile_error:
+                    logger.error(f"Failed to create profile for user {user_id}: {profile_error}")
+                    # If we can't create a profile, we can't proceed
+                    return False            # Extract relevant data from token response
             access_token = token_data.get("access_token")
             token_type = token_data.get("token_type", "bearer")
             bot_id = token_data.get("bot_id")
@@ -244,7 +277,7 @@ class NotionOAuthService:
             if user_id == "test-user-123":
                 return "mock_notion_access_token_123"
             
-            supabase = get_supabase_client()
+            supabase = get_supabase_service_client()
             
             result = await supabase.query(
                 "user_integrations",

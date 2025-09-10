@@ -236,7 +236,7 @@ async def notion_authorize(current_user = Depends(get_current_user_dependency)):
         raise HTTPException(status_code=500, detail=f"Failed to generate Notion auth URL: {str(e)}")
 
 @app.get("/api/oauth/notion/callback")
-async def notion_callback(code: str, state: str):
+async def notion_callback(code: str, state: str, current_user = Depends(get_current_user_dependency)):
     """Handle Notion OAuth callback"""
     try:
         from services.notion_oauth import NotionOAuthService
@@ -245,8 +245,10 @@ async def notion_callback(code: str, state: str):
         # Exchange code for token
         token_data = await oauth_service.exchange_code_for_token(code, state)
         
+        # Use authenticated user ID instead of state for security
+        user_id = current_user.id
+        
         # Store tokens in database
-        user_id = token_data["user_id"]
         success = await oauth_service.store_user_tokens(user_id, token_data)
         
         if success:
