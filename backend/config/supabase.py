@@ -14,15 +14,25 @@ load_dotenv()
 class SimpleSupabaseClient:
     """Simplified Supabase client to avoid version conflicts"""
     
-    def __init__(self, url: str, key: str):
+    def __init__(self, url: str, key: str, user_token: Optional[str] = None):
         self.url = url.rstrip('/')
         self.key = key
+        self.user_token = user_token
+        
+        # Use user token for auth if provided, otherwise use service key
+        auth_token = user_token if user_token else key
+        
         self.headers = {
-            'apikey': key,
-            'Authorization': f'Bearer {key}',
+            'apikey': key,  # Always include API key
+            'Authorization': f'Bearer {auth_token}',
             'Content-Type': 'application/json',
             'Prefer': 'return=representation'
         }
+    
+    def set_user_token(self, user_token: str):
+        """Set user authentication token for RLS"""
+        self.user_token = user_token
+        self.headers['Authorization'] = f'Bearer {user_token}'
     
     async def query(self, table: str, method: str = 'GET', data: Optional[Dict] = None, filters: Optional[Dict] = None) -> Dict[str, Any]:
         """Execute a query on Supabase table"""
@@ -128,7 +138,9 @@ def get_supabase_service_client() -> SimpleSupabaseClient:
     global _service_client
     if _service_client is None:
         config = get_supabase_config()
-        _service_client = config.get_client(use_service_key=True)
+        if not config.service_key:
+            raise ValueError("SUPABASE_SERVICE_KEY must be set for service operations")
+        _service_client = SimpleSupabaseClient(config.url, config.service_key)
     return _service_client
 
 async def test_connection() -> bool:

@@ -217,6 +217,100 @@ async def login(user_data: UserLogin):
 @app.get("/api/auth/user", response_model=UserResponse)
 async def get_user(current_user = Depends(get_current_user_dependency)):
     return current_user
+
+# Notion OAuth endpoints
+@app.get("/api/oauth/notion/authorize")
+async def notion_authorize(current_user = Depends(get_current_user_dependency)):
+    """Initialize Notion OAuth flow"""
+    try:
+        from services.notion_oauth import NotionOAuthService
+        oauth_service = NotionOAuthService()
+        
+        auth_data = oauth_service.generate_auth_url(current_user.id)
+        
+        return {
+            "auth_url": auth_data["auth_url"],
+            "state": auth_data["state"]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate Notion auth URL: {str(e)}")
+
+@app.get("/api/oauth/notion/callback")
+async def notion_callback(code: str, state: str):
+    """Handle Notion OAuth callback"""
+    try:
+        from services.notion_oauth import NotionOAuthService
+        oauth_service = NotionOAuthService()
+        
+        # Extract user ID from state parameter for security
+        if ":" not in state:
+            raise HTTPException(status_code=400, detail="Invalid state parameter")
+        
+        user_id, _ = state.split(":", 1)
+        
+        # Exchange code for token
+        token_data = await oauth_service.exchange_code_for_token(code, state)
+        
+        # Store tokens in database
+        success = await oauth_service.store_user_tokens(user_id, token_data)
+        
+        if success:
+            return {
+                "success": True,
+                "message": "Notion connected successfully",
+                "workspace_name": token_data.get("workspace_name")
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to store Notion tokens")
+            
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"OAuth callback failed: {str(e)}")
+
+@app.get("/api/oauth/notion/status")
+async def notion_status(current_user = Depends(get_current_user_dependency)):
+    """Check Notion connection status for current user"""
+    try:
+        from services.notion_oauth import NotionOAuthService
+        oauth_service = NotionOAuthService()
+        
+        token = await oauth_service.get_user_notion_token(current_user.id)
+        
+        if token:
+            # Test the connection
+            test_result = await oauth_service.test_notion_connection(token)
+            return {
+                "connected": test_result["success"],
+                "token_valid": test_result["success"],
+                "user_info": test_result.get("data") if test_result["success"] else None
+            }
+        else:
+            return {
+                "connected": False,
+                "token_valid": False,
+                "user_info": None
+            }
+            
+    except Exception as e:
+        return {
+            "connected": False,
+            "token_valid": False,
+            "error": str(e)
+        }
+
+@app.get("/api/integrations/status")
+async def get_integrations_status(current_user = Depends(get_current_user_dependency)):
+    """Get status of all integrations for current user"""
+    try:
+        from services.user_tokens import UserTokenService
+        status = await UserTokenService.get_user_integrations_status(current_user.id)
+        return status
+    except Exception as e:
+        return {
+            "notion": False,
+            "google_calendar": False,
+            "google_drive": False,
+            "error": str(e)
+        }
     
 @app.post("/debug-agent")
 async def debug_agent(current_user = Depends(get_current_user_dependency)):

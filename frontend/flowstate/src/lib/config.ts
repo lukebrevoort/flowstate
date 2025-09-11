@@ -6,7 +6,7 @@ interface Config {
 
 // Development configuration
 const devConfig: Config = {
-  apiUrl: 'http://localhost:5001',
+  apiUrl: 'http://localhost:8000',
   langGraphUrl: 'http://localhost:9876',
 };
 

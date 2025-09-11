@@ -1,31 +1,112 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState } from "react";
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from 'next/navigation';
 import Image from "next/image";
 
-export default function OAuth() {
+function OAuthContent() {
   const router = useRouter();
-  // const { user } = useAuth(); Disabled for now as we don't use user info here
+  const searchParams = useSearchParams();
   
   const [loading, setLoading] = useState({
     notion: false,
     google: false,
   });
+  
+  const [connectionStatus, setConnectionStatus] = useState({
+    notion: false,
+    google: false,
+  });
+  
+  const [messages, setMessages] = useState({
+    success: '',
+    error: '',
+  });
+
+  // Check for URL parameters on component mount
+  useEffect(() => {
+    const success = searchParams.get('success');
+    const error = searchParams.get('error');
+    const workspace = searchParams.get('workspace');
+    
+    if (success) {
+      setMessages(prev => ({ 
+        ...prev, 
+        success: workspace ? `${success} (${workspace})` : success 
+      }));
+      // Refresh connection status
+      checkNotionStatus();
+    }
+    
+    if (error) {
+      setMessages(prev => ({ ...prev, error }));
+    }
+    
+    // Clear messages after 5 seconds
+    if (success || error) {
+      setTimeout(() => {
+        setMessages({ success: '', error: '' });
+      }, 5000);
+    }
+  }, [searchParams]);
+
+  // Check connection status on mount
+  useEffect(() => {
+    checkNotionStatus();
+  }, []);
+
+  const checkNotionStatus = async () => {
+    try {
+      // Get auth token from localStorage or your auth context
+      const token = localStorage.getItem('accessToken');
+      if (!token) return;
+
+      const response = await fetch('/api/oauth/notion/status', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setConnectionStatus(prev => ({ ...prev, notion: data.connected }));
+      }
+    } catch (error) {
+      console.error('Error checking Notion status:', error);
+    }
+  };
 
   const handleNotionAuth = async () => {
     setLoading(prev => ({ ...prev, notion: true }));
     try {
-      // TODO: Implement actual Notion OAuth flow
-      // For now, just simulate a delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Get auth token from localStorage or your auth context
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        throw new Error('Please log in first');
+      }
+
+      const response = await fetch('/api/oauth/notion/authorize', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to initialize Notion OAuth');
+      }
+
+      const data = await response.json();
       
-      // This would typically redirect to Notion's OAuth URL
-      console.log("Notion OAuth would be initiated here");
+      // Redirect to Notion's OAuth page
+      window.location.href = data.auth_url;
       
     } catch (error) {
       console.error("Notion auth error:", error);
+      setMessages(prev => ({ 
+        ...prev, 
+        error: error instanceof Error ? error.message : 'Failed to connect to Notion'
+      }));
     } finally {
       setLoading(prev => ({ ...prev, notion: false }));
     }
@@ -153,17 +234,51 @@ export default function OAuth() {
         </p>
 
         <div className="w-full max-w-[400px] space-y-5">
+          {/* Success/Error Messages */}
+          {messages.success && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg text-center"
+            >
+              {messages.success}
+            </motion.div>
+          )}
+          
+          {messages.error && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg text-center"
+            >
+              {messages.error}
+            </motion.div>
+          )}
+
           {/* Notion Authentication Button */}
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={handleNotionAuth}
-            disabled={loading.notion || loading.google}
-            className={`w-full h-[60px] rounded-[35px] bg-white border-[3px] border-black flex items-center justify-center px-6
-              font-alegreya text-[24px] text-black cursor-pointer max-sm:h-[50px] max-sm:text-[20px] 
-              transition-colors hover:bg-gray-50 ${loading.notion ? 'opacity-70' : ''}`}
+            disabled={loading.notion || loading.google || connectionStatus.notion}
+            className={`w-full h-[60px] rounded-[35px] border-[3px] border-black flex items-center justify-center px-6
+              font-alegreya text-[24px] cursor-pointer max-sm:h-[50px] max-sm:text-[20px] 
+              transition-colors ${
+                connectionStatus.notion 
+                  ? 'bg-green-100 border-green-500 text-green-700' 
+                  : loading.notion 
+                    ? 'bg-gray-100 text-gray-500 opacity-70' 
+                    : 'bg-white text-black hover:bg-gray-50'
+              }`}
           >
-            {loading.notion ? (
+            {connectionStatus.notion ? (
+              <div className="flex items-center">
+                <div className="w-8 h-8 mr-4 rounded overflow-hidden">
+                  <Image src="/notion.png" alt="Notion" width={40} height={40} />
+                </div>
+                <span>✓ Notion Connected</span>
+              </div>
+            ) : loading.notion ? (
               <span>Connecting to Notion...</span>
             ) : (
               <div className="flex items-center">
@@ -235,5 +350,114 @@ export default function OAuth() {
         </div>
       </motion.div>
     </div>
+  );
+}
+
+// Loading component for Suspense fallback
+function OAuthLoading() {
+  return (
+    <div className="relative min-h-screen flex justify-center items-center p-5 overflow-hidden bg-flowstate-bg">
+      {/* Orange blur effect */}
+      <div className="absolute top-[-22px] left-[229px] w-[460px] h-[494px]">
+        <svg
+          width="728"
+          height="606"
+          viewBox="0 0 728 606"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <g filter="url(#filter0_f_48_36)">
+            <ellipse cx="364" cy="225" rx="230" ry="247" fill="#D06224" />
+          </g>
+          <defs>
+            <filter
+              id="filter0_f_48_36"
+              x="0"
+              y="-156"
+              width="728"
+              height="762"
+              filterUnits="userSpaceOnUse"
+              colorInterpolationFilters="sRGB"
+            >
+              <feFlood floodOpacity="0" result="BackgroundImageFix" />
+              <feBlend
+                mode="normal"
+                in="SourceGraphic"
+                in2="BackgroundImageFix"
+                result="shape"
+              />
+              <feGaussianBlur
+                stdDeviation="67"
+                result="effect1_foregroundBlur_48_36"
+              />
+            </filter>
+          </defs>
+        </svg>
+      </div>
+
+      {/* Green blur effect */}
+      <div className="absolute bottom-[-100px] right-0 w-[425px] h-[425px]">
+        <svg
+          width="833"
+          height="567"
+          viewBox="0 0 833 567"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <g filter="url(#filter0_f_48_26)">
+            <circle cx="416.5" cy="416.5" r="212.5" fill="#9EAB57" />
+          </g>
+          <defs>
+            <filter
+              id="filter0_f_48_26"
+              x="0"
+              y="0"
+              width="833"
+              height="833"
+              filterUnits="userSpaceOnUse"
+              colorInterpolationFilters="sRGB"
+            >
+              <feFlood floodOpacity="0" result="BackgroundImageFix" />
+              <feBlend
+                mode="normal"
+                in="SourceGraphic"
+                in2="BackgroundImageFix"
+                result="shape"
+              />
+              <feGaussianBlur
+                stdDeviation="102"
+                result="effect1_foregroundBlur_48_26"
+              />
+            </filter>
+          </defs>
+        </svg>
+      </div>
+
+      {/* Loading Container */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+        className="bg-flowstate-header rounded-[45px] p-10 w-full max-w-[610px] flex flex-col items-center relative z-10
+          max-lg:p-[30px] max-sm:p-5 max-sm:rounded-[25px]"
+      >
+        <h1 className="font-alegreya text-[48px] text-black mb-5 text-center max-sm:text-[36px]">
+          Connect Your Apps
+        </h1>
+        
+        <div className="flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-flowstate-dark"></div>
+          <span className="ml-3 font-alegreya text-[20px] text-black">Loading...</span>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+export default function OAuth() {
+  return (
+    <Suspense fallback={<OAuthLoading />}>
+      <OAuthContent />
+    </Suspense>
   );
 }
