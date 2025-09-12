@@ -4,7 +4,7 @@ Provides easy access to user tokens for agents and services
 """
 import logging
 from typing import Optional, Dict, Any
-from config.supabase import get_supabase_client
+from config.supabase import get_supabase_service_client
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ class UserTokenService:
             Access token if found and valid, None otherwise
         """
         try:
-            supabase = get_supabase_client()
+            supabase = get_supabase_service_client()
             
             result = await supabase.query(
                 "user_integrations",
@@ -61,7 +61,7 @@ class UserTokenService:
             Dict with access_token, refresh_token, expires_at if found, None otherwise
         """
         try:
-            supabase = get_supabase_client()
+            supabase = get_supabase_service_client()
             
             result = await supabase.query(
                 "user_integrations",
@@ -100,7 +100,7 @@ class UserTokenService:
             True if connected and active, False otherwise
         """
         try:
-            supabase = get_supabase_client()
+            supabase = get_supabase_service_client()
             
             result = await supabase.query(
                 "user_integrations",
@@ -130,7 +130,7 @@ class UserTokenService:
             Dict mapping integration types to their connection status
         """
         try:
-            supabase = get_supabase_client()
+            supabase = get_supabase_service_client()
             
             result = await supabase.query(
                 "user_integrations",

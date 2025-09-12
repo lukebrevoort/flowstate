@@ -1,7 +1,7 @@
 from notion_client import Client
 from datetime import datetime
 import pytz
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 from datetime import timezone
 from models.assignment import Assignment
 from bs4 import BeautifulSoup
@@ -47,6 +47,12 @@ class NotionAPI:
         # If user_id is provided, try to get their token
         if user_id:
             self.user_token = self._get_user_token(user_id)
+            if self.user_token:
+                logger.info(f"Using OAuth token for user {user_id}")
+            else:
+                logger.info(f"No OAuth token found for user {user_id}, falling back to system token")
+        else:
+            logger.info("No user_id provided, using system token")
         
         # Use user token if available, otherwise fall back to system token
         token = self.user_token or NOTION_TOKEN
@@ -63,7 +69,7 @@ class NotionAPI:
     
     def _get_user_token(self, user_id: str) -> Optional[str]:
         """
-        Get user's Notion token from database
+        Get user's Notion token from database using UserTokenService
         
         Args:
             user_id: User ID
@@ -72,24 +78,11 @@ class NotionAPI:
             User's Notion access token if available
         """
         try:
-            from config.supabase import get_supabase_client
+            from services.user_tokens import UserTokenService
             import asyncio
             
             async def fetch_token():
-                supabase = get_supabase_client()
-                result = await supabase.query(
-                    "user_integrations",
-                    "GET",
-                    filters={
-                        "user_id": user_id,
-                        "integration_type": "notion",
-                        "is_active": True
-                    }
-                )
-                
-                if result and len(result) > 0:
-                    return result[0].get("access_token")
-                return None
+                return await UserTokenService.get_user_notion_token(user_id)
             
             # Run async function in sync context
             try:
@@ -112,6 +105,56 @@ class NotionAPI:
     def is_using_user_token(self) -> bool:
         """Check if currently using user-specific token"""
         return self.user_token is not None
+
+    def refresh_user_token(self) -> bool:
+        """
+        Refresh the user token from database
+        
+        Returns:
+            True if token was refreshed successfully, False otherwise
+        """
+        if not self.user_id:
+            return False
+        
+        new_token = self._get_user_token(self.user_id)
+        if new_token and new_token != self.user_token:
+            self.user_token = new_token
+            # Reinitialize Notion client with new token
+            token = self.user_token or NOTION_TOKEN
+            if token:
+                self.notion = Client(auth=token)
+                logger.info(f"Refreshed Notion token for user {self.user_id}")
+                return True
+        return False
+
+    def validate_token(self) -> bool:
+        """
+        Validate that the current token works by making a test API call
+        
+        Returns:
+            True if token is valid, False otherwise
+        """
+        try:
+            # Make a simple API call to test the token
+            self.notion.users.me()
+            return True
+        except Exception as e:
+            logger.warning(f"Token validation failed: {e}")
+            return False
+
+    def get_token_info(self) -> Dict[str, Any]:
+        """
+        Get information about the current token being used
+        
+        Returns:
+            Dictionary with token information
+        """
+        return {
+            "user_id": self.user_id,
+            "using_user_token": self.is_using_user_token,
+            "token_valid": self.validate_token() if self.user_token or NOTION_TOKEN else False,
+            "has_system_fallback": bool(NOTION_TOKEN)
+        }
 
     @sleep_and_retry
     @limits(calls=MAX_REQUESTS_PER_SECOND, period=ONE_SECOND)
