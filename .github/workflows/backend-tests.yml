@@ -83,7 +83,7 @@ jobs:
     - name: Run safety check
       working-directory: ./backend
       run: |
-        safety check --json --output safety-report.json || true
+        safety check --output json > safety-report.json || true
         safety check || true
 
     - name: Check code formatting with Black
