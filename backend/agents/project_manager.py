@@ -141,7 +141,6 @@ def find_assignment(query: str, config: RunnableConfig):
     """
     user_id = get_user_id_from_config(config)
     notion_api = NotionAPI(user_id=user_id)
-    notion_api = NotionAPI()
     assignments = notion_api.get_all_assignments()
     
     # Extract just the names for matching

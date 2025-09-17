@@ -1,6 +1,7 @@
 import uuid
 import re
 from datetime import datetime
+import httpx
 
 from pydantic import BaseModel, Field
 
@@ -180,15 +181,40 @@ class ValidatedChatAnthropic(ChatAnthropic):
         else:
             validated_input = input
             
-        return await super().ainvoke(validated_input, config=config, **kwargs)
+        try:
+            return await super().ainvoke(validated_input, config=config, **kwargs)
+        except Exception as e:
+            # Handle streaming response errors gracefully
+            error_str = str(e)
+            if isinstance(e, httpx.ResponseNotRead) or "ResponseNotRead" in error_str:
+                print(f"Streaming response error handled: {e}")
+                # Re-raise as a more informative error
+                raise RuntimeError(
+                    "Streaming response error: The response content was not properly read. "
+                    "This typically occurs when streaming is enabled but the response isn't consumed correctly."
+                ) from e
+            # For other response-related exceptions
+            if any(keyword in error_str.lower() for keyword in ["response content", "streaming", "content", "without having called"]):
+                print(f"Response content error handled: {e}")
+                raise RuntimeError(f"Response processing error: {error_str}") from e
+            raise
 
 
 # Initialize the model - Using Sonnet for larger token limits
+# Create both streaming and non-streaming versions
 model = ValidatedChatAnthropic(
     model="claude-3-5-sonnet-20241022", 
     temperature=0,
-    streaming=True,  # Enable streaming
+    streaming=False,  # Disable streaming for general use to avoid ResponseNotRead errors
     max_tokens=4096  # Increase token limit for longer responses
+)
+
+# Streaming model for specific streaming operations
+streaming_model = ValidatedChatAnthropic(
+    model="claude-3-5-sonnet-20241022", 
+    temperature=0,
+    streaming=True,  # Enable streaming only when needed
+    max_tokens=4096
 )
 
 ## Create the Trustcall extractors for updating the user profile and ToDo list

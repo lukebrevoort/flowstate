@@ -30,6 +30,7 @@ const AgentLoadingCard: React.FC<AgentLoadingCardProps> = ({
   const [currentStep, setCurrentStep] = useState(0);
   const [showStep, setShowStep] = useState(true);
   const [internalComplete, setInternalComplete] = useState(isComplete);
+  const [previousStepsLength, setPreviousStepsLength] = useState(0);
 
 // Always use the most up-to-date steps - use memo to recalculate when steps change
   const activeSteps = useMemo(() => {
@@ -45,47 +46,73 @@ const AgentLoadingCard: React.FC<AgentLoadingCardProps> = ({
     console.log('AgentLoadingCard - steps.length:', steps.length);
   }, [steps, activeSteps]);
 
-  // Reset when new steps come in
+  // Handle new steps being added - only advance if we have more steps than before
   useEffect(() => {
-    if (steps.length > 0) {
-      console.log('New steps received, resetting to step 0');
-      setCurrentStep(0);
-      setInternalComplete(false);
-      setShowStep(true);
+    if (steps.length > previousStepsLength) {
+      console.log(`New step added: ${steps.length} vs ${previousStepsLength}`);
+      
+      // If this is the first step, start from 0
+      if (previousStepsLength === 0) {
+        setCurrentStep(0);
+        setInternalComplete(false);
+        setShowStep(true);
+      } else {
+        // If we have new steps and we're caught up to the previous length,
+        // advance to the next step with a smooth transition
+        if (currentStep >= previousStepsLength - 1) {
+          setShowStep(false);
+          setTimeout(() => {
+            setCurrentStep(steps.length - 1);
+            setShowStep(true);
+          }, transitionDuration);
+        }
+      }
+      
+      setPreviousStepsLength(steps.length);
     }
-  }, [steps]);
+  }, [steps.length, previousStepsLength, currentStep, transitionDuration]);
 
   // Handle external completion state changes
   useEffect(() => {
     setInternalComplete(isComplete);
   }, [isComplete]);
 
-  // Handle step progression
+  // Handle step progression - only auto-advance if we're behind
   useEffect(() => {
     if (internalComplete) return;
     
     // If we have no steps yet, wait
     if (steps.length === 0) return;
     
-    const interval = setInterval(() => {
-      if (currentStep < activeSteps.length - 1) {
-        // Fade out current step
-        setShowStep(false);
-        
-        setTimeout(() => {
-          setCurrentStep(prev => prev + 1);
-          setShowStep(true);
-        }, transitionDuration);
-      } else {
+    // Only set up auto-progression if we're not at the latest step
+    // This prevents the timer from interfering with manual step advancement
+    if (currentStep < activeSteps.length - 1) {
+      const interval = setInterval(() => {
+        if (currentStep < activeSteps.length - 1) {
+          // Fade out current step
+          setShowStep(false);
+          
+          setTimeout(() => {
+            setCurrentStep(prev => prev + 1);
+            setShowStep(true);
+          }, transitionDuration);
+        } else {
+          clearInterval(interval);
+        }
+      }, stepDuration);
+
+      return () => clearInterval(interval);
+    } else if (currentStep === activeSteps.length - 1) {
+      // We're at the last step - check if we should complete
+      const completeTimer = setTimeout(() => {
         setInternalComplete(true);
         if (onComplete) {
           onComplete();
         }
-        clearInterval(interval);
-      }
-    }, stepDuration);
+      }, stepDuration);
 
-    return () => clearInterval(interval);
+      return () => clearTimeout(completeTimer);
+    }
   }, [currentStep, activeSteps.length, internalComplete, stepDuration, transitionDuration, onComplete, steps.length, activeSteps]);
 
   const getStepIcon = (type: AgentStep['type']) => {
