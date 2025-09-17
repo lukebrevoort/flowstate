@@ -40,6 +40,9 @@ logger = logging.getLogger(__name__)
 # This happens once when the module is imported
 
 # Currently, avoiding OAuth flow until deployment is ready
+# Initialize service as None to prevent undefined variable errors
+service = None
+
 """
 try:
     service = get_calendar_service()
@@ -89,6 +92,9 @@ def get_calendar_timezone(calendar_id="primary") -> str:
     Returns:
     - Timezone of the calendar
     """
+    if service is None:
+        return "Calendar service is not initialized. Please configure Google Calendar authentication."
+    
     try:
         calendar = service.calendars().get(calendarId=calendar_id).execute()
         return calendar['timeZone']

@@ -48,7 +48,7 @@ jobs:
     - name: Run tests
       run: |
         cd frontend/flowstate
-        npm test -- --coverage --watchAll=false
+        npm test -- --coverage --watchAll=false --passWithNoTests
 
     - name: Build application
       run: |

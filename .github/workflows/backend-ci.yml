@@ -69,7 +69,11 @@ jobs:
     - name: Test with pytest
       run: |
         cd backend
-        pytest tests/ --cov=. --cov-report=xml --cov-report=term-missing
+        if [ "$(find tests/ -name '*.py' -not -name '__*' | wc -l)" -eq 0 ]; then
+          echo "No test files found, skipping tests"
+        else
+          pytest tests/ --cov=. --cov-report=xml --cov-report=term-missing
+        fi
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
