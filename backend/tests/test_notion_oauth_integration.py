@@ -5,6 +5,7 @@ Test OAuth token integration with NotionAPI
 import sys
 import os
 import asyncio
+import pytest
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -67,6 +68,7 @@ def test_notion_api_without_user_token():
         return False
 
 
+@pytest.mark.asyncio
 async def test_user_token_service():
     """Test UserTokenService directly"""
 

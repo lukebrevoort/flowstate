@@ -5,6 +5,7 @@ Test script to verify Supabase service key configuration
 import os
 import sys
 import asyncio
+import pytest
 from pathlib import Path
 
 # Add backend to path
@@ -17,6 +18,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+@pytest.mark.asyncio
 async def test_service_key():
     """Test if service key is properly configured"""
     print("🔧 Testing Supabase Service Key Configuration")
@@ -62,6 +64,7 @@ async def test_service_key():
         return False
 
 
+@pytest.mark.asyncio
 async def test_token_storage():
     """Test token storage with service key"""
     print("\n🔧 Testing Token Storage")

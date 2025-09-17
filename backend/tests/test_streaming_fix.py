@@ -6,6 +6,7 @@ Test script to verify the ResponseNotRead error fix
 import asyncio
 import sys
 import os
+import pytest
 
 # Add the backend directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -13,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from agents.supervisor import stream_response
 
 
+@pytest.mark.asyncio
 async def test_stream_response():
     """Test the stream_response function to ensure it doesn't throw ResponseNotRead errors"""
 

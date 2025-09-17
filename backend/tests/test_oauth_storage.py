@@ -4,6 +4,7 @@ Test Notion OAuth token storage directly
 """
 import asyncio
 import sys
+import pytest
 from pathlib import Path
 
 # Add backend to path
@@ -13,6 +14,7 @@ sys.path.append(str(backend_dir))
 from services.notion_oauth import NotionOAuthService
 
 
+@pytest.mark.asyncio
 async def test_token_storage():
     """Test the actual token storage function"""
     print("🔧 Testing Notion OAuth Token Storage")
