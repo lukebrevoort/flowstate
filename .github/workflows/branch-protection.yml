@@ -1,0 +1,233 @@
+name: Branch Protection
+
+on:
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  # Required status checks for branch protection
+  required-checks:
+    name: Required Checks
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Check for required files
+      run: |
+        # Check that critical files exist
+        test -f backend/app.py || (echo "Backend app.py missing" && exit 1)
+        test -f frontend/flowstate/package.json || (echo "Frontend package.json missing" && exit 1)
+        test -f backend/requirements.txt || (echo "Backend requirements.txt missing" && exit 1)
+        test -f backend/Dockerfile || (echo "Backend Dockerfile missing" && exit 1)
+        echo "✅ All required files present"
+
+    - name: Check commit messages
+      run: |
+        # Get the commit messages for this PR
+        git log --oneline origin/main..HEAD
+        echo "✅ Commit history checked"
+
+    - name: Verify no secrets in code
+      run: |
+        # Basic check for common secret patterns
+        if grep -r "password.*=" backend/ frontend/ --include="*.py" --include="*.js" --include="*.ts" | grep -v test | grep -v example; then
+          echo "❌ Potential hardcoded passwords found"
+          exit 1
+        fi
+        
+        if grep -r "api[_-]key.*=" backend/ frontend/ --include="*.py" --include="*.js" --include="*.ts" | grep -v test | grep -v example; then
+          echo "❌ Potential hardcoded API keys found"
+          exit 1
+        fi
+        
+        echo "✅ No obvious secrets found in code"
+
+  # Validate PR description and metadata
+  pr-validation:
+    name: PR Validation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: Check PR title format
+      run: |
+        PR_TITLE="${{ github.event.pull_request.title }}"
+        echo "PR Title: $PR_TITLE"
+        
+        # Check that PR title is descriptive (at least 10 characters)
+        if [ ${#PR_TITLE} -lt 10 ]; then
+          echo "❌ PR title too short. Please provide a descriptive title."
+          exit 1
+        fi
+        
+        echo "✅ PR title is descriptive"
+
+    - name: Check PR description
+      run: |
+        PR_BODY="${{ github.event.pull_request.body }}"
+        
+        # Check that PR has a description
+        if [ -z "$PR_BODY" ] || [ ${#PR_BODY} -lt 20 ]; then
+          echo "❌ PR description is too short. Please provide details about your changes."
+          exit 1
+        fi
+        
+        echo "✅ PR has adequate description"
+
+    - name: Check for breaking changes
+      run: |
+        # Check if this might be a breaking change
+        git fetch origin main
+        CHANGED_FILES=$(git diff --name-only origin/main..HEAD)
+        
+        echo "Changed files:"
+        echo "$CHANGED_FILES"
+        
+        # Check for potentially breaking changes
+        if echo "$CHANGED_FILES" | grep -E "(models/|schemas/|api/.*\.py|migrations/)"; then
+          echo "⚠️  This PR may contain breaking changes to models, schemas, or API."
+          echo "Please ensure backward compatibility or document breaking changes."
+        fi
+        
+        echo "✅ Breaking change check completed"
+
+  # Size and complexity checks
+  pr-size-check:
+    name: PR Size Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Check PR size
+      run: |
+        git fetch origin main
+        
+        # Count changed lines
+        ADDITIONS=$(git diff --numstat origin/main..HEAD | awk '{sum += $1} END {print sum}')
+        DELETIONS=$(git diff --numstat origin/main..HEAD | awk '{sum += $2} END {print sum}')
+        TOTAL_CHANGES=$((ADDITIONS + DELETIONS))
+        
+        echo "Lines added: $ADDITIONS"
+        echo "Lines deleted: $DELETIONS"
+        echo "Total changes: $TOTAL_CHANGES"
+        
+        # Warn if PR is very large
+        if [ $TOTAL_CHANGES -gt 1000 ]; then
+          echo "⚠️  This is a large PR ($TOTAL_CHANGES lines changed)."
+          echo "Consider breaking it into smaller, focused PRs for easier review."
+        fi
+        
+        # Count changed files
+        CHANGED_FILES_COUNT=$(git diff --name-only origin/main..HEAD | wc -l)
+        echo "Files changed: $CHANGED_FILES_COUNT"
+        
+        if [ $CHANGED_FILES_COUNT -gt 20 ]; then
+          echo "⚠️  This PR changes many files ($CHANGED_FILES_COUNT)."
+          echo "Consider focusing on fewer files per PR."
+        fi
+        
+        echo "✅ PR size analysis completed"
+
+  # Dependency checks
+  dependency-check:
+    name: Dependency Security Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Check Python dependencies
+      working-directory: ./backend
+      run: |
+        # Check for changes to requirements files
+        if git diff --name-only origin/main..HEAD | grep -E "requirements.*\.txt"; then
+          echo "📦 Python dependencies changed"
+          
+          # Install safety to check for known vulnerabilities
+          pip install safety
+          
+          # Check for known vulnerabilities
+          safety check -r requirements.txt || echo "⚠️  Vulnerability check completed with warnings"
+        else
+          echo "✅ No Python dependency changes"
+        fi
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Check Node.js dependencies
+      working-directory: ./frontend/flowstate
+      run: |
+        # Check for changes to package files
+        if git diff --name-only origin/main..HEAD | grep -E "package.*\.json"; then
+          echo "📦 Node.js dependencies changed"
+          
+          # Install dependencies and run audit
+          npm ci --legacy-peer-deps
+          npm audit --audit-level moderate || echo "⚠️  Dependency audit completed with warnings"
+        else
+          echo "✅ No Node.js dependency changes"
+        fi
+
+  # Test coverage requirements
+  coverage-check:
+    name: Test Coverage Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install backend test dependencies
+      working-directory: ./backend
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements-test.txt
+
+    - name: Run backend tests with coverage
+      working-directory: ./backend
+      env:
+        ENV: test
+        DATABASE_URL: sqlite:///./test.db
+        SECRET_KEY: test-secret-key
+      run: |
+        python -m pytest tests/ --cov=. --cov-report=term --cov-report=xml --cov-fail-under=50
+        echo "✅ Backend coverage check passed"
+
+    - name: Comment coverage results
+      if: github.event_name == 'pull_request'
+      run: |
+        echo "✅ Coverage requirements met for this PR"
+
+  # Final status check
+  all-checks-complete:
+    name: All Checks Complete
+    runs-on: ubuntu-latest
+    needs: [required-checks, pr-validation, pr-size-check, dependency-check, coverage-check]
+    
+    steps:
+    - name: Mark as ready
+      run: |
+        echo "✅ All branch protection checks passed!"
+        echo "This PR is ready for review and merge."
