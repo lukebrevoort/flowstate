@@ -1,0 +1,158 @@
+name: Backend Python Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-tests.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-tests.yml'
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+    
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_flowstate
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      working-directory: ./backend
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Create test environment file
+      working-directory: ./backend
+      run: |
+        cat > .env << EOF
+        DATABASE_URL=postgresql://postgres:postgres@localhost:5432/test_flowstate
+        SECRET_KEY=test-secret-key-for-github-actions
+        ALGORITHM=HS256
+        ACCESS_TOKEN_EXPIRE_MINUTES=30
+        SUPABASE_URL=https://test.supabase.co
+        SUPABASE_KEY=test-key
+        OPENAI_API_KEY=test-openai-key
+        ANTHROPIC_API_KEY=test-anthropic-key
+        NOTION_CLIENT_ID=test-notion-client-id
+        NOTION_CLIENT_SECRET=test-notion-client-secret
+        NOTION_REDIRECT_URI=http://localhost:3000/auth/callback
+        EOF
+
+    - name: Run security check with Bandit
+      working-directory: ./backend
+      run: |
+        bandit -r . -x ./tests/,./venv/,./__pycache__/ -f json -o bandit-report.json || true
+        bandit -r . -x ./tests/,./venv/,./__pycache__/ || true
+
+    - name: Run safety check
+      working-directory: ./backend
+      run: |
+        safety check --json --output safety-report.json || true
+        safety check || true
+
+    - name: Check code formatting with Black
+      working-directory: ./backend
+      run: |
+        black --check --diff .
+
+    - name: Run flake8 linting
+      working-directory: ./backend
+      run: |
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    - name: Run mypy type checking
+      working-directory: ./backend
+      run: |
+        mypy . --ignore-missing-imports --no-strict-optional --disable-error-code=import || true
+
+    - name: Run pytest unit tests
+      working-directory: ./backend
+      run: |
+        pytest tests/ -v --cov=. --cov-report=xml --cov-report=term-missing
+
+    - name: Upload coverage reports to Codecov
+      if: matrix.python-version == '3.12'
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./backend/coverage.xml
+        flags: backend
+        name: backend-coverage
+
+    - name: Test import statements
+      working-directory: ./backend
+      run: |
+        python -c "import app; print('✅ App imports successfully')"
+        python -c "import agents.supervisor; print('✅ Supervisor agent imports successfully')"
+        python -c "import agents.configuration; print('✅ Configuration imports successfully')"
+
+    - name: Test LangGraph agent compilation
+      working-directory: ./backend
+      run: |
+        python -c "
+        try:
+            from agents.supervisor import app as agent_app
+            if agent_app:
+                print('✅ LangGraph agent compiled successfully')
+            else:
+                print('⚠️ LangGraph agent is None')
+                exit(1)
+        except Exception as e:
+            print(f'❌ LangGraph agent compilation failed: {e}')
+            exit(1)
+        "
+
+    - name: Validate requirements.txt
+      working-directory: ./backend
+      run: |
+        pip-compile --dry-run requirements.txt || echo "pip-tools not available, skipping dependency validation"
+        pip check
+
+    - name: Check for secrets in code
+      run: |
+        # Simple grep-based secret detection
+        if grep -r -i "password\s*=\s*['\"]" backend/ --exclude-dir=__pycache__ --exclude="*.pyc"; then
+          echo "❌ Found hardcoded passwords"
+          exit 1
+        fi
+        if grep -r -i "api_key\s*=\s*['\"]" backend/ --exclude-dir=__pycache__ --exclude="*.pyc" --exclude-dir=tests; then
+          echo "❌ Found hardcoded API keys"
+          exit 1
+        fi
+        echo "✅ No obvious secrets found in code"
