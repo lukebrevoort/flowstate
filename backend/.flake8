@@ -1,0 +1,13 @@
+# Flake8 Configuration
+[flake8]
+max-line-length = 127
+extend-ignore = E203, W503
+exclude = 
+    .git,
+    __pycache__,
+    .venv,
+    venv,
+    env,
+    migrations,
+    *.pyc
+max-complexity = 10

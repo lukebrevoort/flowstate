@@ -1,0 +1,114 @@
+name: Frontend CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-ci.yml'
+  workflow_call:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ['18', '20']
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        cache-dependency-path: 'frontend/flowstate/package-lock.json'
+
+    - name: Install dependencies
+      run: |
+        cd frontend/flowstate
+        npm ci
+
+    - name: Lint code
+      run: |
+        cd frontend/flowstate
+        npm run lint
+
+    - name: Type check
+      run: |
+        cd frontend/flowstate
+        npx tsc --noEmit
+
+    - name: Run tests
+      run: |
+        cd frontend/flowstate
+        npm test -- --coverage --watchAll=false
+
+    - name: Build application
+      run: |
+        cd frontend/flowstate
+        npm run build
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        directory: ./frontend/flowstate/coverage
+        flags: frontend
+        name: frontend-coverage
+        fail_ci_if_error: false
+
+  lighthouse:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: 'frontend/flowstate/package-lock.json'
+
+    - name: Install dependencies
+      run: |
+        cd frontend/flowstate
+        npm ci
+
+    - name: Build application
+      run: |
+        cd frontend/flowstate
+        npm run build
+
+    - name: Start application
+      run: |
+        cd frontend/flowstate
+        npm start &
+        sleep 10
+
+    - name: Run Lighthouse CI
+      uses: treosh/lighthouse-ci-action@v10
+      with:
+        configPath: '.github/lighthouserc.json'
+        uploadArtifacts: true
+        temporaryPublicStorage: true
+
+  security-audit:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Run security audit
+      run: |
+        cd frontend/flowstate
+        npm audit --audit-level moderate
