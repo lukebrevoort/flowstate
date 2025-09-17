@@ -28,7 +28,13 @@ class UserTokenService:
             supabase = get_supabase_service_client()
 
             result = await supabase.query(
-                "user_integrations", "GET", filters={"user_id": user_id, "integration_type": "notion", "is_active": True}
+                "user_integrations",
+                "GET",
+                filters={
+                    "user_id": user_id,
+                    "integration_type": "notion",
+                    "is_active": True,
+                },
             )
 
             if result and len(result) > 0:
@@ -62,7 +68,11 @@ class UserTokenService:
             result = await supabase.query(
                 "user_integrations",
                 "GET",
-                filters={"user_id": user_id, "integration_type": "google_calendar", "is_active": True},
+                filters={
+                    "user_id": user_id,
+                    "integration_type": "google_calendar",
+                    "is_active": True,
+                },
             )
 
             if result and len(result) > 0:
@@ -97,13 +107,19 @@ class UserTokenService:
             result = await supabase.query(
                 "user_integrations",
                 "GET",
-                filters={"user_id": user_id, "integration_type": integration_type, "is_active": True},
+                filters={
+                    "user_id": user_id,
+                    "integration_type": integration_type,
+                    "is_active": True,
+                },
             )
 
             return bool(result and len(result) > 0)
 
         except Exception as e:
-            logger.error(f"Error checking integration {integration_type} for user {user_id}: {str(e)}")
+            logger.error(
+                f"Error checking integration {integration_type} for user {user_id}: {str(e)}"
+            )
             return False
 
     @staticmethod
@@ -120,7 +136,11 @@ class UserTokenService:
         try:
             supabase = get_supabase_service_client()
 
-            result = await supabase.query("user_integrations", "GET", filters={"user_id": user_id, "is_active": True})
+            result = await supabase.query(
+                "user_integrations",
+                "GET",
+                filters={"user_id": user_id, "is_active": True},
+            )
 
             status = {"notion": False, "google_calendar": False, "google_drive": False}
 
@@ -133,7 +153,9 @@ class UserTokenService:
             return status
 
         except Exception as e:
-            logger.error(f"Error getting integrations status for user {user_id}: {str(e)}")
+            logger.error(
+                f"Error getting integrations status for user {user_id}: {str(e)}"
+            )
             return {"notion": False, "google_calendar": False, "google_drive": False}
 
 

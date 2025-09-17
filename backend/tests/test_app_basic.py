@@ -40,7 +40,9 @@ def test_cors_configuration(client):
     # Test that we can make a request with CORS headers
     response = client.get("/", headers={"Origin": "http://localhost:3000"})
     # Should either work (200/404) or be properly handled, not a server error
-    assert response.status_code < 500, f"Should not be a server error, got {response.status_code}"
+    assert (
+        response.status_code < 500
+    ), f"Should not be a server error, got {response.status_code}"
 
 
 def test_environment_variables():
@@ -69,6 +71,7 @@ def test_auth_utilities_import():
     """Test that auth utilities can be imported."""
     try:
         import utils.auth
+
         assert utils.auth is not None
     except ImportError as e:
         pytest.fail(f"Failed to import auth utilities: {e}")

@@ -51,14 +51,18 @@ class NotionAPI:
             if self.user_token:
                 logger.info(f"Using OAuth token for user {user_id}")
             else:
-                logger.info(f"No OAuth token found for user {user_id}, falling back to system token")
+                logger.info(
+                    f"No OAuth token found for user {user_id}, falling back to system token"
+                )
         else:
             logger.info("No user_id provided, using system token")
 
         # Use user token if available, otherwise fall back to system token
         token = self.user_token or NOTION_TOKEN
         if not token:
-            raise ValueError("No Notion token available (neither user token nor system token)")
+            raise ValueError(
+                "No Notion token available (neither user token nor system token)"
+            )
 
         self.notion = Client(auth=token)
         self.database_id = NOTION_DATABASE_ID
@@ -153,7 +157,9 @@ class NotionAPI:
         return {
             "user_id": self.user_id,
             "using_user_token": self.is_using_user_token,
-            "token_valid": self.validate_token() if self.user_token or NOTION_TOKEN else False,
+            "token_valid": (
+                self.validate_token() if self.user_token or NOTION_TOKEN else False
+            ),
             "has_system_fallback": bool(NOTION_TOKEN),
         }
 
@@ -221,7 +227,9 @@ class NotionAPI:
         """Maps course_id names to Notion page UUIDs from the course_id database."""
         mapping = {}
         try:
-            response = self._make_notion_request("query_database", database_id=self.course_id_db_id, page_size=100)
+            response = self._make_notion_request(
+                "query_database", database_id=self.course_id_db_id, page_size=100
+            )
 
             for page in response.get("results", []):
                 try:
@@ -229,7 +237,9 @@ class NotionAPI:
                     properties = page["properties"]
 
                     # Get the course_id name
-                    if "Course Name" in properties and properties["Course Name"].get("title"):
+                    if "Course Name" in properties and properties["Course Name"].get(
+                        "title"
+                    ):
                         name = properties["Course Name"]["title"][0]["text"]["content"]
                         mapping[name.lower()] = notion_uuid
                         # Also store common abbreviations or partial matches
@@ -256,7 +266,9 @@ class NotionAPI:
             str: The Notion page UUID if found, None otherwise
         """
         try:
-            response = self._make_notion_request("query_database", database_id=self.course_id_db_id, page_size=100)
+            response = self._make_notion_request(
+                "query_database", database_id=self.course_id_db_id, page_size=100
+            )
 
             for page in response["results"]:
                 try:
@@ -285,7 +297,9 @@ class NotionAPI:
             Dict mapping Canvas course_id IDs (str) to Notion page UUIDs (str)
         """
         try:
-            response = self._make_notion_request("query_database", database_id=self.course_id_db_id, page_size=100)
+            response = self._make_notion_request(
+                "query_database", database_id=self.course_id_db_id, page_size=100
+            )
 
             mapping = {}
 
@@ -308,7 +322,9 @@ class NotionAPI:
                     # Map each selected value to this page
                     for item in canvas_ids:
                         canvas_id = item["name"]  # Direct access to name
-                        logger.info(f"Mapping Canvas ID {canvas_id} to page {notion_uuid}")
+                        logger.info(
+                            f"Mapping Canvas ID {canvas_id} to page {notion_uuid}"
+                        )
                         mapping[str(canvas_id)] = notion_uuid
 
                 except KeyError as e:
@@ -365,20 +381,30 @@ class NotionAPI:
                 isinstance(assignment_parameter, str) and assignment_parameter.isdigit()
             ):
                 # If parameter is an integer or string of digits, treat as assignment ID
-                filter_condition = {"property": "AssignmentID", "number": {"equals": int(assignment_parameter)}}
+                filter_condition = {
+                    "property": "AssignmentID",
+                    "number": {"equals": int(assignment_parameter)},
+                }
             elif isinstance(assignment_parameter, str):
                 # If parameter is a string, treat as assignment name
-                filter_condition = {"property": "Assignment Title", "title": {"equals": assignment_parameter}}
+                filter_condition = {
+                    "property": "Assignment Title",
+                    "title": {"equals": assignment_parameter},
+                }
             else:
                 logger.warning(f"Invalid parameter type: {type(assignment_parameter)}")
                 return None
 
-            response = self._make_notion_request("query_database", database_id=self.database_id, filter=filter_condition)
+            response = self._make_notion_request(
+                "query_database", database_id=self.database_id, filter=filter_condition
+            )
             results = response.get("results", [])
             return results[0] if results else None
 
         except Exception as e:
-            logger.error(f"Error fetching assignment ({assignment_parameter}) from Notion: {str(e)}")
+            logger.error(
+                f"Error fetching assignment ({assignment_parameter}) from Notion: {str(e)}"
+            )
             return None
 
     def get_all_assignments(self, start_date=None, end_date=None):
@@ -397,7 +423,9 @@ class NotionAPI:
         try:
             # If no start_date is provided, use the current date
             if start_date is None:
-                start_date = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+                start_date = datetime.now(timezone.utc).replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
 
             # Ensure start_date is a datetime object for comparison
             if not isinstance(start_date, datetime):
@@ -405,7 +433,9 @@ class NotionAPI:
                     start_date = datetime.fromisoformat(start_date)
                 except (ValueError, TypeError):
                     # Log the error but continue with original value
-                    logger.warning(f"Could not parse start_date: {start_date}, using as is")
+                    logger.warning(
+                        f"Could not parse start_date: {start_date}, using as is"
+                    )
 
             # Convert to UTC timezone for consistent comparison
             if isinstance(start_date, datetime) and start_date.tzinfo is None:
@@ -424,21 +454,41 @@ class NotionAPI:
                     query_params["filter"] = {
                         "property": "Due Date",
                         "date": {
-                            "on_or_after": start_date.isoformat() if isinstance(start_date, datetime) else start_date,
-                            "on_or_before": end_date.isoformat() if isinstance(end_date, datetime) else end_date,
+                            "on_or_after": (
+                                start_date.isoformat()
+                                if isinstance(start_date, datetime)
+                                else start_date
+                            ),
+                            "on_or_before": (
+                                end_date.isoformat()
+                                if isinstance(end_date, datetime)
+                                else end_date
+                            ),
                         },
                     }
                 # Filter for assignments on or after start_date
                 elif start_date:
                     query_params["filter"] = {
                         "property": "Due Date",
-                        "date": {"on_or_after": start_date.isoformat() if isinstance(start_date, datetime) else start_date},
+                        "date": {
+                            "on_or_after": (
+                                start_date.isoformat()
+                                if isinstance(start_date, datetime)
+                                else start_date
+                            )
+                        },
                     }
                 # Filter for assignments on or before end_date
                 elif end_date:
                     query_params["filter"] = {
                         "property": "Due Date",
-                        "date": {"on_or_before": end_date.isoformat() if isinstance(end_date, datetime) else end_date},
+                        "date": {
+                            "on_or_before": (
+                                end_date.isoformat()
+                                if isinstance(end_date, datetime)
+                                else end_date
+                            )
+                        },
                     }
 
                 if next_cursor:
@@ -454,7 +504,9 @@ class NotionAPI:
 
                     # Extract assignment title
                     title = ""
-                    title_property = properties.get("Assignment Title", {}).get("title", [])
+                    title_property = properties.get("Assignment Title", {}).get(
+                        "title", []
+                    )
                     if title_property and len(title_property) > 0:
                         title = title_property[0].get("text", {}).get("content", "")
 
@@ -468,19 +520,27 @@ class NotionAPI:
                             try:
                                 # Convert to datetime object for comparison
                                 if "T" in due_date:  # ISO format with time
-                                    due_date_obj = datetime.fromisoformat(due_date.replace("Z", "+00:00"))
+                                    due_date_obj = datetime.fromisoformat(
+                                        due_date.replace("Z", "+00:00")
+                                    )
                                 else:  # Date only
                                     due_date_obj = datetime.fromisoformat(due_date)
                                     # Add UTC timezone for date-only values
                                     if due_date_obj.tzinfo is None:
-                                        due_date_obj = due_date_obj.replace(tzinfo=timezone.utc)
+                                        due_date_obj = due_date_obj.replace(
+                                            tzinfo=timezone.utc
+                                        )
 
                                 # Skip assignments with due dates before the current date
                                 if due_date_obj.date() < current_date:
-                                    logger.debug(f"Skipping past assignment: {title} (due {due_date})")
+                                    logger.debug(
+                                        f"Skipping past assignment: {title} (due {due_date})"
+                                    )
                                     continue
                             except (ValueError, TypeError) as e:
-                                logger.warning(f"Error parsing due date '{due_date}' for '{title}': {e}")
+                                logger.warning(
+                                    f"Error parsing due date '{due_date}' for '{title}': {e}"
+                                )
 
                     # Extract status
                     status = ""
@@ -495,7 +555,9 @@ class NotionAPI:
                     # Extract course relation ID
                     course_id = ""
                     notion_course_id = ""
-                    course_id_property = properties.get("Course", {}).get("relation", [])
+                    course_id_property = properties.get("Course", {}).get(
+                        "relation", []
+                    )
                     if course_id_property and len(course_id_property) > 0:
                         notion_course_id = course_id_property[0].get("id", "")
 
@@ -510,7 +572,12 @@ class NotionAPI:
                             course_id = notion_course_id
 
                     # Create simplified assignment object
-                    simplified_assignment = {"name": title, "due_date": due_date, "status": status, "course_id": course_id}
+                    simplified_assignment = {
+                        "name": title,
+                        "due_date": due_date,
+                        "status": status,
+                        "course_id": course_id,
+                    }
 
                     # Add to results only if it's not before the current date
                     simplified_assignments.append(simplified_assignment)
@@ -541,7 +608,9 @@ class NotionAPI:
             # Convert course_id to string and look up UUID
             course_id_str = str(assignment.course_id)
             course_id_uuid = self.course_id_mapping.get(course_id_str)
-            logger.debug(f"Looking up course {course_id_str} in mapping: {self.course_id_mapping}")
+            logger.debug(
+                f"Looking up course {course_id_str} in mapping: {self.course_id_mapping}"
+            )
 
             if not course_id_uuid:
                 logger.warning(f"No Notion UUID found for course {course_id_str}")
@@ -552,8 +621,14 @@ class NotionAPI:
 
             # Prepare properties
             properties = {
-                "Assignment Title": {"title": [{"text": {"content": str(assignment.name)}}]},
-                "Description": {"rich_text": [{"text": {"content": self._clean_html(assignment.description)}}]},
+                "Assignment Title": {
+                    "title": [{"text": {"content": str(assignment.name)}}]
+                },
+                "Description": {
+                    "rich_text": [
+                        {"text": {"content": self._clean_html(assignment.description)}}
+                    ]
+                },
                 "Course": {"relation": [{"id": course_id_uuid}]},
                 "Status": {"select": {"name": str(assignment.status)}},
             }
@@ -568,17 +643,25 @@ class NotionAPI:
 
             # Handle priority
             VALID_PRIORITIES = ["Low", "Medium", "High"]
-            if hasattr(assignment, "priority") and assignment.priority in VALID_PRIORITIES:
+            if (
+                hasattr(assignment, "priority")
+                and assignment.priority in VALID_PRIORITIES
+            ):
                 properties["Priority"] = {"select": {"name": assignment.priority}}
             else:
                 properties["Priority"] = {"select": {"name": "Low"}}  # Default to Low
 
             # Handle assignment group if available
             if hasattr(assignment, "group_name") and assignment.group_name:
-                properties["Assignment Group"] = {"select": {"name": assignment.group_name}}
+                properties["Assignment Group"] = {
+                    "select": {"name": assignment.group_name}
+                }
 
             # Handle group weight if available
-            if hasattr(assignment, "group_weight") and assignment.group_weight is not None:
+            if (
+                hasattr(assignment, "group_weight")
+                and assignment.group_weight is not None
+            ):
                 properties["Group Weight"] = {"number": assignment.group_weight}
 
             # Remove None values
@@ -589,17 +672,27 @@ class NotionAPI:
                 try:
                     properties["Grade (%)"] = {"number": float(assignment.grade)}
                 except (ValueError, TypeError):
-                    logger.warning(f"Invalid grade format for assignment {assignment.name}: {assignment.grade}")
+                    logger.warning(
+                        f"Invalid grade format for assignment {assignment.name}: {assignment.grade}"
+                    )
                     if hasattr(assignment, "mark") and assignment.mark is not None:
                         try:
                             properties["Status"] = {"select": {"name": "Mark received"}}
                         except (ValueError, TypeError):
-                            logger.warning(f"Invalid mark format for assignment {assignment.name}: {assignment.mark}")
+                            logger.warning(
+                                f"Invalid mark format for assignment {assignment.name}: {assignment.mark}"
+                            )
 
             logger.info(f"Creating new assignment: {assignment.name}")
-            self._make_notion_request("create_page", parent={"database_id": self.database_id}, properties=properties)
+            self._make_notion_request(
+                "create_page",
+                parent={"database_id": self.database_id},
+                properties=properties,
+            )
         except Exception as e:
-            logger.error(f"Error creating assignment {assignment.name} in Notion: {str(e)}")
+            logger.error(
+                f"Error creating assignment {assignment.name} in Notion: {str(e)}"
+            )
             raise
 
     def update_assignment(self, update_data: Dict):
@@ -616,7 +709,9 @@ class NotionAPI:
         try:
             # Check if we have an identifier to find the assignment
             if "id" not in update_data and "name" not in update_data:
-                logger.error("Update data must contain either 'id' or 'name' to identify the assignment")
+                logger.error(
+                    "Update data must contain either 'id' or 'name' to identify the assignment"
+                )
                 return "Update data must contain either 'id' or 'name' to identify the assignment"
 
             # Get existing page
@@ -637,12 +732,20 @@ class NotionAPI:
 
             # Handle name/title update
             if "name" in update_data:
-                properties["Assignment Title"] = {"title": [{"text": {"content": str(update_data["name"])}}]}
+                properties["Assignment Title"] = {
+                    "title": [{"text": {"content": str(update_data["name"])}}]
+                }
 
             # Handle description update
             if "description" in update_data:
                 properties["Description"] = {
-                    "rich_text": [{"text": {"content": self._clean_html(update_data["description"])}}]
+                    "rich_text": [
+                        {
+                            "text": {
+                                "content": self._clean_html(update_data["description"])
+                            }
+                        }
+                    ]
                 }
 
             # Handle course update
@@ -666,10 +769,15 @@ class NotionAPI:
 
             # Handle assignment group update
             if "group_name" in update_data and update_data["group_name"]:
-                properties["Assignment Group"] = {"select": {"name": update_data["group_name"]}}
+                properties["Assignment Group"] = {
+                    "select": {"name": update_data["group_name"]}
+                }
 
             # Handle group weight update
-            if "group_weight" in update_data and update_data["group_weight"] is not None:
+            if (
+                "group_weight" in update_data
+                and update_data["group_weight"] is not None
+            ):
                 properties["Group Weight"] = {"number": update_data["group_weight"]}
 
             # Handle priority update
@@ -679,7 +787,9 @@ class NotionAPI:
                 if priority in VALID_PRIORITIES:
                     properties["Priority"] = {"select": {"name": priority}}
                 else:
-                    properties["Priority"] = {"select": {"name": "Low"}}  # Default to Low
+                    properties["Priority"] = {
+                        "select": {"name": "Low"}
+                    }  # Default to Low
 
             # Handle grade update
             if "grade" in update_data and update_data["grade"] is not None:
@@ -706,7 +816,9 @@ class NotionAPI:
                 properties.pop("Status", None)
 
             logger.info(f"Updating assignment fields: {', '.join(properties.keys())}")
-            self._make_notion_request("update_page", page_id=existing_page["id"], properties=properties)
+            self._make_notion_request(
+                "update_page", page_id=existing_page["id"], properties=properties
+            )
             return None
         except Exception as e:
             identifier = update_data.get("id") or update_data.get("name", "Unknown")
@@ -739,7 +851,9 @@ class NotionAPI:
             return structured_content
 
         except Exception as e:
-            logger.error(f"Error getting notes for assignment {assignment_id_or_name}: {str(e)}")
+            logger.error(
+                f"Error getting notes for assignment {assignment_id_or_name}: {str(e)}"
+            )
             return None
 
     def get_complete_page_content(self, page_id):
@@ -773,7 +887,9 @@ class NotionAPI:
             return self._process_blocks_recursively(all_blocks)
 
         except Exception as e:
-            logger.error(f"Error retrieving complete page content for {page_id}: {str(e)}")
+            logger.error(
+                f"Error retrieving complete page content for {page_id}: {str(e)}"
+            )
             return []
 
     def _process_blocks_recursively(self, blocks):
@@ -794,7 +910,9 @@ class NotionAPI:
 
             # If the block has children, fetch them
             if block.get("has_children", False):
-                children = self._make_notion_request("blocks/children/list", block_id=block["id"]).get("results", [])
+                children = self._make_notion_request(
+                    "blocks/children/list", block_id=block["id"]
+                ).get("results", [])
 
                 # Process children recursively
                 processed_block["children"] = self._process_blocks_recursively(children)
@@ -857,7 +975,9 @@ class NotionAPI:
 
             # Add children if present
             if "children" in block and block["children"]:
-                block_data["children"] = self._parse_content_structure(block["children"])
+                block_data["children"] = self._parse_content_structure(
+                    block["children"]
+                )
 
             result.append(block_data)
 
@@ -878,7 +998,11 @@ class NotionAPI:
 
         text_parts = []
         for text_obj in rich_text:
-            if isinstance(text_obj, dict) and "text" in text_obj and "content" in text_obj["text"]:
+            if (
+                isinstance(text_obj, dict)
+                and "text" in text_obj
+                and "content" in text_obj["text"]
+            ):
                 text_parts.append(text_obj["text"]["content"])
 
         return "".join(text_parts)

@@ -85,7 +85,9 @@ async def test_token_storage():
 
         # Clean up - delete the test record
         await service_client.query(
-            "user_integrations", "DELETE", filters={"user_id": test_data["user_id"], "integration_type": "notion"}
+            "user_integrations",
+            "DELETE",
+            filters={"user_id": test_data["user_id"], "integration_type": "notion"},
         )
         print(f"✅ Cleanup successful!")
 

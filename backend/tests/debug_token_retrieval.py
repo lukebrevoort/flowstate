@@ -22,14 +22,22 @@ async def debug_token_retrieval():
         # Test the UserTokenService
         print("\n1. Testing UserTokenService...")
         token = await UserTokenService.get_user_notion_token(user_id)
-        print(f"UserTokenService result: {token[:20]}..." if token else "No token found")
+        print(
+            f"UserTokenService result: {token[:20]}..." if token else "No token found"
+        )
 
         # Test direct query with the same filters
         print("\n2. Testing direct query...")
         supabase = get_supabase_service_client()
 
         result = await supabase.query(
-            "user_integrations", "GET", filters={"user_id": user_id, "integration_type": "notion", "is_active": True}
+            "user_integrations",
+            "GET",
+            filters={
+                "user_id": user_id,
+                "integration_type": "notion",
+                "is_active": True,
+            },
         )
 
         print(f"Direct query result: {len(result) if result else 0} rows")
@@ -39,7 +47,11 @@ async def debug_token_retrieval():
 
         # Test without the is_active filter
         print("\n3. Testing without is_active filter...")
-        result2 = await supabase.query("user_integrations", "GET", filters={"user_id": user_id, "integration_type": "notion"})
+        result2 = await supabase.query(
+            "user_integrations",
+            "GET",
+            filters={"user_id": user_id, "integration_type": "notion"},
+        )
 
         print(f"Query without is_active: {len(result2) if result2 else 0} rows")
         if result2:

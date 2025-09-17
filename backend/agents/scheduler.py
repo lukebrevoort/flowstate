@@ -62,8 +62,12 @@ class CalendarEvent:
     summary: str
     location: str
     description: str
-    start: Dict[str, str]  # Should be in the format {'dateTime': '2025-03-27T10:00:00-04:00', 'timeZone': 'America/New_York'}
-    end: Dict[str, str]  # Should be in the format {'dateTime': '2025-03-27T11:00:00-04:00', 'timeZone': 'America/New_York'}
+    start: Dict[
+        str, str
+    ]  # Should be in the format {'dateTime': '2025-03-27T10:00:00-04:00', 'timeZone': 'America/New_York'}
+    end: Dict[
+        str, str
+    ]  # Should be in the format {'dateTime': '2025-03-27T11:00:00-04:00', 'timeZone': 'America/New_York'}
     reminders: Dict[
         str, Any
     ]  # Should be in the format {'useDefault': False, 'overrides': [{'method': 'email', 'minutes': 10}]}
@@ -119,7 +123,9 @@ def get_current_time() -> str:
 
 
 @tool
-def get_relative_time(start_date: Optional[Union[str, datetime, date]] = None) -> List[Dict[datetime, str]]:
+def get_relative_time(
+    start_date: Optional[Union[str, datetime, date]] = None,
+) -> List[Dict[datetime, str]]:
     """
     Generate a mapping of dates to days of the week for a month, starting from the given date.
 
@@ -153,7 +159,9 @@ def get_relative_time(start_date: Optional[Union[str, datetime, date]] = None) -
         for i in range(30):
             current_date = start + timedelta(days=i)
             day_of_week = current_date.strftime("%A")
-            date_str = current_date.strftime("%-m/%-d")  # Format as M/D without leading zeros
+            date_str = current_date.strftime(
+                "%-m/%-d"
+            )  # Format as M/D without leading zeros
             date_mapping.append({current_date: day_of_week})
 
         return date_mapping
@@ -184,7 +192,9 @@ def get_calendar_mapping():
 
 
 @tool
-def get_events(start_date: str, end_date: str, calendar_id="default") -> List[Dict[str, Any]]:
+def get_events(
+    start_date: str, end_date: str, calendar_id="default"
+) -> List[Dict[str, Any]]:
     """
     Gets all the current events on the user's Google Calendar within a specified time range.
 
@@ -208,7 +218,9 @@ def get_events(start_date: str, end_date: str, calendar_id="default") -> List[Di
                 return f"{date_str}T00:00:00Z"
 
             # If it has time but no timezone designator
-            if "T" in date_str and not (date_str.endswith("Z") or "+" in date_str or "-" in date_str[10:]):
+            if "T" in date_str and not (
+                date_str.endswith("Z") or "+" in date_str or "-" in date_str[10:]
+            ):
                 return f"{date_str}Z"
 
             # Already properly formatted
@@ -241,14 +253,22 @@ def get_events(start_date: str, end_date: str, calendar_id="default") -> List[Di
                     events = events_result.get("items", [])
                     all_events.extend(events)
                 except Exception as calendar_error:
-                    logger.warning(f"Error getting events for calendar {calendar['summary']}: {str(calendar_error)}")
+                    logger.warning(
+                        f"Error getting events for calendar {calendar['summary']}: {str(calendar_error)}"
+                    )
                     continue
 
             return all_events
         else:
             events_result = (
                 service.events()
-                .list(calendarId=calendar_id, timeMin=start_date, timeMax=end_date, singleEvents=True, orderBy="startTime")
+                .list(
+                    calendarId=calendar_id,
+                    timeMin=start_date,
+                    timeMax=end_date,
+                    singleEvents=True,
+                    orderBy="startTime",
+                )
                 .execute()
             )
             events = events_result.get("items", [])
@@ -291,12 +311,16 @@ def create_event(calendar_event: CalendarEvent, calendar_id: str = "primary") ->
         if calendar_event.recurrence:
             event["recurrence"] = calendar_event.recurrence
         if calendar_event.attendees:
-            event["attendees"] = [{"email": attendee} for attendee in calendar_event.attendees]
+            event["attendees"] = [
+                {"email": attendee} for attendee in calendar_event.attendees
+            ]
         if calendar_event.conference_data:
             event["conferenceData"] = calendar_event.conference_data
 
         # Create the event
-        event_result = service.events().insert(calendarId=calendar_id, body=event).execute()
+        event_result = (
+            service.events().insert(calendarId=calendar_id, body=event).execute()
+        )
         return f"Event created: {event_result['htmlLink']}"
     except Exception as e:
         logger.error(f"Error creating event: {str(e)}")
@@ -304,7 +328,9 @@ def create_event(calendar_event: CalendarEvent, calendar_id: str = "primary") ->
 
 
 @tool
-def update_event(event_id: str, event: CalendarEvent, calendar_id: str = "primary") -> str:
+def update_event(
+    event_id: str, event: CalendarEvent, calendar_id: str = "primary"
+) -> str:
     """
     Updates existing event on the user's Google Calendar with new details.
 
@@ -329,19 +355,27 @@ def update_event(event_id: str, event: CalendarEvent, calendar_id: str = "primar
         if event.recurrence:
             updated_event["recurrence"] = event.recurrence
         if event.attendees:
-            updated_event["attendees"] = [{"email": attendee} for attendee in event.attendees]
+            updated_event["attendees"] = [
+                {"email": attendee} for attendee in event.attendees
+            ]
         if event.conference_data:
             updated_event["conferenceData"] = event.conference_data
 
         # Update the event
-        existing_event = service.events().get(calendarId=calendar_id, eventId=event_id).execute()
+        existing_event = (
+            service.events().get(calendarId=calendar_id, eventId=event_id).execute()
+        )
         print(f"Existing event ID: {existing_event['id']}")
 
         # Make sure your updated_event contains the same ID
         updated_event["id"] = event_id
 
         # Now try the update
-        event_result = service.events().update(calendarId=calendar_id, eventId=event_id, body=updated_event).execute()
+        event_result = (
+            service.events()
+            .update(calendarId=calendar_id, eventId=event_id, body=updated_event)
+            .execute()
+        )
         return f"Event updated: {event_result['htmlLink']}"
     except Exception as e:
         logger.error(f"Error updating event: {str(e)}")
@@ -349,7 +383,9 @@ def update_event(event_id: str, event: CalendarEvent, calendar_id: str = "primar
 
 
 @tool
-def delete_event(event_id: str, calendar_id: str = "primary", delete_all_instances: bool = False) -> str:
+def delete_event(
+    event_id: str, calendar_id: str = "primary", delete_all_instances: bool = False
+) -> str:
     """
     Deletes an event from the user's Google Calendar.
 
@@ -369,42 +405,62 @@ def delete_event(event_id: str, calendar_id: str = "primary", delete_all_instanc
 
             if delete_all_instances:
                 # Delete the entire series by using the original event ID
-                service.events().delete(calendarId=calendar_id, eventId=original_event_id).execute()
+                service.events().delete(
+                    calendarId=calendar_id, eventId=original_event_id
+                ).execute()
                 return f"Recurring event series with ID {original_event_id} was successfully deleted."
             else:
                 # For deleting a single instance, we need to get the instance and mark it as cancelled
                 # First try to get the specific instance
                 try:
                     # Try to get the specific instance
-                    event = service.events().get(calendarId=calendar_id, eventId=event_id).execute()
+                    event = (
+                        service.events()
+                        .get(calendarId=calendar_id, eventId=event_id)
+                        .execute()
+                    )
                     # Mark it as cancelled
                     event["status"] = "cancelled"
-                    service.events().update(calendarId=calendar_id, eventId=event_id, body=event).execute()
+                    service.events().update(
+                        calendarId=calendar_id, eventId=event_id, body=event
+                    ).execute()
                     return f"Instance of recurring event with ID {event_id} was successfully cancelled."
                 except Exception as instance_error:
                     # If we can't get the specific instance, try an alternative approach
                     try:
                         # Get the original event
-                        original_event = service.events().get(calendarId=calendar_id, eventId=original_event_id).execute()
+                        original_event = (
+                            service.events()
+                            .get(calendarId=calendar_id, eventId=original_event_id)
+                            .execute()
+                        )
 
                         # Extract the instance timestamp
                         instance_time = event_id.split("_")[1]
                         # Format for recurrence ID - might need adjustment based on your actual timestamp format
                         if "T" in instance_time:
                             recurrence_id = instance_time.split("T")[0]
-                            instance_datetime = datetime.strptime(instance_time, "%Y%m%dT%H%M%SZ")
+                            instance_datetime = datetime.strptime(
+                                instance_time, "%Y%m%dT%H%M%SZ"
+                            )
                         else:
                             recurrence_id = instance_time
-                            instance_datetime = datetime.strptime(instance_time, "%Y%m%d")
+                            instance_datetime = datetime.strptime(
+                                instance_time, "%Y%m%d"
+                            )
 
                         # Create an exception for this instance
                         exception = {
                             "summary": original_event["summary"],
                             "status": "cancelled",
-                            "originalStartTime": {"dateTime": instance_datetime.isoformat() + "Z"},
+                            "originalStartTime": {
+                                "dateTime": instance_datetime.isoformat() + "Z"
+                            },
                             "recurringEventId": original_event_id,
                         }
-                        service.events().insert(calendarId=calendar_id, body=exception).execute()
+                        service.events().insert(
+                            calendarId=calendar_id, body=exception
+                        ).execute()
                         return f"Instance of recurring event with ID {event_id} was successfully cancelled."
                     except Exception as e:
                         return f"Error cancelling recurring event instance: {str(e)}"
@@ -442,11 +498,15 @@ def find_event(event_name: str, timeMin=None, timeMax=None):
         matched_events = []
 
         for calendar_name, calendar_id in calendar_mapping.items():
-            events_result = service.events().list(calendarId=calendar_id, q=event_name).execute()
+            events_result = (
+                service.events().list(calendarId=calendar_id, q=event_name).execute()
+            )
             matched_events.extend(events_result.get("items", []))
 
         if not matched_events:
-            return f"No events matching '{event_name}' found in the specified time range."
+            return (
+                f"No events matching '{event_name}' found in the specified time range."
+            )
 
         return matched_events
     except Exception as e:
@@ -456,7 +516,10 @@ def find_event(event_name: str, timeMin=None, timeMax=None):
 
 @tool
 def find_available_time_slots(
-    start_date: str, end_date: str, duration_minutes: int = 60, exclude_early: bool = False
+    start_date: str,
+    end_date: str,
+    duration_minutes: int = 60,
+    exclude_early: bool = False,
 ) -> List[str]:
     """
     Finds available time slots in the user's calendar using Google Calendar's freebusy API.
@@ -482,7 +545,9 @@ def find_available_time_slots(
                 return f"{date_str}T00:00:00Z"
 
             # If it has time but no timezone designator
-            if "T" in date_str and not (date_str.endswith("Z") or "+" in date_str or "-" in date_str[10:]):
+            if "T" in date_str and not (
+                date_str.endswith("Z") or "+" in date_str or "-" in date_str[10:]
+            ):
                 return f"{date_str}Z"
 
             # Already properly formatted
@@ -500,7 +565,9 @@ def find_available_time_slots(
 
         # Set up freebusy query
         # Get user's timezone from primary calendar
-        user_timezone = service.calendars().get(calendarId="primary").execute()["timeZone"]
+        user_timezone = (
+            service.calendars().get(calendarId="primary").execute()["timeZone"]
+        )
 
         body = {
             "timeMin": start_date,
@@ -521,12 +588,21 @@ def find_available_time_slots(
             end_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
 
             # Get the starting date at midnight
-            current_day = datetime(start_dt.year, start_dt.month, start_dt.day, tzinfo=start_dt.tzinfo)
-            end_day = datetime(end_dt.year, end_dt.month, end_dt.day, tzinfo=end_dt.tzinfo) + timedelta(days=1)
+            current_day = datetime(
+                start_dt.year, start_dt.month, start_dt.day, tzinfo=start_dt.tzinfo
+            )
+            end_day = datetime(
+                end_dt.year, end_dt.month, end_dt.day, tzinfo=end_dt.tzinfo
+            ) + timedelta(days=1)
 
             # For each day in the range
             while current_day < end_day:
-                busy_slots.append({"start": current_day.isoformat(), "end": (current_day + timedelta(hours=6)).isoformat()})
+                busy_slots.append(
+                    {
+                        "start": current_day.isoformat(),
+                        "end": (current_day + timedelta(hours=6)).isoformat(),
+                    }
+                )
                 current_day += timedelta(days=1)
 
         # Add all busy slots from calendars
@@ -540,12 +616,18 @@ def find_available_time_slots(
         if busy_slots:
             merged_slots = []
             current_slot = {
-                "start": datetime.fromisoformat(busy_slots[0]["start"].replace("Z", "+00:00")),
-                "end": datetime.fromisoformat(busy_slots[0]["end"].replace("Z", "+00:00")),
+                "start": datetime.fromisoformat(
+                    busy_slots[0]["start"].replace("Z", "+00:00")
+                ),
+                "end": datetime.fromisoformat(
+                    busy_slots[0]["end"].replace("Z", "+00:00")
+                ),
             }
 
             for busy in busy_slots[1:]:
-                busy_start = datetime.fromisoformat(busy["start"].replace("Z", "+00:00"))
+                busy_start = datetime.fromisoformat(
+                    busy["start"].replace("Z", "+00:00")
+                )
                 busy_end = datetime.fromisoformat(busy["end"].replace("Z", "+00:00"))
 
                 # If this busy slot overlaps with the current merged slot, extend the end time
@@ -599,9 +681,15 @@ def find_available_time_slots(
         if (end_time - current_time).total_seconds() / 60 >= duration_minutes:
             start_format = "%A, %b %d, %I:%M %p"
             end_format = "%A, %b %d, %I:%M %p"
-            available_slots.append(f"Available from {current_time.strftime(start_format)} to {end_time.strftime(end_format)}")
+            available_slots.append(
+                f"Available from {current_time.strftime(start_format)} to {end_time.strftime(end_format)}"
+            )
 
-        return available_slots if available_slots else ["No available slots found that match your criteria."]
+        return (
+            available_slots
+            if available_slots
+            else ["No available slots found that match your criteria."]
+        )
 
     except Exception as e:
         logger.error(f"Error finding available time slots: {str(e)}")
@@ -621,7 +709,15 @@ def day_name_to_date(day_name: str) -> datetime:
     """
     # Get current date
     today = datetime.now().date()
-    day_mapping = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6}
+    day_mapping = {
+        "monday": 0,
+        "tuesday": 1,
+        "wednesday": 2,
+        "thursday": 3,
+        "friday": 4,
+        "saturday": 5,
+        "sunday": 6,
+    }
 
     today_weekday = today.weekday()
     target_weekday = day_mapping[day_name.lower()]

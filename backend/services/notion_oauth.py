@@ -24,10 +24,15 @@ class NotionOAuthService:
     def __init__(self):
         self.client_id = os.getenv("NOTION_OAUTH_CLIENT_ID")
         self.client_secret = os.getenv("NOTION_OAUTH_CLIENT_SECRET")
-        self.redirect_uri = os.getenv("NOTION_OAUTH_REDIRECT_URI", "http://localhost:3000/api/oauth/notion/callback")
+        self.redirect_uri = os.getenv(
+            "NOTION_OAUTH_REDIRECT_URI",
+            "http://localhost:3000/api/oauth/notion/callback",
+        )
 
         if not self.client_id or not self.client_secret:
-            raise ValueError("NOTION_OAUTH_CLIENT_ID and NOTION_OAUTH_CLIENT_SECRET must be set")
+            raise ValueError(
+                "NOTION_OAUTH_CLIENT_ID and NOTION_OAUTH_CLIENT_SECRET must be set"
+            )
 
     def generate_auth_url(self, user_id: str) -> Dict[str, str]:
         """
@@ -102,7 +107,11 @@ class NotionOAuthService:
             # Prepare token exchange request
             token_url = "https://api.notion.com/v1/oauth/token"
 
-            data = {"grant_type": "authorization_code", "code": code, "redirect_uri": self.redirect_uri}
+            data = {
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": self.redirect_uri,
+            }
 
             # Use basic auth for client credentials
             auth = (self.client_id, self.client_secret)
@@ -112,12 +121,20 @@ class NotionOAuthService:
                     token_url,
                     data=data,
                     auth=auth,
-                    headers={"Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded"},
+                    headers={
+                        "Accept": "application/json",
+                        "Content-Type": "application/x-www-form-urlencoded",
+                    },
                 )
 
                 if response.status_code != 200:
-                    logger.error(f"Token exchange failed: {response.status_code} - {response.text}")
-                    raise HTTPException(status_code=400, detail=f"Failed to exchange code for token: {response.text}")
+                    logger.error(
+                        f"Token exchange failed: {response.status_code} - {response.text}"
+                    )
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Failed to exchange code for token: {response.text}",
+                    )
 
                 token_data = response.json()
 
@@ -143,7 +160,9 @@ class NotionOAuthService:
         """
         try:
             # Handle mock/test tokens
-            if user_id == "test-user-123" or token_data.get("access_token", "").startswith("mock_"):
+            if user_id == "test-user-123" or token_data.get(
+                "access_token", ""
+            ).startswith("mock_"):
                 logger.info(f"Mock token storage for user {user_id}")
                 return True
 
@@ -153,15 +172,21 @@ class NotionOAuthService:
             auth_header = supabase.headers.get("Authorization", "")
             if "anon" in auth_header:
                 logger.error("ERROR: Using anon key instead of service key!")
-                raise Exception("Configuration error: anon key used instead of service key")
+                raise Exception(
+                    "Configuration error: anon key used instead of service key"
+                )
             else:
                 logger.info("Using service role key for token storage")
 
             # First, verify the user exists in profiles table
-            existing_profile = await supabase.query("profiles", "GET", filters={"id": user_id})
+            existing_profile = await supabase.query(
+                "profiles", "GET", filters={"id": user_id}
+            )
 
             if not existing_profile:
-                logger.warning(f"User {user_id} not found in profiles table. Creating profile...")
+                logger.warning(
+                    f"User {user_id} not found in profiles table. Creating profile..."
+                )
 
                 # Create a basic profile for the user
                 # Note: In production, you'd want to get this info from the OAuth provider or have it from signup
@@ -176,7 +201,9 @@ class NotionOAuthService:
                     await supabase.query("profiles", "POST", data=profile_data)
                     logger.info(f"Created profile for user {user_id}")
                 except Exception as profile_error:
-                    logger.error(f"Failed to create profile for user {user_id}: {profile_error}")
+                    logger.error(
+                        f"Failed to create profile for user {user_id}: {profile_error}"
+                    )
                     # If we can't create a profile, we can't proceed
                     return False  # Extract relevant data from token response
             access_token = token_data.get("access_token")
@@ -199,7 +226,9 @@ class NotionOAuthService:
 
             # Check if integration already exists
             existing = await supabase.query(
-                "user_integrations", "GET", filters={"user_id": user_id, "integration_type": "notion"}
+                "user_integrations",
+                "GET",
+                filters={"user_id": user_id, "integration_type": "notion"},
             )
 
             if existing:
@@ -207,7 +236,11 @@ class NotionOAuthService:
                 result = await supabase.query(
                     "user_integrations",
                     "PATCH",
-                    data={"access_token": access_token, "integration_data": integration_data, "is_active": True},
+                    data={
+                        "access_token": access_token,
+                        "integration_data": integration_data,
+                        "is_active": True,
+                    },
                     filters={"user_id": user_id, "integration_type": "notion"},
                 )
             else:
@@ -225,7 +258,12 @@ class NotionOAuthService:
                 )
 
             # Update user profile to mark Notion as connected
-            await supabase.query("profiles", "PATCH", data={"notion_connected": True}, filters={"id": user_id})
+            await supabase.query(
+                "profiles",
+                "PATCH",
+                data={"notion_connected": True},
+                filters={"id": user_id},
+            )
 
             logger.info(f"Successfully stored Notion tokens for user {user_id}")
             return True
@@ -252,7 +290,13 @@ class NotionOAuthService:
             supabase = get_supabase_service_client()
 
             result = await supabase.query(
-                "user_integrations", "GET", filters={"user_id": user_id, "integration_type": "notion", "is_active": True}
+                "user_integrations",
+                "GET",
+                filters={
+                    "user_id": user_id,
+                    "integration_type": "notion",
+                    "is_active": True,
+                },
             )
 
             if result and len(result) > 0:

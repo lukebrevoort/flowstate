@@ -29,18 +29,25 @@ async def test_stream_response():
         chunks = []
         async for chunk in stream_response(test_input, config):
             chunks.append(chunk)
-            print(f"Received chunk: {chunk.get('type', 'unknown')} - {chunk.get('message', 'no message')}")
+            print(
+                f"Received chunk: {chunk.get('type', 'unknown')} - {chunk.get('message', 'no message')}"
+            )
 
             # Limit output for testing
             if len(chunks) >= 10:
                 print("Stopping after 10 chunks for testing purposes...")
                 break
 
-        print(f"\n✅ Test completed successfully! Received {len(chunks)} chunks without ResponseNotRead errors.")
+        print(
+            f"\n✅ Test completed successfully! Received {len(chunks)} chunks without ResponseNotRead errors."
+        )
         return True
 
     except Exception as e:
-        if "ResponseNotRead" in str(e) or "streaming response content" in str(e).lower():
+        if (
+            "ResponseNotRead" in str(e)
+            or "streaming response content" in str(e).lower()
+        ):
             print(f"\n❌ ResponseNotRead error still occurs: {e}")
             return False
         else:
