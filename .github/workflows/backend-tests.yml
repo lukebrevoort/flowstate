@@ -89,18 +89,18 @@ jobs:
     - name: Check code formatting with Black
       working-directory: ./backend
       run: |
-        black --check --diff .
+        black --check --diff --exclude="/(venv|\.venv|env|site-packages|__pycache__|\.pytest_cache)/" .
 
     - name: Run flake8 linting
       working-directory: ./backend
       run: |
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --exclude=venv,env,.venv,site-packages,__pycache__,.pytest_cache
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics --exclude=venv,env,.venv,site-packages,__pycache__,.pytest_cache
 
     - name: Run mypy type checking
       working-directory: ./backend
       run: |
-        mypy . --ignore-missing-imports --no-strict-optional --disable-error-code=import || true
+        mypy . --ignore-missing-imports --no-strict-optional --disable-error-code=import --exclude="(venv|\.venv|env|site-packages|__pycache__|\.pytest_cache)" || true
 
     - name: Run pytest unit tests
       working-directory: ./backend

@@ -16,14 +16,10 @@ load_dotenv()
 def get_supabase_client():
     """Create and return a Supabase client."""
     url = os.getenv("SUPABASE_URL")
-    key = os.getenv(
-        "SUPABASE_SERVICE_ROLE_KEY"
-    )  # Need service role for schema operations
+    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")  # Need service role for schema operations
 
     if not url or not key:
-        print(
-            "❌ Error: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set in environment variables"
-        )
+        print("❌ Error: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set in environment variables")
         sys.exit(1)
 
     return create_client(url, key)
@@ -43,12 +39,8 @@ def execute_sql_file(supabase: Client, file_path: str, description: str):
         for i, statement in enumerate(statements):
             if statement:
                 try:
-                    result = supabase.postgrest.rpc(
-                        "exec_sql", {"sql": statement}
-                    ).execute()
-                    print(
-                        f"   ✅ Statement {i+1}/{len(statements)} executed successfully"
-                    )
+                    result = supabase.postgrest.rpc("exec_sql", {"sql": statement}).execute()
+                    print(f"   ✅ Statement {i+1}/{len(statements)} executed successfully")
                 except Exception as e:
                     print(f"   ⚠️  Statement {i+1}/{len(statements)} failed: {str(e)}")
                     # Continue with other statements
@@ -128,9 +120,7 @@ def main():
     supabase = get_supabase_client()
 
     # Optional: Create backup
-    backup_choice = (
-        input("\nDo you want to create a backup first? (yes/no): ").lower().strip()
-    )
+    backup_choice = input("\nDo you want to create a backup first? (yes/no): ").lower().strip()
     if backup_choice == "yes":
         backup_data(supabase)
 
@@ -154,9 +144,7 @@ def main():
     print("\n📋 Next steps:")
     print("1. Test your application to ensure everything works")
     print("2. Update your Supabase Auth settings for the security enhancements")
-    print(
-        "3. Consider enabling MFA and leaked password protection in Supabase dashboard"
-    )
+    print("3. Consider enabling MFA and leaked password protection in Supabase dashboard")
     print("4. Update your Postgres version if possible")
 
 

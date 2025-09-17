@@ -14,9 +14,7 @@ def run_command(cmd, description):
     """Run a shell command and handle errors"""
     print(f"🔄 {description}...")
     try:
-        result = subprocess.run(
-            cmd, shell=True, check=True, capture_output=True, text=True
-        )
+        result = subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
         print(f"✅ {description} completed")
         return result.stdout
     except subprocess.CalledProcessError as e:
@@ -155,9 +153,7 @@ def main():
     print("   Copy the contents of database/supabase_schema.sql")
     print()
     print("4. Test the connection:")
-    print(
-        '   python -c "from config.supabase import test_connection; test_connection()"'
-    )
+    print('   python -c "from config.supabase import test_connection; test_connection()"')
     print()
     print("5. Start your application:")
     print("   python app.py")
