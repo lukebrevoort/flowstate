@@ -316,7 +316,7 @@ def update_assignment(
     try:
         # Attempt to update the assignment
         updated_assignment = notion_api.update_assignment(assignment_dict)
-        return f"Assignment updated successfully."
+        return f"Assignment updated successfully: {updated_assignment.get('title', 'Unknown')}"
     except Exception as e:
         # Log the error and return a message
         logger.error(f"Error updating assignment: {e}")
@@ -363,6 +363,7 @@ def estimate_completion_time(assignment_dict):
             "due_date": assignment_dict["due_date"],
             "status": assignment_dict.get("select", "Not started"),
             "description": assignment_dict.get("description", ""),
+            "current_time": current_time.isoformat(),
             "notes": get_assignment_notes(assignment_dict["name"]),
         }
     )
@@ -453,6 +454,7 @@ def create_subtasks(assignment_dict, config: RunnableConfig):
         List of subtask dictionaries ready to be created in Notion.
     """
     user_id = get_user_id_from_config(config)
+    logger.info(f"Generating subtasks for user {user_id}, assignment: {assignment_dict.get('name', 'Unknown')}")
 
     try:
         chain = subtask_prompt | llm

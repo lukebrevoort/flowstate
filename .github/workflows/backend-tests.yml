@@ -147,11 +147,11 @@ jobs:
     - name: Check for secrets in code
       run: |
         # Simple grep-based secret detection
-        if grep -r -i "password\s*=\s*['\"]" backend/ --exclude-dir=__pycache__ --exclude="*.pyc"; then
+        if grep -r -i "password\s*=\s*['\"]" backend/ --exclude-dir=__pycache__ --exclude-dir=venv --exclude-dir=.venv --exclude-dir=site-packages --exclude="*.pyc"; then
           echo "❌ Found hardcoded passwords"
           exit 1
         fi
-        if grep -r -i "api_key\s*=\s*['\"]" backend/ --exclude-dir=__pycache__ --exclude="*.pyc" --exclude-dir=tests; then
+        if grep -r -i "api_key\s*=\s*['\"]" backend/ --exclude-dir=__pycache__ --exclude-dir=venv --exclude-dir=.venv --exclude-dir=site-packages --exclude="*.pyc" --exclude-dir=tests; then
           echo "❌ Found hardcoded API keys"
           exit 1
         fi
