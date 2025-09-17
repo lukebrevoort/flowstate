@@ -42,31 +42,31 @@ async def run_all_tests() -> bool:
     """Run all test suites"""
     print("🧪 Flowstate Backend Test Suite")
     print("=" * 60)
-    
+
     # Run integration tests first (these check if backend is running)
     print("\n" + "=" * 60)
     integration_success = run_integration_tests()
-    
+
     if not integration_success:
         print("\n❌ Integration tests failed. Skipping OAuth tests.")
         print("Please ensure your backend is running and properly configured.")
         return False
-    
+
     # Run OAuth tests
     print("\n" + "=" * 60)
     oauth_success = await run_oauth_tests()
-    
+
     # Final summary
     print("\n" + "=" * 60)
     print("📊 FINAL TEST RESULTS")
     print("=" * 60)
-    
+
     if integration_success and oauth_success:
         print("🎉 ALL TESTS PASSED!")
         print("\n✅ Your Notion OAuth integration is ready for production!")
         print("\n📋 Next Steps:")
         print("  1. Commit your changes to git")
-        print("  2. Deploy to your production environment")  
+        print("  2. Deploy to your production environment")
         print("  3. Test the OAuth flow in production")
         print("  4. Monitor the logs for any issues")
         return True
@@ -84,20 +84,18 @@ async def run_all_tests() -> bool:
 def main():
     """Main test runner with command line options"""
     parser = argparse.ArgumentParser(description="Run Flowstate backend tests")
-    parser.add_argument("--oauth-only", action="store_true", 
-                       help="Run only OAuth tests")
-    parser.add_argument("--integration-only", action="store_true",
-                       help="Run only integration tests")
-    
+    parser.add_argument("--oauth-only", action="store_true", help="Run only OAuth tests")
+    parser.add_argument("--integration-only", action="store_true", help="Run only integration tests")
+
     args = parser.parse_args()
-    
+
     if args.oauth_only:
         success = asyncio.run(run_oauth_tests())
     elif args.integration_only:
         success = run_integration_tests()
     else:
         success = asyncio.run(run_all_tests())
-    
+
     sys.exit(0 if success else 1)
 
 

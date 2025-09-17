@@ -165,11 +165,7 @@ class DeclarativeMappedTest(MappedTest):
         class _DeclBase(DeclarativeBase):
             __table_cls__ = schema.Table
             metadata = cls._tables_metadata
-            type_annotation_map = {
-                str: sa.String().with_variant(
-                    sa.String(50), "mysql", "mariadb", "oracle"
-                )
-            }
+            type_annotation_map = {str: sa.String().with_variant(sa.String(50), "mysql", "mariadb", "oracle")}
 
             def __init_subclass__(cls, **kw) -> None:
                 assert cls_registry is not None

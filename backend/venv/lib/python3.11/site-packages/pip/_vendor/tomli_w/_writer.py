@@ -12,9 +12,7 @@ if TYPE_CHECKING:
 
 ASCII_CTRL = frozenset(chr(i) for i in range(32)) | frozenset(chr(127))
 ILLEGAL_BASIC_STR_CHARS = frozenset('"\\') | ASCII_CTRL - frozenset("\t")
-BARE_KEY_CHARS = frozenset(
-    "abcdefghijklmnopqrstuvwxyz" "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "0123456789" "-_"
-)
+BARE_KEY_CHARS = frozenset("abcdefghijklmnopqrstuvwxyz" "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "0123456789" "-_")
 ARRAY_TYPES = (list, tuple)
 MAX_LINE_LENGTH = 100
 
@@ -53,9 +51,7 @@ def dump(
         fp.write(chunk.encode())
 
 
-def dumps(
-    obj: Mapping[str, Any], /, *, multiline_strings: bool = False, indent: int = 4
-) -> str:
+def dumps(obj: Mapping[str, Any], /, *, multiline_strings: bool = False, indent: int = 4) -> str:
     ctx = Context(multiline_strings, indent)
     return "".join(gen_table_chunks(obj, ctx, name=""))
 
@@ -118,9 +114,7 @@ def format_literal(obj: object, ctx: Context, *, nest_level: int = 0) -> str:
 
     if isinstance(obj, Decimal):
         return format_decimal(obj)
-    raise TypeError(
-        f"Object of type '{type(obj).__qualname__}' is not TOML serializable"
-    )
+    raise TypeError(f"Object of type '{type(obj).__qualname__}' is not TOML serializable")
 
 
 def format_decimal(obj: Decimal) -> str:
@@ -141,14 +135,7 @@ def format_inline_table(obj: Mapping, ctx: Context) -> str:
     if not obj:
         rendered = "{}"
     else:
-        rendered = (
-            "{ "
-            + ", ".join(
-                f"{format_key_part(k)} = {format_literal(v, ctx)}"
-                for k, v in obj.items()
-            )
-            + " }"
-        )
+        rendered = "{ " + ", ".join(f"{format_key_part(k)} = {format_literal(v, ctx)}" for k, v in obj.items()) + " }"
     ctx.inline_table_cache[obj_id] = rendered
     return rendered
 
@@ -160,10 +147,7 @@ def format_inline_array(obj: tuple | list, ctx: Context, nest_level: int) -> str
     closing_bracket_indent = ctx.indent_str * nest_level
     return (
         "[\n"
-        + ",\n".join(
-            item_indent + format_literal(item, ctx, nest_level=nest_level + 1)
-            for item in obj
-        )
+        + ",\n".join(item_indent + format_literal(item, ctx, nest_level=nest_level + 1) for item in obj)
         + f",\n{closing_bracket_indent}]"
     )
 
@@ -173,8 +157,7 @@ def format_key_part(part: str) -> str:
         only_bare_key_chars = BARE_KEY_CHARS.issuperset(part)
     except TypeError:
         raise TypeError(
-            f"Invalid mapping key '{part}' of type '{type(part).__qualname__}'."
-            " A string is required."
+            f"Invalid mapping key '{part}' of type '{type(part).__qualname__}'." " A string is required."
         ) from None
 
     if part and only_bare_key_chars:
@@ -215,11 +198,7 @@ def format_string(s: str, *, allow_multiline: bool) -> str:
 def is_aot(obj: Any) -> bool:
     """Decides if an object behaves as an array of tables (i.e. a nonempty list
     of dicts)."""
-    return bool(
-        isinstance(obj, ARRAY_TYPES)
-        and obj
-        and all(isinstance(v, Mapping) for v in obj)
-    )
+    return bool(isinstance(obj, ARRAY_TYPES) and obj and all(isinstance(v, Mapping) for v in obj))
 
 
 def is_suitable_inline_table(obj: Mapping, ctx: Context) -> bool:

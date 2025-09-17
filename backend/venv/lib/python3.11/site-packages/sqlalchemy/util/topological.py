@@ -27,9 +27,7 @@ _T = TypeVar("_T", bound=Any)
 __all__ = ["sort", "sort_as_subsets", "find_cycles"]
 
 
-def sort_as_subsets(
-    tuples: Collection[Tuple[_T, _T]], allitems: Collection[_T]
-) -> Iterator[Sequence[_T]]:
+def sort_as_subsets(tuples: Collection[Tuple[_T, _T]], allitems: Collection[_T]) -> Iterator[Sequence[_T]]:
     edges: DefaultDict[_T, Set[_T]] = util.defaultdict(set)
     for parent, child in tuples:
         edges[child].add(parent)
@@ -74,9 +72,7 @@ def sort(
         yield from set_
 
 
-def find_cycles(
-    tuples: Iterable[Tuple[_T, _T]], allitems: Iterable[_T]
-) -> Set[_T]:
+def find_cycles(tuples: Iterable[Tuple[_T, _T]], allitems: Iterable[_T]) -> Set[_T]:
     # adapted from:
     # https://neopythonic.blogspot.com/2009/01/detecting-cycles-in-directed-graph.html
 

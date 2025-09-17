@@ -56,9 +56,7 @@ class PyJWK:
                 raise InvalidKeyError(f"Unsupported kty: {kty}")
 
         if not has_crypto and algorithm in requires_cryptography:
-            raise MissingCryptographyError(
-                f"{algorithm} requires 'cryptography' to be installed."
-            )
+            raise MissingCryptographyError(f"{algorithm} requires 'cryptography' to be installed.")
 
         self.algorithm_name = algorithm
 
@@ -111,9 +109,7 @@ class PyJWKSet:
                 continue
 
         if len(self.keys) == 0:
-            raise PyJWKSetError(
-                "The JWK Set did not contain any usable keys. Perhaps 'cryptography' is not installed?"
-            )
+            raise PyJWKSetError("The JWK Set did not contain any usable keys. Perhaps 'cryptography' is not installed?")
 
     @staticmethod
     def from_dict(obj: dict[str, Any]) -> PyJWKSet:
