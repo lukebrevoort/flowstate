@@ -32,8 +32,12 @@ describe('ProtectedRoute Component', () => {
     jest.clearAllMocks();
     mockUseRouter.mockReturnValue({
       push: mockPush,
-      // Add other router properties as needed
-    } as any);
+      back: jest.fn(),
+      forward: jest.fn(),
+      refresh: jest.fn(),
+      replace: jest.fn(),
+      prefetch: jest.fn(),
+    });
   });
 
   it('renders children when user is authenticated', () => {

@@ -97,7 +97,7 @@ describe('AgentLoadingCard Component', () => {
       ];
 
       // Test each step type by rendering individually
-      steps.forEach((step, index) => {
+      steps.forEach((step) => {
         const { unmount } = render(<AgentLoadingCard steps={[step]} />);
         
         // Icons are rendered as SVG elements within the component structure
