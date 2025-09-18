@@ -80,7 +80,10 @@ jobs:
       - name: Check bundle size
         run: |
           # Analyze bundle size and fail if it's too large
-          BUNDLE_SIZE=$(du -sb .next | cut -f1)
+          # Exclude cache directory as it's not part of the deployable bundle
+          # Use find to calculate size excluding cache directory (cross-platform)
+          BUNDLE_SIZE_KB=$(find .next -type f ! -path '.next/cache/*' -exec du -ck {} + | tail -1 | cut -f1)
+          BUNDLE_SIZE=$((BUNDLE_SIZE_KB * 1024))  # Convert KB to bytes
           MAX_SIZE=52428800  # 50MB in bytes
           if [ $BUNDLE_SIZE -gt $MAX_SIZE ]; then
             echo "❌ Bundle size ($BUNDLE_SIZE bytes) exceeds maximum ($MAX_SIZE bytes)"
