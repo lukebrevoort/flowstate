@@ -3,8 +3,9 @@
 ## 🎉 What We've Accomplished
 
 ### 1. ✅ Backend OAuth Infrastructure
+
 - **NotionOAuthService**: Complete OAuth flow handling with CSRF protection
-- **OAuth Endpoints**: 
+- **OAuth Endpoints**:
   - `/api/oauth/notion/authorize` - Initiate OAuth flow
   - `/api/oauth/notion/callback` - Handle OAuth callback
   - `/api/oauth/notion/status` - Check connection status
@@ -12,18 +13,21 @@
 - **Token Storage**: Secure storage in Supabase with RLS policies
 - **Error Handling**: Comprehensive error handling and logging
 
-### 2. ✅ Frontend OAuth Integration  
+### 2. ✅ Frontend OAuth Integration
+
 - **API Routes**: Next.js API routes that proxy to backend
 - **OAuth Page**: Updated with real OAuth functionality
 - **Status Indicators**: Visual feedback for connection status
 - **Success/Error Messages**: User-friendly feedback system
 
 ### 3. ✅ Database Integration
+
 - **User Tokens Storage**: Tokens stored securely in `user_integrations` table
 - **Token Retrieval**: Service layer for accessing user tokens
 - **Integration Status**: Track multiple integration types
 
 ### 4. ✅ Agent Integration
+
 - **Updated NotionAPI**: Now supports user-specific tokens
 - **Project Manager**: All tools updated to use user tokens
 - **Token Service**: Helper service for agents to access user tokens
@@ -34,11 +38,13 @@
 Your Notion OAuth pipeline is **FULLY FUNCTIONAL** and ready for testing!
 
 ### Environment Setup ✅
+
 - Notion OAuth credentials are configured
 - Supabase connection is working
 - All required environment variables are set
 
 ### Code Status ✅
+
 - All backend services implemented and tested
 - Frontend integration complete
 - Agent integration updated
@@ -47,24 +53,28 @@ Your Notion OAuth pipeline is **FULLY FUNCTIONAL** and ready for testing!
 ## 🧪 How to Test
 
 ### 1. Start the Servers
+
 ```bash
 # Backend (Terminal 1)
 cd /Users/lbrevoort/Desktop/flowstate/backend
 python app.py
 
-# Frontend (Terminal 2) 
+# Frontend (Terminal 2)
 cd /Users/lbrevoort/Desktop/flowstate/frontend/flowstate
 npm run dev
 ```
 
 ### 2. Test OAuth Flow
+
 1. Navigate to `http://localhost:3000/OAuth`
 2. Click "Connect Notion"
 3. Authorize in Notion
 4. Verify success message and green checkmark
 
 ### 3. Test Agent Integration
+
 Once a user has connected their Notion:
+
 ```python
 # Your agents will automatically use the user's token
 from notion_api import NotionAPI
@@ -114,16 +124,18 @@ If you encounter issues:
 ## 📝 Usage Examples
 
 ### For Frontend
+
 ```typescript
 // Check if user has Notion connected
-const response = await fetch('/api/oauth/notion/status', {
-  headers: { 'Authorization': `Bearer ${token}` }
+const response = await fetch("/api/oauth/notion/status", {
+  headers: { Authorization: `Bearer ${token}` },
 });
 const status = await response.json();
-console.log('Notion connected:', status.connected);
+console.log("Notion connected:", status.connected);
 ```
 
 ### For Backend/Agents
+
 ```python
 # Use user-specific Notion API
 from notion_api import NotionAPI
@@ -138,6 +150,7 @@ assignments = api.get_all_assignments()
 ## 🎊 Congratulations!
 
 Your Notion OAuth pipeline is **PRODUCTION READY**! Users can now:
+
 - Connect their personal Notion workspaces
 - Have agents access their private Notion data
 - Enjoy a seamless, secure integration experience

@@ -16,21 +16,24 @@ tests/
 ## Running Tests
 
 ### Run All Tests
+
 ```bash
 cd backend
 python tests/run_tests.py
 ```
 
 ### Run Specific Test Suites
+
 ```bash
 # OAuth tests only
 python tests/run_tests.py --oauth-only
 
-# Integration tests only  
+# Integration tests only
 python tests/run_tests.py --integration-only
 ```
 
 ### Individual Test Files
+
 ```bash
 # OAuth tests
 python tests/oauth/test_notion_oauth.py
@@ -42,12 +45,14 @@ python tests/integration/test_backend_integration.py
 ## Test Coverage
 
 ### OAuth Tests (`oauth/test_notion_oauth.py`)
+
 - ✅ Environment configuration validation
 - ✅ OAuth URL generation and validation
 - ✅ Token service integration
 - ✅ Security features (CSRF protection, unique states)
 
 ### Integration Tests (`integration/test_backend_integration.py`)
+
 - ✅ Backend health checks
 - ✅ API endpoint availability
 - ✅ Database connectivity
@@ -59,6 +64,7 @@ python tests/integration/test_backend_integration.py
 Before running tests, ensure:
 
 1. **Backend is running**:
+
    ```bash
    cd backend
    python app.py
@@ -79,6 +85,7 @@ Before running tests, ensure:
 ## Test Results
 
 Tests will output detailed results including:
+
 - ✅ Passed tests
 - ❌ Failed tests with error details
 - ⚠️ Warnings for non-critical issues
@@ -89,15 +96,19 @@ Tests will output detailed results including:
 ### Common Issues
 
 1. **Backend not running**:
+
    ```
    ❌ Cannot connect to backend at http://localhost:8000
    ```
+
    **Solution**: Start the backend with `python app.py`
 
 2. **Missing environment variables**:
+
    ```
    ❌ Missing environment variables: ['NOTION_OAUTH_CLIENT_ID']
    ```
+
    **Solution**: Check your `.env` file and ensure all required variables are set
 
 3. **OAuth configuration issues**:
@@ -109,6 +120,7 @@ Tests will output detailed results including:
 ### Debug Mode
 
 For more detailed output, you can run individual test files directly:
+
 ```bash
 python tests/oauth/test_notion_oauth.py
 ```
@@ -124,6 +136,7 @@ To add new tests:
 3. **For new service areas**: Create new test files in appropriate subdirectories
 
 Follow the existing patterns:
+
 - Use descriptive test names
 - Include proper error handling
 - Provide clear success/failure messages

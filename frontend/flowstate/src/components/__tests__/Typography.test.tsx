@@ -4,7 +4,7 @@ import Typography from '../Typography';
 
 describe('Typography Component', () => {
   it('renders h1 variant correctly', () => {
-    render(<Typography variant="h1">Heading 1</Typography>);
+    render(<Typography variant='h1'>Heading 1</Typography>);
     const heading = screen.getByRole('heading', { level: 1 });
     expect(heading).toBeInTheDocument();
     expect(heading).toHaveTextContent('Heading 1');
@@ -12,7 +12,7 @@ describe('Typography Component', () => {
   });
 
   it('renders h2 variant correctly', () => {
-    render(<Typography variant="h2">Heading 2</Typography>);
+    render(<Typography variant='h2'>Heading 2</Typography>);
     const heading = screen.getByRole('heading', { level: 2 });
     expect(heading).toBeInTheDocument();
     expect(heading).toHaveTextContent('Heading 2');
@@ -20,7 +20,7 @@ describe('Typography Component', () => {
   });
 
   it('renders h3 variant correctly', () => {
-    render(<Typography variant="h3">Heading 3</Typography>);
+    render(<Typography variant='h3'>Heading 3</Typography>);
     const heading = screen.getByRole('heading', { level: 3 });
     expect(heading).toBeInTheDocument();
     expect(heading).toHaveTextContent('Heading 3');
@@ -28,7 +28,7 @@ describe('Typography Component', () => {
   });
 
   it('renders p variant correctly', () => {
-    render(<Typography variant="p">Paragraph text</Typography>);
+    render(<Typography variant='p'>Paragraph text</Typography>);
     const paragraph = screen.getByText('Paragraph text');
     expect(paragraph).toBeInTheDocument();
     expect(paragraph.tagName).toBe('P');
@@ -36,7 +36,7 @@ describe('Typography Component', () => {
   });
 
   it('renders span variant correctly', () => {
-    render(<Typography variant="span">Span text</Typography>);
+    render(<Typography variant='span'>Span text</Typography>);
     const span = screen.getByText('Span text');
     expect(span).toBeInTheDocument();
     expect(span.tagName).toBe('SPAN');
@@ -45,7 +45,7 @@ describe('Typography Component', () => {
 
   it('applies custom className', () => {
     render(
-      <Typography variant="p" className="custom-class">
+      <Typography variant='p' className='custom-class'>
         Custom styled text
       </Typography>
     );
@@ -56,11 +56,11 @@ describe('Typography Component', () => {
 
   it('handles React node children', () => {
     render(
-      <Typography variant="p">
+      <Typography variant='p'>
         <strong>Bold</strong> and <em>italic</em> text
       </Typography>
     );
-    
+
     // Use a more specific selector for the paragraph
     const paragraph = document.querySelector('p');
     expect(paragraph).toBeInTheDocument();
@@ -71,24 +71,37 @@ describe('Typography Component', () => {
 
   it('combines base classes with custom classes properly', () => {
     render(
-      <Typography variant="h1" className="text-red-500 mt-4">
+      <Typography variant='h1' className='text-red-500 mt-4'>
         Styled heading
       </Typography>
     );
-    
+
     const heading = screen.getByRole('heading', { level: 1 });
-    expect(heading).toHaveClass('text-3xl', 'font-bold', 'text-red-500', 'mt-4');
+    expect(heading).toHaveClass(
+      'text-3xl',
+      'font-bold',
+      'text-red-500',
+      'mt-4'
+    );
   });
 
   it('handles empty className gracefully', () => {
-    render(<Typography variant="p" className="">Plain text</Typography>);
+    render(
+      <Typography variant='p' className=''>
+        Plain text
+      </Typography>
+    );
     const element = screen.getByText('Plain text');
     expect(element).toHaveClass('text-base');
     expect(element.className).not.toContain('undefined');
   });
 
   it('trims className properly', () => {
-    render(<Typography variant="p" className="  extra-space  ">Text</Typography>);
+    render(
+      <Typography variant='p' className='  extra-space  '>
+        Text
+      </Typography>
+    );
     const element = screen.getByText('Text');
     expect(element.className).not.toMatch(/^\s|\s$/); // No leading/trailing spaces
   });

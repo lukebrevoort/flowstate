@@ -26,7 +26,7 @@ describe('Validation Utilities', () => {
         'a@b.co',
       ];
 
-      validEmails.forEach((email) => {
+      validEmails.forEach(email => {
         expect(isValidEmail(email)).toBe(true);
       });
     });
@@ -46,7 +46,7 @@ describe('Validation Utilities', () => {
         'user@domain',
       ];
 
-      invalidEmails.forEach((email) => {
+      invalidEmails.forEach(email => {
         expect(isValidEmail(email)).toBe(false);
       });
     });
@@ -82,7 +82,7 @@ describe('Validation Utilities', () => {
         'Secure123#',
       ];
 
-      strongPasswords.forEach((password) => {
+      strongPasswords.forEach(password => {
         const result = validatePassword(password);
         expect(result.isValid).toBe(true);
         expect(result.requirements.minLength).toBe(true);
@@ -142,11 +142,11 @@ describe('Validation Utilities', () => {
     it('handles non-string inputs', () => {
       const invalidInputs = [null, undefined, 123, {}, [], true];
 
-      invalidInputs.forEach((input) => {
+      invalidInputs.forEach(input => {
         const result = validatePassword(input);
         expect(result.isValid).toBe(false);
         expect(
-          Object.values(result.requirements).every((req) => req === false)
+          Object.values(result.requirements).every(req => req === false)
         ).toBe(true);
       });
     });
@@ -178,12 +178,12 @@ describe('Validation Utilities', () => {
       const result1 = formatDate('2023-01-01'); // This might show Dec 31, 2022 due to timezone
       const result2 = formatDate('2023/01/01'); // This should show Jan 1, 2023
       const result3 = formatDate('January 1, 2023'); // This should show Jan 1, 2023
-      
+
       // Check that all return valid formatted dates
       expect(result1).toMatch(/(December 31, 2022|January 1, 2023)/);
       expect(result2).toMatch(/January 1, 2023/);
       expect(result3).toMatch(/January 1, 2023/);
-      
+
       // All should be valid dates, not "Invalid Date"
       [result1, result2, result3].forEach(result => {
         expect(result).not.toBe('Invalid Date');
@@ -191,14 +191,9 @@ describe('Validation Utilities', () => {
     });
 
     it('returns "Invalid Date" for invalid date strings', () => {
-      const invalidDates = [
-        'invalid-date',
-        'not-a-date',
-        '',
-        'abc',
-      ];
+      const invalidDates = ['invalid-date', 'not-a-date', '', 'abc'];
 
-      invalidDates.forEach((date) => {
+      invalidDates.forEach(date => {
         expect(formatDate(date)).toBe('Invalid Date');
       });
     });
@@ -208,7 +203,7 @@ describe('Validation Utilities', () => {
       const validDateString = '2023-12-25';
       const result = formatDate(validDateString);
       expect(result).toMatch(/December \d{1,2}, 2023/);
-      
+
       // Test that pure number strings are treated as invalid
       const numberString = '1703548800000';
       expect(formatDate(numberString)).toBe('Invalid Date');

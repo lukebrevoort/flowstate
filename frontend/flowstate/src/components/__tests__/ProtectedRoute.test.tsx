@@ -21,7 +21,9 @@ const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const createMockAuthContext = (isAuthenticated: boolean, loading: boolean) => ({
   isAuthenticated,
   loading,
-  user: isAuthenticated ? { id: '1', name: 'Test User', email: 'test@example.com' } : null,
+  user: isAuthenticated
+    ? { id: '1', name: 'Test User', email: 'test@example.com' }
+    : null,
   login: jest.fn(),
   logout: jest.fn(),
   signup: jest.fn(),
@@ -66,7 +68,7 @@ describe('ProtectedRoute Component', () => {
     const loadingSpinner = document.querySelector('.animate-spin');
     expect(loadingSpinner).toBeInTheDocument();
     expect(loadingSpinner).toHaveClass('border-flowstate-accent');
-    
+
     // Protected content should not be visible
     expect(screen.queryByText('Protected content')).not.toBeInTheDocument();
     expect(mockPush).not.toHaveBeenCalled();
@@ -154,12 +156,16 @@ describe('ProtectedRoute Component', () => {
       <ProtectedRoute>
         <div>
           <h1>Dashboard</h1>
-          <p>Welcome to the <strong>protected</strong> area!</p>
+          <p>
+            Welcome to the <strong>protected</strong> area!
+          </p>
         </div>
       </ProtectedRoute>
     );
 
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Dashboard');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+      'Dashboard'
+    );
     expect(screen.getByText(/Welcome to the/)).toBeInTheDocument();
     expect(screen.getByText('protected')).toBeInTheDocument();
   });

@@ -1,5 +1,5 @@
 // jest.setup.js
-import '@testing-library/jest-dom'
+import '@testing-library/jest-dom';
 
 // Mock IntersectionObserver
 global.IntersectionObserver = class IntersectionObserver {
@@ -7,7 +7,7 @@ global.IntersectionObserver = class IntersectionObserver {
   disconnect() {}
   observe() {}
   unobserve() {}
-}
+};
 
 // Mock ResizeObserver
 global.ResizeObserver = class ResizeObserver {
@@ -15,7 +15,7 @@ global.ResizeObserver = class ResizeObserver {
   disconnect() {}
   observe() {}
   unobserve() {}
-}
+};
 
 // Mock matchMedia
 Object.defineProperty(window, 'matchMedia', {
@@ -30,11 +30,11 @@ Object.defineProperty(window, 'matchMedia', {
     removeEventListener: jest.fn(),
     dispatchEvent: jest.fn(),
   })),
-})
+});
 
 // Mock fetch if not available
 if (typeof global.fetch === 'undefined') {
-  global.fetch = jest.fn()
+  global.fetch = jest.fn();
 }
 
 // Mock next/router
@@ -56,9 +56,9 @@ jest.mock('next/router', () => ({
         off: jest.fn(),
         emit: jest.fn(),
       },
-    }
+    };
   },
-}))
+}));
 
 // Mock next/navigation
 jest.mock('next/navigation', () => ({
@@ -70,7 +70,7 @@ jest.mock('next/navigation', () => ({
       back: jest.fn(),
       forward: jest.fn(),
       refresh: jest.fn(),
-    }
+    };
   },
   useSearchParams() {
     return {
@@ -81,9 +81,9 @@ jest.mock('next/navigation', () => ({
       forEach: jest.fn(),
       keys: jest.fn(),
       values: jest.fn(),
-    }
+    };
   },
   usePathname() {
-    return '/'
+    return '/';
   },
-}))
+}));

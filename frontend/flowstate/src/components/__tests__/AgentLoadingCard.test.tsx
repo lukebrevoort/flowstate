@@ -41,20 +41,26 @@ describe('AgentLoadingCard Component', () => {
   describe('Initial States', () => {
     it('renders initial loading state when no steps provided', () => {
       render(<AgentLoadingCard />);
-      
-      expect(screen.getByText('Processing Your Request...')).toBeInTheDocument();
+
+      expect(
+        screen.getByText('Processing Your Request...')
+      ).toBeInTheDocument();
       const spinner = document.querySelector('.animate-spin');
       expect(spinner).toBeInTheDocument();
     });
 
     it('renders initial loading state with empty steps array', () => {
       render(<AgentLoadingCard steps={[]} />);
-      
-      expect(screen.getByText('Processing Your Request...')).toBeInTheDocument();
+
+      expect(
+        screen.getByText('Processing Your Request...')
+      ).toBeInTheDocument();
     });
 
     it('applies custom className', () => {
-      const { container } = render(<AgentLoadingCard className="custom-class" />);
+      const { container } = render(
+        <AgentLoadingCard className='custom-class' />
+      );
       expect(container.firstChild).toHaveClass('custom-class');
     });
   });
@@ -64,7 +70,7 @@ describe('AgentLoadingCard Component', () => {
       const step = createMockStep({
         agent: 'Project Manager',
         message: 'Analyzing your request...',
-        type: 'routing'
+        type: 'routing',
       });
 
       render(<AgentLoadingCard steps={[step]} />);
@@ -72,19 +78,23 @@ describe('AgentLoadingCard Component', () => {
       expect(screen.getByText('Project Manager')).toBeInTheDocument();
       expect(screen.getByText('Analyzing your request...')).toBeInTheDocument();
       expect(screen.getByText('Processing Request')).toBeInTheDocument();
-      expect(screen.getByText('Student Productivity Agent')).toBeInTheDocument();
+      expect(
+        screen.getByText('Student Productivity Agent')
+      ).toBeInTheDocument();
     });
 
     it('renders step with tool information', () => {
       const step = createMockStep({
         message: 'Using calendar integration',
         tool: 'google_calendar_api',
-        type: 'tool'
+        type: 'tool',
       });
 
       render(<AgentLoadingCard steps={[step]} />);
 
-      expect(screen.getByText('Using calendar integration')).toBeInTheDocument();
+      expect(
+        screen.getByText('Using calendar integration')
+      ).toBeInTheDocument();
       expect(screen.getByText('google_calendar_api')).toBeInTheDocument();
     });
 
@@ -97,13 +107,15 @@ describe('AgentLoadingCard Component', () => {
       ];
 
       // Test each step type by rendering individually
-      steps.forEach((step) => {
+      steps.forEach(step => {
         const { unmount } = render(<AgentLoadingCard steps={[step]} />);
-        
+
         // Icons are rendered as SVG elements within the component structure
-        const iconElement = document.querySelector('.text-flowstate-accent svg');
+        const iconElement = document.querySelector(
+          '.text-flowstate-accent svg'
+        );
         expect(iconElement).toBeInTheDocument();
-        
+
         unmount();
       });
     });
@@ -130,7 +142,7 @@ describe('AgentLoadingCard Component', () => {
 
     it('handles new steps being added dynamically', async () => {
       const initialSteps = [createMockStep({ message: 'Initial step' })];
-      
+
       const { rerender } = render(
         <AgentLoadingCard steps={initialSteps} stepDuration={1000} />
       );
@@ -140,15 +152,18 @@ describe('AgentLoadingCard Component', () => {
       // Add a new step
       const newSteps = [
         ...initialSteps,
-        createMockStep({ message: 'New step added' })
+        createMockStep({ message: 'New step added' }),
       ];
 
       rerender(<AgentLoadingCard steps={newSteps} stepDuration={1000} />);
 
       // Should show the new step (it may take effect immediately or after a delay)
-      await waitFor(() => {
-        expect(screen.getByText('New step added')).toBeInTheDocument();
-      }, { timeout: 2000 });
+      await waitFor(
+        () => {
+          expect(screen.getByText('New step added')).toBeInTheDocument();
+        },
+        { timeout: 2000 }
+      );
     });
 
     it('calls onComplete when all steps are finished', async () => {
@@ -156,9 +171,9 @@ describe('AgentLoadingCard Component', () => {
       const steps = [createMockStep({ message: 'Only step' })];
 
       render(
-        <AgentLoadingCard 
-          steps={steps} 
-          stepDuration={1000} 
+        <AgentLoadingCard
+          steps={steps}
+          stepDuration={1000}
           onComplete={onComplete}
         />
       );
@@ -176,9 +191,9 @@ describe('AgentLoadingCard Component', () => {
       ];
 
       render(
-        <AgentLoadingCard 
-          steps={steps} 
-          stepDuration={500} 
+        <AgentLoadingCard
+          steps={steps}
+          stepDuration={500}
           transitionDuration={100}
         />
       );
@@ -194,7 +209,7 @@ describe('AgentLoadingCard Component', () => {
   describe('Completion State', () => {
     it('handles external completion state', () => {
       const steps = [createMockStep({ message: 'Step' })];
-      
+
       const { rerender } = render(
         <AgentLoadingCard steps={steps} isComplete={false} />
       );
@@ -204,7 +219,7 @@ describe('AgentLoadingCard Component', () => {
 
       // Mark as complete externally
       rerender(<AgentLoadingCard steps={steps} isComplete={true} />);
-      
+
       // Component should handle completion state
       expect(screen.getByText('Step')).toBeInTheDocument();
     });
@@ -216,11 +231,7 @@ describe('AgentLoadingCard Component', () => {
       ];
 
       render(
-        <AgentLoadingCard 
-          steps={steps} 
-          isComplete={true}
-          stepDuration={100}
-        />
+        <AgentLoadingCard steps={steps} isComplete={true} stepDuration={100} />
       );
 
       expect(screen.getByText('First')).toBeInTheDocument();
@@ -235,9 +246,9 @@ describe('AgentLoadingCard Component', () => {
   describe('Edge Cases', () => {
     it('handles undefined currentStepData gracefully', () => {
       const steps = [createMockStep({ message: 'Test' })];
-      
+
       render(<AgentLoadingCard steps={steps} />);
-      
+
       // Verify it doesn't crash and shows appropriate fallback
       expect(screen.getByText('Test')).toBeInTheDocument();
     });
@@ -252,10 +263,14 @@ describe('AgentLoadingCard Component', () => {
 
       render(<AgentLoadingCard steps={[step]} />);
 
-      expect(screen.getByText('Message without optional fields')).toBeInTheDocument();
+      expect(
+        screen.getByText('Message without optional fields')
+      ).toBeInTheDocument();
       expect(screen.getByText('Test Agent')).toBeInTheDocument();
       // Should not show tool section
-      expect(screen.queryByRole('generic', { name: /google_calendar_api/ })).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('generic', { name: /google_calendar_api/ })
+      ).not.toBeInTheDocument();
     });
 
     it('handles rapid step additions', async () => {
@@ -294,16 +309,16 @@ describe('AgentLoadingCard Component', () => {
     });
 
     it('shows correct step type styling', () => {
-      const step = createMockStep({ 
+      const step = createMockStep({
         agent: 'Scheduler',
-        type: 'tool'
+        type: 'tool',
       });
 
       render(<AgentLoadingCard steps={[step]} />);
 
       // Should show agent badge
       expect(screen.getByText('Scheduler')).toBeInTheDocument();
-      
+
       // Should have proper styling classes (component structure)
       const agentBadge = screen.getByText('Scheduler');
       expect(agentBadge).toHaveClass('inline-flex');
