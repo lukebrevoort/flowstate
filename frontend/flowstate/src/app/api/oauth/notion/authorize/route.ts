@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
   try {
     // Get the access token from the request headers or cookies
     const authHeader = request.headers.get('authorization');
-    
+
     if (!authHeader) {
       return NextResponse.json(
         { error: 'Authorization header required' },
@@ -15,13 +15,16 @@ export async function GET(request: NextRequest) {
     }
 
     // Forward the request to the backend
-    const response = await fetch(`${config.apiUrl}/api/oauth/notion/authorize`, {
-      method: 'GET',
-      headers: {
-        'Authorization': authHeader,
-        'Content-Type': 'application/json',
-      },
-    });
+    const response = await fetch(
+      `${config.apiUrl}/api/oauth/notion/authorize`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: authHeader,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
 
     if (!response.ok) {
       throw new Error(`Backend responded with ${response.status}`);
@@ -29,7 +32,6 @@ export async function GET(request: NextRequest) {
 
     const data = await response.json();
     return NextResponse.json(data);
-
   } catch (error) {
     console.error('Notion OAuth authorize error:', error);
     return NextResponse.json(

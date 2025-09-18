@@ -15,11 +15,7 @@ export default function Home() {
 
   return (
     <div>
-      {backendData ? (
-        <h1>{backendData.message}</h1>
-      ) : (
-        <h1>Loading...</h1>
-      )}
+      {backendData ? <h1>{backendData.message}</h1> : <h1>Loading...</h1>}
     </div>
   );
 }

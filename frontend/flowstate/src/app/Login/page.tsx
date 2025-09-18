@@ -1,82 +1,83 @@
-"use client";
+'use client';
 
-import Image from "next/image";
-import Link from "next/link";
-import { motion } from "framer-motion";
-import { useState } from "react";
+import Image from 'next/image';
+import Link from 'next/link';
+import { motion } from 'framer-motion';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function Login() {
   const router = useRouter();
   const { login, loading } = useAuth();
-  
+
   const [formData, setFormData] = useState({
-    email: "",
-    password: "",
+    email: '',
+    password: '',
     rememberMe: false,
   });
-  
+
   const [error, setError] = useState('');
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
-    setFormData((prev) => ({
+    setFormData(prev => ({
       ...prev,
-      [name]: type === "checkbox" ? checked : value,
+      [name]: type === 'checkbox' ? checked : value,
     }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    
+
     try {
       // Call login function from AuthContext
       await login(formData.email, formData.password);
-      
+
       // Redirect to chat page on successful login
       router.push('/Chat');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred during login');
+      setError(
+        err instanceof Error ? err.message : 'An error occurred during login'
+      );
     }
   };
 
-
   return (
-    <div className="relative min-h-screen flex justify-center items-center p-5 bg-flowstate-bg overflow-hidden">
+    <div className='relative min-h-screen flex justify-center items-center p-5 bg-flowstate-bg overflow-hidden'>
       {/* Green blur circle - top */}
-      <div className="absolute top-[-89px] right-[224px] w-[425px] h-[425px]">
+      <div className='absolute top-[-89px] right-[224px] w-[425px] h-[425px]'>
         <svg
-          width="833"
-          height="540"
-          viewBox="0 0 833 540"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
+          width='833'
+          height='540'
+          viewBox='0 0 833 540'
+          fill='none'
+          xmlns='http://www.w3.org/2000/svg'
         >
-          <g filter="url(#filter0_f_48_20)">
-            <circle cx="416.5" cy="123.5" r="212.5" fill="#9EAB57" />
+          <g filter='url(#filter0_f_48_20)'>
+            <circle cx='416.5' cy='123.5' r='212.5' fill='#9EAB57' />
           </g>
           <defs>
             <filter
-              id="filter0_f_48_20"
-              x="0"
-              y="-293"
-              width="833"
-              height="833"
-              filterUnits="userSpaceOnUse"
-              colorInterpolationFilters="sRGB"
+              id='filter0_f_48_20'
+              x='0'
+              y='-293'
+              width='833'
+              height='833'
+              filterUnits='userSpaceOnUse'
+              colorInterpolationFilters='sRGB'
             >
-              <feFlood floodOpacity="0" result="BackgroundImageFix" />
+              <feFlood floodOpacity='0' result='BackgroundImageFix' />
               <feBlend
-                mode="normal"
-                in="SourceGraphic"
-                in2="BackgroundImageFix"
-                result="shape"
+                mode='normal'
+                in='SourceGraphic'
+                in2='BackgroundImageFix'
+                result='shape'
               />
               <feGaussianBlur
-                stdDeviation="102"
-                result="effect1_foregroundBlur_48_20"
+                stdDeviation='102'
+                result='effect1_foregroundBlur_48_20'
               />
             </filter>
           </defs>
@@ -84,37 +85,37 @@ export default function Login() {
       </div>
 
       {/* Orange blur circle - bottom */}
-      <div className="absolute bottom-[-89px] left-[124px] w-[460px] h-[494px]">
+      <div className='absolute bottom-[-89px] left-[124px] w-[460px] h-[494px]'>
         <svg
-          width="718"
-          height="422"
-          viewBox="0 0 718 422"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
+          width='718'
+          height='422'
+          viewBox='0 0 718 422'
+          fill='none'
+          xmlns='http://www.w3.org/2000/svg'
         >
-          <g filter="url(#filter0_f_48_38)">
-            <ellipse cx="354" cy="381" rx="230" ry="247" fill="#D06224" />
+          <g filter='url(#filter0_f_48_38)'>
+            <ellipse cx='354' cy='381' rx='230' ry='247' fill='#D06224' />
           </g>
           <defs>
             <filter
-              id="filter0_f_48_38"
-              x="-10"
-              y="0"
-              width="728"
-              height="762"
-              filterUnits="userSpaceOnUse"
-              colorInterpolationFilters="sRGB"
+              id='filter0_f_48_38'
+              x='-10'
+              y='0'
+              width='728'
+              height='762'
+              filterUnits='userSpaceOnUse'
+              colorInterpolationFilters='sRGB'
             >
-              <feFlood floodOpacity="0" result="BackgroundImageFix" />
+              <feFlood floodOpacity='0' result='BackgroundImageFix' />
               <feBlend
-                mode="normal"
-                in="SourceGraphic"
-                in2="BackgroundImageFix"
-                result="shape"
+                mode='normal'
+                in='SourceGraphic'
+                in2='BackgroundImageFix'
+                result='shape'
               />
               <feGaussianBlur
-                stdDeviation="67"
-                result="effect1_foregroundBlur_48_38"
+                stdDeviation='67'
+                result='effect1_foregroundBlur_48_38'
               />
             </filter>
           </defs>
@@ -126,20 +127,20 @@ export default function Login() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
-        className="relative w-[610px] mt-[30px] max-lg:w-[90%] max-lg:max-w-[610px] max-sm:w-full px-4"
+        className='relative w-[610px] mt-[30px] max-lg:w-[90%] max-lg:max-w-[610px] max-sm:w-full px-4'
       >
-        <div className="w-full min-h-[800px] rounded-[45px] bg-flowstate-header max-lg:min-h-[750px]">
-          <div className="absolute top-0 left-0 w-full h-full p-10 max-sm:p-5">
-            <h1 className="font-alegreya text-[48px] text-black mb-[30px]">
+        <div className='w-full min-h-[800px] rounded-[45px] bg-flowstate-header max-lg:min-h-[750px]'>
+          <div className='absolute top-0 left-0 w-full h-full p-10 max-sm:p-5'>
+            <h1 className='font-alegreya text-[48px] text-black mb-[30px]'>
               Sign in
             </h1>
 
             {/* Sign up link */}
-            <div className="absolute right-5 top-[65px] text-[20px] max-sm:static max-sm:text-center max-sm:mb-5">
+            <div className='absolute right-5 top-[65px] text-[20px] max-sm:static max-sm:text-center max-sm:mb-5'>
               <span>Don&apos;t have an account? </span>
               <Link
-                href="/Signup"
-                className="font-bold cursor-pointer hover:text-flowstate-accent transition-colors"
+                href='/Signup'
+                className='font-bold cursor-pointer hover:text-flowstate-accent transition-colors'
               >
                 Create One
               </Link>
@@ -148,62 +149,62 @@ export default function Login() {
             {/* Form */}
             <form
               onSubmit={handleSubmit}
-              className="max-w-[427px] mx-auto mt-20 max-sm:mt-10"
+              className='max-w-[427px] mx-auto mt-20 max-sm:mt-10'
             >
               {/* Email field */}
-              <div className="mb-10">
+              <div className='mb-10'>
                 <label
-                  htmlFor="email"
-                  className="font-alegreya text-[32px] text-black mb-2.5 block"
+                  htmlFor='email'
+                  className='font-alegreya text-[32px] text-black mb-2.5 block'
                 >
                   Email
                 </label>
                 <input
-                  type="email"
-                  id="email"
-                  name="email"
-                  placeholder="e.g. student@school.edu"
+                  type='email'
+                  id='email'
+                  name='email'
+                  placeholder='e.g. student@school.edu'
                   value={formData.email}
                   onChange={handleInputChange}
-                  className="w-full h-[40px] rounded-[35px] border-[3px] border-black bg-flowstate-header
-                    px-5 font-alegreya text-[24px] text-[#665F5D] max-sm:text-[20px]"
+                  className='w-full h-[40px] rounded-[35px] border-[3px] border-black bg-flowstate-header
+                    px-5 font-alegreya text-[24px] text-[#665F5D] max-sm:text-[20px]'
                 />
               </div>
 
               {/* Password field */}
-              <div className="mb-10">
+              <div className='mb-10'>
                 <label
-                  htmlFor="password"
-                  className="font-alegreya text-[32px] text-black mb-2.5 block"
+                  htmlFor='password'
+                  className='font-alegreya text-[32px] text-black mb-2.5 block'
                 >
                   Password
                 </label>
                 <input
-                  type="password"
-                  id="password"
-                  name="password"
-                  placeholder="Password (min 8 characters)"
+                  type='password'
+                  id='password'
+                  name='password'
+                  placeholder='Password (min 8 characters)'
                   value={formData.password}
                   onChange={handleInputChange}
-                  className="w-full h-[40px] rounded-[35px] border-[3px] border-black bg-flowstate-header
-                    px-5 font-alegreya text-[24px] text-[#665F5D] max-sm:text-[20px]"
+                  className='w-full h-[40px] rounded-[35px] border-[3px] border-black bg-flowstate-header
+                    px-5 font-alegreya text-[24px] text-[#665F5D] max-sm:text-[20px]'
                 />
               </div>
 
               {/* Remember me checkbox */}
-              <div className="flex items-center mb-10">
-                <div className="flex items-center gap-2.5">
+              <div className='flex items-center mb-10'>
+                <div className='flex items-center gap-2.5'>
                   <input
-                    type="checkbox"
-                    id="rememberMe"
-                    name="rememberMe"
+                    type='checkbox'
+                    id='rememberMe'
+                    name='rememberMe'
                     checked={formData.rememberMe}
                     onChange={handleInputChange}
-                    className="w-8 h-8 border-2 border-[#1D1B20] rounded"
+                    className='w-8 h-8 border-2 border-[#1D1B20] rounded'
                   />
                   <label
-                    htmlFor="rememberMe"
-                    className="font-alegreya text-[32px] text-black max-sm:text-[24px]"
+                    htmlFor='rememberMe'
+                    className='font-alegreya text-[32px] text-black max-sm:text-[24px]'
                   >
                     Remember me
                   </label>
@@ -211,14 +212,14 @@ export default function Login() {
               </div>
 
               {/* Buttons */}
-              <div className="flex flex-col gap-[25px]">
+              <div className='flex flex-col gap-[25px]'>
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  type="submit"
+                  type='submit'
                   disabled={loading}
-                  className="w-full h-[80px] rounded-[35px] bg-flowstate-dark text-white font-alegreya text-[36px]
-                    cursor-pointer max-sm:h-[60px] max-sm:text-[28px] max-sm:-mt-[5px]"
+                  className='w-full h-[80px] rounded-[35px] bg-flowstate-dark text-white font-alegreya text-[36px]
+                    cursor-pointer max-sm:h-[60px] max-sm:text-[28px] max-sm:-mt-[5px]'
                 >
                   {loading ? 'Signing in...' : 'Sign in'}
                 </motion.button>
@@ -226,18 +227,18 @@ export default function Login() {
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  type="button"
-                  className="w-full h-[50px] rounded-[35px] bg-flowstate-bg flex items-center px-5
-                    cursor-pointer max-sm:h-[45px] max-lg:px-4"
+                  type='button'
+                  className='w-full h-[50px] rounded-[35px] bg-flowstate-bg flex items-center px-5
+                    cursor-pointer max-sm:h-[45px] max-lg:px-4'
                 >
                   <Image
-                    src="/google.png"
-                    alt="Google"
+                    src='/google.png'
+                    alt='Google'
                     width={32}
                     height={32}
-                    className="mr-5 max-lg:mr-3"
+                    className='mr-5 max-lg:mr-3'
                   />
-                  <span className="font-alegreya text-[32px] text-black max-lg:text-[24px] max-sm:text-[17px]">
+                  <span className='font-alegreya text-[32px] text-black max-lg:text-[24px] max-sm:text-[17px]'>
                     Sign in with Google
                   </span>
                 </motion.button>
@@ -245,18 +246,16 @@ export default function Login() {
 
               {/* Error display */}
               {error && (
-                <div className="mt-4 text-red-500 text-center">
-                  {error}
-                </div>
+                <div className='mt-4 text-red-500 text-center'>{error}</div>
               )}
 
               {/* Development backdoor info */}
-              <div className="mt-6 p-4 bg-yellow-100 border-2 border-yellow-400 rounded-lg">
-                <div className="text-center text-yellow-800">
-                  <p className="font-bold text-sm mb-2">🔓 DEVELOPMENT MODE</p>
-                  <p className="text-xs">Test Credentials:</p>
-                  <p className="text-xs font-mono">Email: test@flowstate.dev</p>
-                  <p className="text-xs font-mono">Password: testpass123</p>
+              <div className='mt-6 p-4 bg-yellow-100 border-2 border-yellow-400 rounded-lg'>
+                <div className='text-center text-yellow-800'>
+                  <p className='font-bold text-sm mb-2'>🔓 DEVELOPMENT MODE</p>
+                  <p className='text-xs'>Test Credentials:</p>
+                  <p className='text-xs font-mono'>Email: test@flowstate.dev</p>
+                  <p className='text-xs font-mono'>Password: testpass123</p>
                 </div>
               </div>
             </form>

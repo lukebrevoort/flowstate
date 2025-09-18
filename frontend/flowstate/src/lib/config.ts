@@ -12,11 +12,15 @@ const devConfig: Config = {
 
 // Production configuration
 const prodConfig: Config = {
-  apiUrl: process.env.NEXT_PUBLIC_API_URL || 'https://flowstate-xqoe.onrender.com',
-  langGraphUrl: process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'https://flowstate-xqoe.onrender.com',
+  apiUrl:
+    process.env.NEXT_PUBLIC_API_URL || 'https://flowstate-xqoe.onrender.com',
+  langGraphUrl:
+    process.env.NEXT_PUBLIC_LANGGRAPH_URL ||
+    'https://flowstate-xqoe.onrender.com',
 };
 
 // Determine which configuration to use based on environment
-const config: Config = process.env.NODE_ENV === 'production' ? prodConfig : devConfig;
+const config: Config =
+  process.env.NODE_ENV === 'production' ? prodConfig : devConfig;
 
 export default config;

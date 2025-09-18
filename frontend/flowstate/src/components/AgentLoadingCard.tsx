@@ -25,14 +25,14 @@ const AgentLoadingCard: React.FC<AgentLoadingCardProps> = ({
   onComplete,
   stepDuration = 2500,
   transitionDuration = 300,
-  className = ''
+  className = '',
 }) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [showStep, setShowStep] = useState(true);
   const [internalComplete, setInternalComplete] = useState(isComplete);
   const [previousStepsLength, setPreviousStepsLength] = useState(0);
 
-// Always use the most up-to-date steps - use memo to recalculate when steps change
+  // Always use the most up-to-date steps - use memo to recalculate when steps change
   const activeSteps = useMemo(() => {
     const result = steps.length > 0 ? steps : [];
     console.log('activeSteps recalculated:', result);
@@ -50,7 +50,7 @@ const AgentLoadingCard: React.FC<AgentLoadingCardProps> = ({
   useEffect(() => {
     if (steps.length > previousStepsLength) {
       console.log(`New step added: ${steps.length} vs ${previousStepsLength}`);
-      
+
       // If this is the first step, start from 0
       if (previousStepsLength === 0) {
         setCurrentStep(0);
@@ -67,7 +67,7 @@ const AgentLoadingCard: React.FC<AgentLoadingCardProps> = ({
           }, transitionDuration);
         }
       }
-      
+
       setPreviousStepsLength(steps.length);
     }
   }, [steps.length, previousStepsLength, currentStep, transitionDuration]);
@@ -80,10 +80,10 @@ const AgentLoadingCard: React.FC<AgentLoadingCardProps> = ({
   // Handle step progression - only auto-advance if we're behind
   useEffect(() => {
     if (internalComplete) return;
-    
+
     // If we have no steps yet, wait
     if (steps.length === 0) return;
-    
+
     // Only set up auto-progression if we're not at the latest step
     // This prevents the timer from interfering with manual step advancement
     if (currentStep < activeSteps.length - 1) {
@@ -91,7 +91,7 @@ const AgentLoadingCard: React.FC<AgentLoadingCardProps> = ({
         if (currentStep < activeSteps.length - 1) {
           // Fade out current step
           setShowStep(false);
-          
+
           setTimeout(() => {
             setCurrentStep(prev => prev + 1);
             setShowStep(true);
@@ -113,29 +113,38 @@ const AgentLoadingCard: React.FC<AgentLoadingCardProps> = ({
 
       return () => clearTimeout(completeTimer);
     }
-  }, [currentStep, activeSteps.length, internalComplete, stepDuration, transitionDuration, onComplete, steps.length, activeSteps]);
+  }, [
+    currentStep,
+    activeSteps.length,
+    internalComplete,
+    stepDuration,
+    transitionDuration,
+    onComplete,
+    steps.length,
+    activeSteps,
+  ]);
 
   const getStepIcon = (type: AgentStep['type']) => {
     switch (type) {
       case 'routing':
-        return <ArrowRight className="w-4 h-4" />;
+        return <ArrowRight className='w-4 h-4' />;
       case 'tool':
-        return <Zap className="w-4 h-4" />;
+        return <Zap className='w-4 h-4' />;
       case 'completion':
-        return <CheckCircle className="w-4 h-4" />;
+        return <CheckCircle className='w-4 h-4' />;
       default:
-        return <Clock className="w-4 h-4" />;
+        return <Clock className='w-4 h-4' />;
     }
   };
 
   if (activeSteps.length === 0) {
     return (
       <div className={`max-w-md mx-auto ${className}`}>
-        <div className="bg-flowstate-bg border border-gray-200 rounded-xl shadow-header p-6 text-center">
-          <div className="p-2 rounded-full bg-flowstate-accent mx-auto mb-3 w-fit">
-            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+        <div className='bg-flowstate-bg border border-gray-200 rounded-xl shadow-header p-6 text-center'>
+          <div className='p-2 rounded-full bg-flowstate-accent mx-auto mb-3 w-fit'>
+            <div className='w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin' />
           </div>
-          <p className="text-gray-500">Processing Your Request...</p>
+          <p className='text-gray-500'>Processing Your Request...</p>
         </div>
       </div>
     );
@@ -145,11 +154,16 @@ const AgentLoadingCard: React.FC<AgentLoadingCardProps> = ({
 
   // Safety check - if currentStepData is undefined, don't render
   if (!currentStepData) {
-    console.log('currentStepData is undefined, currentStep:', currentStep, 'activeSteps.length:', activeSteps.length);
+    console.log(
+      'currentStepData is undefined, currentStep:',
+      currentStep,
+      'activeSteps.length:',
+      activeSteps.length
+    );
     return (
       <div className={`max-w-md mx-auto ${className}`}>
-        <div className="bg-flowstate-bg border border-gray-200 rounded-xl shadow-header p-6 text-center">
-          <p className="text-gray-500">Loading steps...</p>
+        <div className='bg-flowstate-bg border border-gray-200 rounded-xl shadow-header p-6 text-center'>
+          <p className='text-gray-500'>Loading steps...</p>
         </div>
       </div>
     );
@@ -157,50 +171,56 @@ const AgentLoadingCard: React.FC<AgentLoadingCardProps> = ({
 
   return (
     <div className={`max-w-md mx-auto ${className}`}>
-      <div className="bg-flowstate-bg border border-gray-200 rounded-xl shadow-header overflow-hidden">
+      <div className='bg-flowstate-bg border border-gray-200 rounded-xl shadow-header overflow-hidden'>
         {/* Header */}
-        <div className="px-6 py-4 bg-flowstate-header">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-full bg-flowstate-accent">
-              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+        <div className='px-6 py-4 bg-flowstate-header'>
+          <div className='flex items-center gap-3'>
+            <div className='p-2 rounded-full bg-flowstate-accent'>
+              <div className='w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin' />
             </div>
             <div>
-              <h3 className="font-semibold text-flowstate-dark">Processing Request</h3>
-              <p className="text-sm text-gray-600">Student Productivity Agent</p>
+              <h3 className='font-semibold text-flowstate-dark'>
+                Processing Request
+              </h3>
+              <p className='text-sm text-gray-600'>
+                Student Productivity Agent
+              </p>
             </div>
           </div>
         </div>
 
         {/* Current Step */}
-        <div className="px-6 py-6">
-          <div 
+        <div className='px-6 py-6'>
+          <div
             className={`transition-all duration-${transitionDuration} ${
-              showStep ? 'opacity-100 transform translate-y-0' : 'opacity-0 transform translate-y-2'
+              showStep
+                ? 'opacity-100 transform translate-y-0'
+                : 'opacity-0 transform translate-y-2'
             }`}
           >
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0">
-                <div className="w-10 h-10 rounded-full bg-flowstate-accent bg-opacity-10 flex items-center justify-center">
-                  <div className="text-flowstate-accent">
+            <div className='flex items-start gap-4'>
+              <div className='flex-shrink-0'>
+                <div className='w-10 h-10 rounded-full bg-flowstate-accent bg-opacity-10 flex items-center justify-center'>
+                  <div className='text-flowstate-accent'>
                     {getStepIcon(currentStepData.type)}
                   </div>
                 </div>
               </div>
-              
-              <div className="flex-1 min-w-0">
-                <div className="mb-2">
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-flowstate-accent bg-opacity-10 text-flowstate-dark">
+
+              <div className='flex-1 min-w-0'>
+                <div className='mb-2'>
+                  <span className='inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-flowstate-accent bg-opacity-10 text-flowstate-dark'>
                     {currentStepData.agent}
                   </span>
                 </div>
-                
-                <p className="text-flowstate-dark font-medium leading-relaxed">
+
+                <p className='text-flowstate-dark font-medium leading-relaxed'>
                   {currentStepData.message}
                 </p>
-                
+
                 {currentStepData.tool && (
-                  <div className="mt-3 inline-flex items-center gap-2 px-3 py-2 bg-flowstate-dark text-flowstate-bg text-sm font-mono rounded-lg">
-                    <Zap className="w-3 h-3" />
+                  <div className='mt-3 inline-flex items-center gap-2 px-3 py-2 bg-flowstate-dark text-flowstate-bg text-sm font-mono rounded-lg'>
+                    <Zap className='w-3 h-3' />
                     {currentStepData.tool}
                   </div>
                 )}
@@ -209,11 +229,20 @@ const AgentLoadingCard: React.FC<AgentLoadingCardProps> = ({
           </div>
 
           {/* Simple loading indicator */}
-          <div className="mt-6 flex justify-center">
-            <div className="flex gap-1">
-              <div className="w-2 h-2 bg-flowstate-accent rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-              <div className="w-2 h-2 bg-flowstate-accent rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-              <div className="w-2 h-2 bg-flowstate-accent rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+          <div className='mt-6 flex justify-center'>
+            <div className='flex gap-1'>
+              <div
+                className='w-2 h-2 bg-flowstate-accent rounded-full animate-bounce'
+                style={{ animationDelay: '0ms' }}
+              />
+              <div
+                className='w-2 h-2 bg-flowstate-accent rounded-full animate-bounce'
+                style={{ animationDelay: '150ms' }}
+              />
+              <div
+                className='w-2 h-2 bg-flowstate-accent rounded-full animate-bounce'
+                style={{ animationDelay: '300ms' }}
+              />
             </div>
           </div>
         </div>
