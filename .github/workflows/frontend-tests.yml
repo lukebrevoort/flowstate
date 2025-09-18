@@ -40,7 +40,7 @@ jobs:
         cache-dependency-path: frontend/flowstate/package-lock.json
 
     - name: Cache node modules
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: frontend/flowstate/node_modules
         key: ${{ runner.os }}-node-${{ matrix.node-version }}-${{ hashFiles('frontend/flowstate/package-lock.json') }}
@@ -118,7 +118,7 @@ jobs:
 
     - name: Upload test coverage
       if: matrix.node-version == '20.x'
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
         directory: ./frontend/flowstate/coverage
         flags: frontend
@@ -126,7 +126,7 @@ jobs:
 
     - name: Upload build artifacts
       if: matrix.node-version == '20.x'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: next-build-${{ github.sha }}
         path: |
