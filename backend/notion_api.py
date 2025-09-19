@@ -1,9 +1,14 @@
+# This page is responsible for interacting with the Notion API to manage
+# and pull assignments from the Notion Database.
+# It includes rate limiting, error handling, and data transformation.
+# All about making the Notion API work smoothly with our application and our PM agent super simple.
+
 from notion_client import Client
 from datetime import datetime
 import pytz
 from typing import Dict, Optional, Any
 from datetime import timezone
-from models.assignment import Assignment
+from backend.models.assignment import Assignment
 from bs4 import BeautifulSoup
 import re
 import logging
@@ -11,13 +16,14 @@ import backoff
 from ratelimit import limits, sleep_and_retry
 import dotenv
 import os
+import requests
 
 
 dotenv.load_dotenv()
 
 NOTION_TOKEN = os.environ.get("NOTION_TOKEN")
 NOTION_DATABASE_ID = os.environ.get("NOTION_DATABASE_ID")
-COURSE_DATABASE_ID = os.environ.get("COURSE_DATABASE_ID")
+# Course database is now a data source for course pages and in the same database assignments.
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +48,10 @@ class NotionAPI:
         Args:
             user_id: Optional user ID to fetch user-specific Notion token
         """
-        self.user_id = user_id
+        self.user_id = "99d11141-76eb-460f-8741-f2f5e767ba0f" # or user.id  # Default system user ID for testing purposes
         self.user_token = None
+        self.data_source_id = None  # Store the data source ID for this database
+        self.database_id = None # Initialize database ID for OAuth users 
 
         # If user_id is provided, try to get their token
         if user_id:
@@ -56,17 +64,16 @@ class NotionAPI:
             logger.info("No user_id provided, using system token")
 
         # Use user token if available, otherwise fall back to system token
-        token = self.user_token or NOTION_TOKEN
+
+        token = self.user_token or NOTION_TOKEN # pulled from testing user
         if not token:
             raise ValueError("No Notion token available (neither user token nor system token)")
 
-        self.notion = Client(auth=token)
-        self.database_id = NOTION_DATABASE_ID
-        self.course_id_db_id = COURSE_DATABASE_ID
-        self.course_id_mapping = {}  # Initialize empty
-        self.course_id_name_mapping = {}  # For name→id mapping
-        self.last_mapping_refresh = None
-        self._refresh_course_id_mapping()  # Load on init
+        self.notion = Client(auth=token, notion_version="2025-09-03")
+
+        self.database_id = self._get_database_id() or NOTION_DATABASE_ID
+        # Initialize data source ID
+        self._initialize_data_source()
 
     def _get_user_token(self, user_id: str) -> Optional[str]:
         """
@@ -79,7 +86,7 @@ class NotionAPI:
             User's Notion access token if available
         """
         try:
-            from services.user_tokens import UserTokenService
+            from backend.services.user_tokens import UserTokenService
             import asyncio
 
             async def fetch_token():
@@ -100,6 +107,99 @@ class NotionAPI:
 
         except Exception as e:
             logger.warning(f"Could not fetch user token for {user_id}: {e}")
+            return None
+        
+    def _get_database_id(self) -> Optional[str]:
+        """
+        Get the Notion database ID, either from environment or by querying Notion.
+
+        Returns:
+            Database ID if found, else None
+        """
+        try:
+            # Search for databases using the correct filter syntax for 2025-09-03 API
+            response = self.notion.search(
+                filter={
+                    "value": "data_source",  # Changed from "database" to "data_source" for new API
+                    "property": "object"
+                }
+            )
+            if response and "results" in response and len(response["results"]) > 0:
+                # Get the parent database ID from the first data source found
+                first_result = response["results"][0]
+                if "parent" in first_result and first_result["parent"]["type"] == "database_id":
+                    db_id = first_result["parent"]["database_id"]
+                    logger.info(f"Found Notion database ID: {db_id}")
+                    return db_id
+                else:
+                    logger.warning("No parent database found in search results")
+                    return NOTION_DATABASE_ID
+            else:
+                logger.warning("No data sources found in Notion workspace")
+                return NOTION_DATABASE_ID
+        except Exception as e:
+            logger.error(f"Error fetching Notion databases, using system ID: {e}")
+            return NOTION_DATABASE_ID
+
+    def _initialize_data_source(self) -> None:
+        """
+        Initialize data source ID by fetching from the database.
+        This implements Step 1 from the 2025-09-03 upgrade guide.
+        """
+        try:
+            if not self.database_id:
+                logger.warning("No database_id configured")
+                return
+                
+            # Get database info to retrieve data sources
+            response = self.notion.databases.retrieve(database_id=self.database_id)
+            
+            if response and "data_sources" in response:
+                data_sources = response["data_sources"]
+                if data_sources and len(data_sources) > 0:
+                    # Use the first data source for now
+                    self.data_source_id = data_sources[0]["id"]
+                    logger.info(f"Using data source: {self.data_source_id}")
+                else:
+                    logger.warning("No data sources found in database")
+            else:
+                logger.warning("No data_sources field in database response")
+                
+        except Exception as e:
+            logger.error(f"Failed to initialize data source: {e}")
+            # Fall back to using database_id if data source discovery fails
+            self.data_source_id = None
+
+    def get_data_source_info(self) -> Dict[str, Any]:
+        """
+        Get information about the current data source being used
+
+        Returns:
+            Dictionary with data source information
+        """
+        return {
+            "database_id": self.database_id,
+            "data_source_id": self.data_source_id,
+            "using_data_source": self.data_source_id is not None,
+        }
+
+    def get_data_source_schema(self) -> Optional[Dict[str, Any]]:
+        """
+        Get the schema (properties) of the current data source.
+        This helps debug what properties are available.
+
+        Returns:
+            Data source schema information or None if unavailable
+        """
+        if not self.data_source_id:
+            logger.warning("No data source ID available")
+            return None
+            
+        try:
+            response = self._make_notion_request("retrieve_data_source", data_source_id=self.data_source_id)
+            return response
+        except Exception as e:
+            logger.error(f"Failed to retrieve data source schema: {e}")
             return None
 
     @property
@@ -123,7 +223,7 @@ class NotionAPI:
             # Reinitialize Notion client with new token
             token = self.user_token or NOTION_TOKEN
             if token:
-                self.notion = Client(auth=token)
+                self.notion = Client(auth=token, notion_version="2024-05-16")
                 logger.info(f"Refreshed Notion token for user {self.user_id}")
                 return True
         return False
@@ -163,9 +263,10 @@ class NotionAPI:
     def _make_notion_request(self, operation_type: str, **kwargs):
         """
         Rate-limited wrapper for Notion API calls with exponential backoff.
+        Supports both legacy database operations and new data source operations.
 
         Args:
-            operation_type: Type of Notion operation ('query_database', 'update_page', 'create_page')
+            operation_type: Type of Notion operation ('query_database', 'query_data_source', 'update_page', 'create_page', etc.)
             **kwargs: Arguments passed to the Notion API call
 
         Returns:
@@ -176,6 +277,21 @@ class NotionAPI:
         """
         if operation_type == "query_database":
             return self.notion.databases.query(**kwargs)
+        elif operation_type == "query_data_source":
+            # Use the new data source query endpoint
+            data_source_id = kwargs.pop('data_source_id')
+            return self.notion.request(
+                method="PATCH",
+                path=f"data_sources/{data_source_id}/query",
+                body=kwargs
+            )
+        elif operation_type == "retrieve_data_source":
+            # Retrieve data source schema/properties
+            data_source_id = kwargs.pop('data_source_id')
+            return self.notion.request(
+                method="GET",
+                path=f"data_sources/{data_source_id}"
+            )
         elif operation_type == "update_page":
             return self.notion.pages.update(**kwargs)
         elif operation_type == "create_page":
@@ -207,124 +323,6 @@ class NotionAPI:
 
         return dt
 
-    def _refresh_course_id_mapping(self):
-        """Refresh the course_id mappings with timeout"""
-        try:
-            self.course_id_mapping = self._get_course_id_mapping()
-            # Also create a name-to-id mapping for fuzzy matching
-            self.course_id_name_mapping = self._get_course_id_name_mapping()
-            self.last_mapping_refresh = datetime.now()
-        except Exception as e:
-            logger.error(f"Failed to refresh course_id mappings: {e}")
-
-    def _get_course_id_name_mapping(self) -> Dict[str, str]:
-        """Maps course_id names to Notion page UUIDs from the course_id database."""
-        mapping = {}
-        try:
-            response = self._make_notion_request("query_database", database_id=self.course_id_db_id, page_size=100)
-
-            for page in response.get("results", []):
-                try:
-                    notion_uuid = page["id"]
-                    properties = page["properties"]
-
-                    # Get the course_id name
-                    if "Course Name" in properties and properties["Course Name"].get("title"):
-                        name = properties["Course Name"]["title"][0]["text"]["content"]
-                        mapping[name.lower()] = notion_uuid
-                        # Also store common abbreviations or partial matches
-                        parts = name.split(" - ")
-                        if len(parts) > 1:
-                            course_id_code = parts[0].strip()
-                            mapping[course_id_code.lower()] = notion_uuid
-                except Exception as e:
-                    logger.warning(f"Error processing course_id page: {e}")
-                    continue
-        except Exception as e:
-            logger.error(f"Error building course_id name mapping: {e}")
-
-        return mapping
-
-    def get_course_id(self, course_name: str):
-        """
-        Get the Notion page UUID for a specific course name from the Notion database
-
-        Args:
-            course_name: The name of the course to find
-
-        Returns:
-            str: The Notion page UUID if found, None otherwise
-        """
-        try:
-            response = self._make_notion_request("query_database", database_id=self.course_id_db_id, page_size=100)
-
-            for page in response["results"]:
-                try:
-                    properties = page["properties"]
-                    name = properties["Course Name"]["title"][0]["text"]["content"]
-                    if name == course_name:
-                        return page["id"]  # This returns the Notion UUID
-                except KeyError as e:
-                    logger.error(f"Missing property in page {page.get('id')}: {e}")
-                    continue
-                except Exception as e:
-                    logger.error(f"Error processing page {page.get('id')}: {e}")
-                    continue
-
-            return None
-
-        except Exception as e:
-            logger.error(f"Failed to get course UUID: {e}")
-            return None
-
-    def _get_course_id_mapping(self) -> Dict[str, str]:
-        """
-        Maps Canvas course_id IDs to Notion page UUIDs from the course_id database.
-
-        Returns:
-            Dict mapping Canvas course_id IDs (str) to Notion page UUIDs (str)
-        """
-        try:
-            response = self._make_notion_request("query_database", database_id=self.course_id_db_id, page_size=100)
-
-            mapping = {}
-
-            # Debug full response
-            logger.debug(f"Full response: {response}")
-
-            for page in response["results"]:
-                try:
-                    # Get page ID and properties
-                    notion_uuid = page["id"]
-                    properties = page["properties"]
-
-                    # Debug properties
-                    logger.debug(f"Page {notion_uuid} properties: {properties}")
-
-                    # Access multi-select values directly
-                    canvas_ids = properties["CourseID"]["multi_select"]
-                    logger.debug(f"Canvas IDs found: {canvas_ids}")
-
-                    # Map each selected value to this page
-                    for item in canvas_ids:
-                        canvas_id = item["name"]  # Direct access to name
-                        logger.info(f"Mapping Canvas ID {canvas_id} to page {notion_uuid}")
-                        mapping[str(canvas_id)] = notion_uuid
-
-                except KeyError as e:
-                    logger.error(f"Missing property in page {page.get('id')}: {e}")
-                    continue
-                except Exception as e:
-                    logger.error(f"Error processing page {page.get('id')}: {e}")
-                    continue
-
-            logger.info(f"Final mappings: {mapping}")
-            return mapping
-
-        except Exception as e:
-            logger.error(f"Failed to get course_id mapping: {e}")
-            return {}
-
     def _clean_html(self, html_content: str) -> str:
         """
         Converts HTML content to plain text and truncates to Notion's 2000 char limit.
@@ -350,550 +348,163 @@ class NotionAPI:
             logger.warning(f"Error cleaning HTML content: {e}")
             return html_content[:2000]
 
-    def get_assignment_page(self, assignment_parameter):
+    def _get_assignment_page(self, assignment: Assignment) -> Optional[Dict[str, Any]]:
         """
-        Retrieves existing assignment page from Notion by Canvas assignment ID or name.
+        Check if a Notion page already exists for the given assignment.
 
         Args:
-            assignment_parameter: Either Canvas assignment ID (int) or assignment name (str)
-
+            assignment: Assignment object
         Returns:
-            Notion page object if found, None otherwise
+            Notion page dict if found, else None
         """
-        try:
-            if isinstance(assignment_parameter, int) or (
-                isinstance(assignment_parameter, str) and assignment_parameter.isdigit()
-            ):
-                # If parameter is an integer or string of digits, treat as assignment ID
-                filter_condition = {
-                    "property": "AssignmentID",
-                    "number": {"equals": int(assignment_parameter)},
+        payload = {
+            "filter": {
+                "property": "Assignment Name",
+                "rich_text": {
+                    "contains": assignment.name
                 }
-            elif isinstance(assignment_parameter, str):
-                # If parameter is a string, treat as assignment name
-                filter_condition = {
-                    "property": "Assignment Title",
-                    "title": {"equals": assignment_parameter},
-                }
-            else:
-                logger.warning(f"Invalid parameter type: {type(assignment_parameter)}")
-                return None
-
-            response = self._make_notion_request("query_database", database_id=self.database_id, filter=filter_condition)
-            results = response.get("results", [])
-            return results[0] if results else None
-
-        except Exception as e:
-            logger.error(f"Error fetching assignment ({assignment_parameter}) from Notion: {str(e)}")
-            return None
-
-    def get_all_assignments(self, start_date=None, end_date=None):
-        """
-        Retrieves all assignments from the Notion database within a specified date range.
-
-        Args:
-            start_date: Optional datetime object for the start of the range
-            end_date: Optional datetime object for the end of the range
-
-        Returns:
-            List of assignment objects in the specified date range
-        """
-        next_cursor = None
+            }
+        }
 
         try:
-            # If no start_date is provided, use the current date
-            if start_date is None:
-                start_date = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-
-            # Ensure start_date is a datetime object for comparison
-            if not isinstance(start_date, datetime):
-                try:
-                    start_date = datetime.fromisoformat(start_date)
-                except (ValueError, TypeError):
-                    # Log the error but continue with original value
-                    logger.warning(f"Could not parse start_date: {start_date}, using as is")
-
-            # Convert to UTC timezone for consistent comparison
-            if isinstance(start_date, datetime) and start_date.tzinfo is None:
-                start_date = start_date.replace(tzinfo=timezone.utc)
-
-            # Extract just the current date for simpler comparison
-            current_date = datetime.now(timezone.utc).date()
-            logger.info(f"Filtering assignments from {start_date} to {end_date}")
-
-            simplified_assignments = []
-            while True:
-                query_params = {"database_id": self.database_id, "page_size": 100}
-
-                # Add date range filter if both dates are provided
-                if start_date and end_date:
-                    query_params["filter"] = {
-                        "property": "Due Date",
-                        "date": {
-                            "on_or_after": (start_date.isoformat() if isinstance(start_date, datetime) else start_date),
-                            "on_or_before": (end_date.isoformat() if isinstance(end_date, datetime) else end_date),
-                        },
-                    }
-                # Filter for assignments on or after start_date
-                elif start_date:
-                    query_params["filter"] = {
-                        "property": "Due Date",
-                        "date": {"on_or_after": (start_date.isoformat() if isinstance(start_date, datetime) else start_date)},
-                    }
-                # Filter for assignments on or before end_date
-                elif end_date:
-                    query_params["filter"] = {
-                        "property": "Due Date",
-                        "date": {"on_or_before": (end_date.isoformat() if isinstance(end_date, datetime) else end_date)},
-                    }
-
-                if next_cursor:
-                    query_params["start_cursor"] = next_cursor
-
-                logger.debug(f"Querying Notion with params: {query_params}")
-
-                response = self._make_notion_request("query_database", **query_params)
-
-                # Extract only the requested fields from each assignment
-                for page in response.get("results", []):
-                    properties = page.get("properties", {})
-
-                    # Extract assignment title
-                    title = ""
-                    title_property = properties.get("Assignment Title", {}).get("title", [])
-                    if title_property and len(title_property) > 0:
-                        title = title_property[0].get("text", {}).get("content", "")
-
-                    # Extract due date
-                    due_date = None
-                    due_date_obj = None
-                    date_property = properties.get("Due Date", {}).get("date", {})
-                    if date_property:
-                        due_date = date_property.get("start")
-                        if due_date:
-                            try:
-                                # Convert to datetime object for comparison
-                                if "T" in due_date:  # ISO format with time
-                                    due_date_obj = datetime.fromisoformat(due_date.replace("Z", "+00:00"))
-                                else:  # Date only
-                                    due_date_obj = datetime.fromisoformat(due_date)
-                                    # Add UTC timezone for date-only values
-                                    if due_date_obj.tzinfo is None:
-                                        due_date_obj = due_date_obj.replace(tzinfo=timezone.utc)
-
-                                # Skip assignments with due dates before the current date
-                                if due_date_obj.date() < current_date:
-                                    logger.debug(f"Skipping past assignment: {title} (due {due_date})")
-                                    continue
-                            except (ValueError, TypeError) as e:
-                                logger.warning(f"Error parsing due date '{due_date}' for '{title}': {e}")
-
-                    # Extract status
-                    status = ""
-                    status_property = properties.get("Status", {}).get("select", {})
-                    if status_property:
-                        status = status_property.get("name", "")
-
-                    # Skip assignments with "Dont show" status
-                    if status == "Dont show":
-                        continue
-
-                    # Extract course relation ID
-                    course_id = ""
-                    notion_course_id = ""
-                    course_id_property = properties.get("Course", {}).get("relation", [])
-                    if course_id_property and len(course_id_property) > 0:
-                        notion_course_id = course_id_property[0].get("id", "")
-
-                        # Try to map the Notion UUID back to a Canvas course ID
-                        for canvas_id, notion_uuid in self.course_id_mapping.items():
-                            if notion_uuid == notion_course_id:
-                                course_id = canvas_id
-                                break
-
-                        # If no mapping found, fall back to the Notion UUID
-                        if not course_id:
-                            course_id = notion_course_id
-
-                    # Create simplified assignment object
-                    simplified_assignment = {
-                        "name": title,
-                        "due_date": due_date,
-                        "status": status,
-                        "course_id": course_id,
-                    }
-
-                    # Add to results only if it's not before the current date
-                    simplified_assignments.append(simplified_assignment)
-
-                # Check if there are more pages
-                next_cursor = response.get("next_cursor")
-                if not next_cursor:
-                    break
-
-            logger.info(f"Found {len(simplified_assignments)} assignments")
-            return simplified_assignments
-
+            response = self._make_notion_request("databases/query", **payload)
+            if response and "results" in response:
+                for page in response["results"]:
+                    if page["properties"]["Assignment Name"]["rich_text"][0]["text"]["content"] == assignment.name:
+                        return page
         except Exception as e:
-            logger.error(f"Error fetching all assignments from Notion: {str(e)}")
-            return []  # Return empty list on error
+            logger.error(f"Error fetching assignment page: {e}")
+        return None
 
-    def create_assignment(self, assignment: Assignment):
+    def _get_all_assignment_pages_by_course(self) -> Dict[str, Dict[str, Any]]:
         """
-        Create a new assignment in Notion from a Canvas assignment object.
-
-        Args:
-            assignment: Assignment object to create. Assignment ID is optional.
+        Retrieve all assignment pages from the Notion database grouped by course.
 
         Returns:
-            None
+            Dictionary mapping course names to their assignment page dicts
         """
-        try:
-            # Convert course_id to string and look up UUID
-            course_id_str = str(assignment.course_id)
-            course_id_uuid = self.course_id_mapping.get(course_id_str)
-            logger.debug(f"Looking up course {course_id_str} in mapping: {self.course_id_mapping}")
-
-            if not course_id_uuid:
-                logger.warning(f"No Notion UUID found for course {course_id_str}")
-                raise ValueError(f"No Notion UUID found for course {course_id_str}")
-
-            # Parse due date using the helper
-            due_date = self._parse_date(assignment.due_date)
-
-            # Prepare properties
-            properties = {
-                "Assignment Title": {"title": [{"text": {"content": str(assignment.name)}}]},
-                "Description": {"rich_text": [{"text": {"content": self._clean_html(assignment.description)}}]},
-                "Course": {"relation": [{"id": course_id_uuid}]},
-                "Status": {"select": {"name": str(assignment.status)}},
+        payload = {
+            "filter": {
+                "property": "Type",
             }
 
-            # Add AssignmentID only if available
-            if hasattr(assignment, "id") and assignment.id is not None:
-                properties["AssignmentID"] = {"number": int(assignment.id)}
+        }
 
-            # Handle due date
-            if due_date:
-                properties["Due Date"] = {"date": {"start": due_date.isoformat()}}
-
-            # Handle priority
-            VALID_PRIORITIES = ["Low", "Medium", "High"]
-            if hasattr(assignment, "priority") and assignment.priority in VALID_PRIORITIES:
-                properties["Priority"] = {"select": {"name": assignment.priority}}
-            else:
-                properties["Priority"] = {"select": {"name": "Low"}}  # Default to Low
-
-            # Handle assignment group if available
-            if hasattr(assignment, "group_name") and assignment.group_name:
-                properties["Assignment Group"] = {"select": {"name": assignment.group_name}}
-
-            # Handle group weight if available
-            if hasattr(assignment, "group_weight") and assignment.group_weight is not None:
-                properties["Group Weight"] = {"number": assignment.group_weight}
-
-            # Remove None values
-            properties = {k: v for k, v in properties.items() if v is not None}
-
-            # Handle grade
-            if hasattr(assignment, "grade") and assignment.grade is not None:
-                try:
-                    properties["Grade (%)"] = {"number": float(assignment.grade)}
-                except (ValueError, TypeError):
-                    logger.warning(f"Invalid grade format for assignment {assignment.name}: {assignment.grade}")
-                    if hasattr(assignment, "mark") and assignment.mark is not None:
-                        try:
-                            properties["Status"] = {"select": {"name": "Mark received"}}
-                        except (ValueError, TypeError):
-                            logger.warning(f"Invalid mark format for assignment {assignment.name}: {assignment.mark}")
-
-            logger.info(f"Creating new assignment: {assignment.name}")
-            self._make_notion_request(
-                "create_page",
-                parent={"database_id": self.database_id},
-                properties=properties,
-            )
-        except Exception as e:
-            logger.error(f"Error creating assignment {assignment.name} in Notion: {str(e)}")
-            raise
-
-    def update_assignment(self, update_data: Dict):
+    def _create_assignment_page(self, assignment: Assignment) -> Optional[Dict[str, Any]]:
         """
-        Update specific fields of an existing assignment in Notion.
+        Create a new Notion page for the given assignment.
 
         Args:
-            update_data: Dictionary containing fields to update.
-                         Must contain either 'id' or 'name' to identify the assignment.
+            assignment: Assignment object
 
         Returns:
-            None if successful, error message if failed
+            Notion page dict if created successfully, else None
         """
-        try:
-            # Check if we have an identifier to find the assignment
-            if "id" not in update_data and "name" not in update_data:
-                logger.error("Update data must contain either 'id' or 'name' to identify the assignment")
-                return "Update data must contain either 'id' or 'name' to identify the assignment"
-
-            # Get existing page
-            existing_page = None
-            if "id" in update_data:
-                existing_page = self.get_assignment_page(update_data["id"])
-
-            if existing_page is None and "name" in update_data:
-                existing_page = self.get_assignment_page(update_data["name"])
-
-            if existing_page is None:
-                identifier = update_data.get("id") or update_data.get("name")
-                logger.warning(f"No existing page found for assignment {identifier}")
-                return f"No existing page found for assignment {identifier}"
-
-            # Initialize properties dictionary - we'll only add what's in update_data
-            properties = {}
-
-            # Handle name/title update
-            if "name" in update_data:
-                properties["Assignment Title"] = {"title": [{"text": {"content": str(update_data["name"])}}]}
-
-            # Handle description update
-            if "description" in update_data:
-                properties["Description"] = {
-                    "rich_text": [{"text": {"content": self._clean_html(update_data["description"])}}]
+        properties = {
+            "Assignment Name": {
+                "title": [
+                    {
+                        "text": {
+                            "content": assignment.name
+                        }
+                    }
+                ]
+            },
+            "Status": {
+                "status": {
+                    "name": assignment.status or "Not started"
                 }
+            },
+            "Due date": {
+                "date": {
+                    "start": assignment.due_date.isoformat() if assignment.due_date else None
+                }
+            },
+            "Priority": {
+                "select": {
+                    "name": assignment.priority or "Low"
+                }
+            },
+            "Description": {
+                "rich_text": [
+                    {
+                        "text": {
+                            "content": self._clean_html(assignment.description)
+                        }
+                    }
+                ]
+            },
+            "Course": {
+                "relation": [
+                    # For now, we'll leave this empty since we need to find/create course pages
+                    # TODO: Implement course page lookup/creation
+                ]
+            }
+        }
 
-            # Handle course update
-            if "course_id" in update_data:
-                course_id_str = str(update_data["course_id"])
-                course_id_uuid = self.course_id_mapping.get(course_id_str)
-                if not course_id_uuid:
-                    logger.warning(f"No Notion UUID found for course {course_id_str}")
-                    return f"No Notion UUID found for course {course_id_str}"
-                properties["Course"] = {"relation": [{"id": course_id_uuid}]}
+        # Use data_source_id if available (new 2025-09-03 API), fallback to database_id
+        if self.data_source_id:
+            payload = {
+                "parent": {"type": "data_source_id", "data_source_id": self.data_source_id},
+                "properties": properties
+            }
+        else:
+            # Fallback for older API or when data source discovery fails
+            payload = {
+                "parent": {"database_id": self.database_id},
+                "properties": properties
+            }
 
-            # Handle status update
-            if "status" in update_data:
-                properties["Status"] = {"select": {"name": str(update_data["status"])}}
-
-            # Handle due date update
-            if "due_date" in update_data:
-                due_date = self._parse_date(update_data["due_date"])
-                if due_date:
-                    properties["Due Date"] = {"date": {"start": due_date.isoformat()}}
-
-            # Handle assignment group update
-            if "group_name" in update_data and update_data["group_name"]:
-                properties["Assignment Group"] = {"select": {"name": update_data["group_name"]}}
-
-            # Handle group weight update
-            if "group_weight" in update_data and update_data["group_weight"] is not None:
-                properties["Group Weight"] = {"number": update_data["group_weight"]}
-
-            # Handle priority update
-            if "priority" in update_data:
-                VALID_PRIORITIES = ["Low", "Medium", "High"]
-                priority = update_data["priority"]
-                if priority in VALID_PRIORITIES:
-                    properties["Priority"] = {"select": {"name": priority}}
-                else:
-                    properties["Priority"] = {"select": {"name": "Low"}}  # Default to Low
-
-            # Handle grade update
-            if "grade" in update_data and update_data["grade"] is not None:
-                try:
-                    properties["Grade (%)"] = {"number": float(update_data["grade"])}
-                    # Only set status to "Mark received" if we're updating the grade and not already setting status
-                    if "status" not in update_data:
-                        properties["Status"] = {"select": {"name": "Mark received"}}
-                except (ValueError, TypeError):
-                    logger.warning(f"Invalid grade format: {update_data['grade']}")
-
-            # Check if we have anything to update
-            if not properties:
-                logger.info("No properties to update")
-                return "No properties to update"
-
-            # Check current status for special cases
-            current_status = existing_page["properties"]["Status"]["select"]["name"]
-            if current_status == "Dont show" and "status" not in update_data:
-                logger.info(f"Skipping update due to 'Dont show' status")
-                return "Skipping update due to 'Dont show' status"
-            elif current_status == "In progress" and "status" not in update_data:
-                # Don't change the status if it's currently "In progress" unless explicitly requested
-                properties.pop("Status", None)
-
-            logger.info(f"Updating assignment fields: {', '.join(properties.keys())}")
-            self._make_notion_request("update_page", page_id=existing_page["id"], properties=properties)
-            return None
-        except Exception as e:
-            identifier = update_data.get("id") or update_data.get("name", "Unknown")
-            logger.error(f"Error updating assignment {identifier} in Notion: {str(e)}")
-            raise
-
-    def get_assignment_notes(self, assignment_id_or_name):
-        """
-        Retrieve and parse notes from an assignment page in Notion.
-
-        Args:
-            assignment_id_or_name: Either Canvas assignment ID (int) or assignment name (str)
-
-        Returns:
-            Structured dictionary of the assignment content
-        """
         try:
-            # Get the page
-            page = self.get_assignment_page(assignment_id_or_name)
-            if not page:
-                logger.warning(f"No assignment page found for {assignment_id_or_name}")
-                return None
-
-            # Get the complete page content with nested blocks
-            content = self.get_complete_page_content(page["id"])
-
-            # Parse into a more user-friendly structure
-            structured_content = self._parse_content_structure(content)
-
-            return structured_content
-
+            response = self._make_notion_request("create_page", **payload)
+            return response
         except Exception as e:
-            logger.error(f"Error getting notes for assignment {assignment_id_or_name}: {str(e)}")
+            logger.error(f"Error creating assignment page: {e}")
             return None
 
-    def get_complete_page_content(self, page_id):
+    def _update_assignment_page(self, page_id: str, assignment: Assignment) -> Optional[Dict[str, Any]]:
         """
-        Get the complete content of a page, including all nested blocks.
+        Update an existing Notion page with new assignment data.
 
         Args:
-            page_id: ID of the Notion page
+            page_id: Notion page ID to update
+            assignment: Assignment object with updated data
 
         Returns:
-            Complete hierarchical structure of the page
+            Updated Notion page dict if successful, else None
         """
-        try:
-            all_blocks = []
-            has_more = True
-            cursor = None
+        # IMPLEMENT LATER
 
-            # Get all top-level blocks with pagination
-            while has_more:
-                params = {"block_id": page_id}
-                if cursor:
-                    params["start_cursor"] = cursor
-
-                response = self._make_notion_request("blocks/children/list", **params)
-
-                all_blocks.extend(response.get("results", []))
-                has_more = response.get("has_more", False)
-                cursor = response.get("next_cursor")
-
-            # Process each block to fetch its children
-            return self._process_blocks_recursively(all_blocks)
-
-        except Exception as e:
-            logger.error(f"Error retrieving complete page content for {page_id}: {str(e)}")
-            return []
-
-    def _process_blocks_recursively(self, blocks):
+    def _get_course_page(self, course_name: str) -> Optional[Dict[str, Any]]:
         """
-        Process blocks recursively to fetch all children.
+        Find a Notion page for the given course name.
 
         Args:
-            blocks: List of blocks to process
+            course_name: Name of the course
 
         Returns:
-            Processed blocks with all children included
+            Notion page dict if found, else None
         """
-        processed_blocks = []
+        # IMPLEMENT LATER
 
-        for block in blocks:
-            # Create a copy of the block
-            processed_block = dict(block)
-
-            # If the block has children, fetch them
-            if block.get("has_children", False):
-                children = self._make_notion_request("blocks/children/list", block_id=block["id"]).get("results", [])
-
-                # Process children recursively
-                processed_block["children"] = self._process_blocks_recursively(children)
-
-            processed_blocks.append(processed_block)
-
-        return processed_blocks
-
-    def _parse_content_structure(self, blocks):
+    def _create_course_page(self, course_name: str) -> Optional[Dict[str, Any]]:
         """
-        Parse raw Notion blocks into a more usable structure.
+        Create a new Notion page for the given course.
 
         Args:
-            blocks: Raw Notion blocks
+            course_name: Name of the course
 
         Returns:
-            Structured content dictionary
+            Notion page dict if created successfully, else None
         """
-        result = []
+        # IMPLEMENT LATER
 
-        for block in blocks:
-            block_type = block.get("type")
-            block_data = {"type": block_type}
-
-            # Extract text content based on block type
-            if block_type in [
-                "paragraph",
-                "heading_1",
-                "heading_2",
-                "heading_3",
-                "bulleted_list_item",
-                "numbered_list_item",
-                "to_do",
-            ]:
-                rich_text = block.get(block_type, {}).get("rich_text", [])
-                block_data["text"] = self._extract_text_from_rich_text(rich_text)
-
-                # Add checked state for to-do items
-                if block_type == "to_do":
-                    block_data["checked"] = block.get("to_do", {}).get("checked", False)
-
-            # Handle image blocks
-            elif block_type == "image":
-                image_obj = block.get("image", {})
-                if "file" in image_obj:
-                    block_data["url"] = image_obj["file"].get("url")
-                elif "external" in image_obj:
-                    block_data["url"] = image_obj["external"].get("url")
-
-                caption = image_obj.get("caption", [])
-                if caption:
-                    block_data["caption"] = self._extract_text_from_rich_text(caption)
-
-            # Handle code blocks
-            elif block_type == "code":
-                code_obj = block.get("code", {})
-                rich_text = code_obj.get("rich_text", [])
-                block_data["text"] = self._extract_text_from_rich_text(rich_text)
-                block_data["language"] = code_obj.get("language", "plain text")
-
-            # Add children if present
-            if "children" in block and block["children"]:
-                block_data["children"] = self._parse_content_structure(block["children"])
-
-            result.append(block_data)
-
-        return result
-
-    def _extract_text_from_rich_text(self, rich_text):
+    def _get_all_course_pages(self) -> Dict[str, Dict[str, Any]]:
         """
-        Extract plain text from Notion's rich_text format
-
-        Args:
-            rich_text: List of Notion rich_text objects
+        Retrieve all course pages from the Notion course database.
 
         Returns:
-            Concatenated plain text string
+            Dictionary mapping course names to their Notion page dicts
         """
-        if not rich_text:
-            return ""
-
-        text_parts = []
-        for text_obj in rich_text:
-            if isinstance(text_obj, dict) and "text" in text_obj and "content" in text_obj["text"]:
-                text_parts.append(text_obj["text"]["content"])
-
-        return "".join(text_parts)
+        # IMPLEMENT LATER
+    

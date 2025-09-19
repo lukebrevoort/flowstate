@@ -5,7 +5,7 @@ Provides easy access to user tokens for agents and services
 
 import logging
 from typing import Optional, Dict, Any
-from config.supabase import get_supabase_service_client
+from backend.config.supabase import get_supabase_service_client
 
 logger = logging.getLogger(__name__)
 
