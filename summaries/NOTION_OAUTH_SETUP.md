@@ -1,6 +1,7 @@
 # Notion OAuth Setup Guide for Flowstate
 
 ## Overview
+
 This guide will help you set up Notion OAuth integration for your Flowstate application, allowing users to connect their personal Notion workspaces.
 
 ## Step 1: Create a Notion Integration
@@ -26,6 +27,7 @@ This guide will help you set up Notion OAuth integration for your Flowstate appl
 ## Step 3: Set Capabilities
 
 In the integration settings, make sure you have the following capabilities enabled:
+
 - **Read content**: ✅
 - **Update content**: ✅
 - **Insert content**: ✅
@@ -53,12 +55,14 @@ NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
 ## Step 6: Test the OAuth Flow
 
 1. Start your backend server:
+
    ```bash
    cd /Users/lbrevoort/Desktop/flowstate/backend
    python app.py
    ```
 
 2. Start your frontend server:
+
    ```bash
    cd /Users/lbrevoort/Desktop/flowstate/frontend/flowstate
    npm run dev

@@ -54,9 +54,11 @@ class H11Protocol(asyncio.Protocol):
         self.access_log = self.access_logger.hasHandlers()
         self.conn = h11.Connection(
             h11.SERVER,
-            config.h11_max_incomplete_event_size
-            if config.h11_max_incomplete_event_size is not None
-            else DEFAULT_MAX_INCOMPLETE_EVENT_SIZE,
+            (
+                config.h11_max_incomplete_event_size
+                if config.h11_max_incomplete_event_size is not None
+                else DEFAULT_MAX_INCOMPLETE_EVENT_SIZE
+            ),
         )
         self.ws_protocol_class = config.ws_protocol_class
         self.root_path = config.root_path
@@ -85,9 +87,7 @@ class H11Protocol(asyncio.Protocol):
         self.cycle: RequestResponseCycle = None  # type: ignore[assignment]
 
     # Protocol interface
-    def connection_made(  # type: ignore[override]
-        self, transport: asyncio.Transport
-    ) -> None:
+    def connection_made(self, transport: asyncio.Transport) -> None:  # type: ignore[override]
         self.connections.add(self)
 
         self.transport = transport
@@ -400,9 +400,7 @@ class RequestResponseCycle:
     # ASGI exception wrapper
     async def run_asgi(self, app: ASGI3Application) -> None:
         try:
-            result = await app(  # type: ignore[func-returns-value]
-                self.scope, self.receive, self.send
-            )
+            result = await app(self.scope, self.receive, self.send)  # type: ignore[func-returns-value]
         except BaseException as exc:
             msg = "Exception in ASGI application\n"
             self.logger.error(msg, exc_info=exc)

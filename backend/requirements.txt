@@ -66,4 +66,14 @@ httpx>=0.25.2
 python-multipart==0.0.6
 orjson>=3.10.1  # ✅ Updated to satisfy langgraph-sdk requirement
 
+# Testing dependencies
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.5.0
+bandit>=1.7.5
+safety>=2.3.0
+
 # Supabase integration (using custom HTTP client to avoid conflicts)

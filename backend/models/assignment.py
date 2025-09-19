@@ -4,11 +4,12 @@ from typing import Optional
 
 # Assignment: Data model representing a Canvas assignment with Notion-specific attributes
 
+
 @dataclass
 class Assignment:
     """
     Represents a Canvas assignment with additional metadata for Notion integration.
-    
+
     Attributes:
         id: Canvas assignment ID
         name: Assignment title
@@ -22,6 +23,7 @@ class Assignment:
         group_weight: Weight of assignment group in final grade (0-1.0)
         priority: Assignment priority ('Low', 'Medium', 'High') based on group weight
     """
+
     id: int
     name: str
     description: str

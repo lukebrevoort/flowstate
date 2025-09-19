@@ -110,15 +110,12 @@ _socks4errors = (
     "request granted",
     "request rejected or failed",
     "request rejected because SOCKS server cannot connect to identd on the client",
-    "request rejected because the client program and identd report different "
-    "user-ids",
+    "request rejected because the client program and identd report different " "user-ids",
     "unknown error",
 )
 
 
-def setdefaultproxy(
-    proxytype=None, addr=None, port=None, rdns=True, username=None, password=None
-):
+def setdefaultproxy(proxytype=None, addr=None, port=None, rdns=True, username=None, password=None):
     """setdefaultproxy(proxytype, addr[, port[, rdns[, username[, password]]]])
     Sets a default proxy which all further socksocket objects will use,
     unless explicitly changed.
@@ -149,9 +146,7 @@ class socksocket(socket.socket):
     you must specify family=AF_INET, type=SOCK_STREAM and proto=0.
     """
 
-    def __init__(
-        self, family=socket.AF_INET, type=socket.SOCK_STREAM, proto=0, _sock=None
-    ):
+    def __init__(self, family=socket.AF_INET, type=socket.SOCK_STREAM, proto=0, _sock=None):
         _orgsocket.__init__(self, family, type, proto, _sock)
         if _defaultproxy != None:
             self.__proxy = _defaultproxy
@@ -175,7 +170,7 @@ class socksocket(socket.socket):
         return data
 
     def sendall(self, content, *args):
-        """ override socket.socket.sendall method to rewrite the header
+        """override socket.socket.sendall method to rewrite the header
         for non-tunneling proxies if needed
         """
         if not self.__httptunnel:
@@ -183,7 +178,7 @@ class socksocket(socket.socket):
         return super(socksocket, self).sendall(content, *args)
 
     def __rewriteproxy(self, header):
-        """ rewrite HTTP request headers to support non-tunneling proxies
+        """rewrite HTTP request headers to support non-tunneling proxies
         (i.e. those which do not support the CONNECT method).
         This only works for HTTP (not HTTPS) since HTTPS requires tunneling.
         """
@@ -311,12 +306,7 @@ class socksocket(socket.socket):
             if self.__proxy[3]:
                 # Resolve remotely
                 ipaddr = None
-                req = (
-                    req
-                    + chr(0x03).encode()
-                    + chr(len(destaddr)).encode()
-                    + destaddr.encode()
-                )
+                req = req + chr(0x03).encode() + chr(len(destaddr)).encode() + destaddr.encode()
             else:
                 # Resolve locally
                 ipaddr = socket.inet_aton(socket.gethostbyname(destaddr))

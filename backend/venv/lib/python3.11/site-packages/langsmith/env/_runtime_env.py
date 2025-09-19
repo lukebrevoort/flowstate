@@ -108,9 +108,7 @@ def get_docker_version() -> Optional[str]:
     import subprocess
 
     try:
-        docker_version = (
-            subprocess.check_output(["docker", "--version"]).decode("utf-8").strip()
-        )
+        docker_version = subprocess.check_output(["docker", "--version"]).decode("utf-8").strip()
     except FileNotFoundError:
         docker_version = "unknown"
     except:  # noqa
@@ -121,11 +119,7 @@ def get_docker_version() -> Optional[str]:
 @functools.lru_cache(maxsize=1)
 def get_docker_compose_version() -> Optional[str]:
     try:
-        docker_compose_version = (
-            subprocess.check_output(["docker-compose", "--version"])
-            .decode("utf-8")
-            .strip()
-        )
+        docker_compose_version = subprocess.check_output(["docker-compose", "--version"]).decode("utf-8").strip()
     except FileNotFoundError:
         docker_compose_version = "unknown"
     except:  # noqa
@@ -150,9 +144,7 @@ def get_docker_environment() -> dict:
     compose_command = _get_compose_command()
     return {
         "docker_version": get_docker_version(),
-        "docker_compose_command": (
-            " ".join(compose_command) if compose_command is not None else None
-        ),
+        "docker_compose_command": (" ".join(compose_command) if compose_command is not None else None),
         "docker_compose_version": get_docker_compose_version(),
     }
 

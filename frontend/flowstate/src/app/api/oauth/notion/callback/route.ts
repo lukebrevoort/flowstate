@@ -11,9 +11,13 @@ export async function GET(request: NextRequest) {
 
     // Handle OAuth error
     if (error) {
-      const errorDescription = searchParams.get('error_description') || 'OAuth authorization failed';
+      const errorDescription =
+        searchParams.get('error_description') || 'OAuth authorization failed';
       return NextResponse.redirect(
-        new URL(`/OAuth?error=${encodeURIComponent(errorDescription)}`, request.url)
+        new URL(
+          `/OAuth?error=${encodeURIComponent(errorDescription)}`,
+          request.url
+        )
       );
     }
 
@@ -37,7 +41,9 @@ export async function GET(request: NextRequest) {
 
     if (!response.ok) {
       const errorData = await response.text();
-      throw new Error(`Backend responded with ${response.status}: ${errorData}`);
+      throw new Error(
+        `Backend responded with ${response.status}: ${errorData}`
+      );
     }
 
     const data = await response.json();
@@ -45,16 +51,21 @@ export async function GET(request: NextRequest) {
     if (data.success) {
       // Redirect to OAuth page with success message
       return NextResponse.redirect(
-        new URL(`/OAuth?success=Notion connected successfully&workspace=${encodeURIComponent(data.workspace_name || 'Unknown')}`, request.url)
+        new URL(
+          `/OAuth?success=Notion connected successfully&workspace=${encodeURIComponent(data.workspace_name || 'Unknown')}`,
+          request.url
+        )
       );
     } else {
       throw new Error(data.message || 'OAuth callback failed');
     }
-
   } catch (error) {
     console.error('Notion OAuth callback error:', error);
     return NextResponse.redirect(
-      new URL(`/OAuth?error=${encodeURIComponent('Failed to complete Notion authorization')}`, request.url)
+      new URL(
+        `/OAuth?error=${encodeURIComponent('Failed to complete Notion authorization')}`,
+        request.url
+      )
     );
   }
 }

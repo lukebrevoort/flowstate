@@ -5,6 +5,7 @@ This guide explains how to set up and use Supabase as your database backend for 
 ## What is Supabase?
 
 Supabase is an open-source Firebase alternative that provides:
+
 - PostgreSQL database
 - Built-in authentication
 - Real-time subscriptions
@@ -42,6 +43,7 @@ Supabase is an open-source Firebase alternative that provides:
 ### 3. Configure Your Environment
 
 1. Copy the environment template:
+
    ```bash
    cp .env.example .env
    ```
@@ -56,11 +58,13 @@ Supabase is an open-source Firebase alternative that provides:
 ### 4. Install Dependencies
 
 Run the setup script:
+
 ```bash
 python scripts/setup_supabase.py
 ```
 
 Or install manually:
+
 ```bash
 pip install supabase>=2.4.0 postgrest-py>=0.13.0
 ```
@@ -73,6 +77,7 @@ pip install supabase>=2.4.0 postgrest-py>=0.13.0
 4. Click "Run" to execute the schema
 
 This will create:
+
 - `profiles` table for user data
 - `user_tasks` table for task management
 - `user_sessions` table for chat history
@@ -99,10 +104,12 @@ python app.py
 ### Database Service Layer
 
 The `services/database.py` file provides a unified interface that can work with both:
+
 - **Supabase** (when configured)
 - **SQLAlchemy** (as fallback)
 
 This means your app will automatically:
+
 1. Try to use Supabase if configured
 2. Fall back to SQLAlchemy/SQLite if Supabase is not available
 3. Work seamlessly in both modes
@@ -124,38 +131,46 @@ This means your app will automatically:
 ## Database Schema
 
 ### profiles
+
 - User profile information
 - Connected service flags
 - User preferences and settings
 
 ### user_tasks
+
 - Task management
 - Priority, status, due dates
 - Integration with Notion/Calendar
 
 ### user_sessions
+
 - Chat conversation history
 - Session context and metadata
 
 ### user_integrations
+
 - OAuth tokens for third-party services
 - Integration configuration
 
 ## Security Features
 
 ### Row Level Security (RLS)
+
 All tables have RLS policies ensuring users can only access their own data.
 
 ### JWT Authentication
+
 Uses standard JWT tokens compatible with your existing auth system.
 
 ### API Keys
+
 - **anon key**: For client-side operations (limited permissions)
 - **service key**: For server-side operations (full permissions)
 
 ## Free Tier Limits
 
 Supabase free tier includes:
+
 - 500MB database storage
 - 2GB bandwidth
 - 50MB file storage
@@ -167,6 +182,7 @@ Perfect for development and small production deployments!
 ## Upgrading
 
 When you need more resources:
+
 1. Go to your Supabase dashboard
 2. Click "Settings" → "Billing"
 3. Choose a paid plan starting at $25/month
@@ -174,16 +190,19 @@ When you need more resources:
 ## Troubleshooting
 
 ### Connection Issues
+
 - Check your `.env` file has correct URL and keys
 - Verify your Supabase project is active
 - Test connection with the test script
 
 ### Schema Issues
+
 - Make sure you ran the complete schema from `database/supabase_schema.sql`
 - Check the SQL Editor for any error messages
 - Verify tables were created in the "Table Editor"
 
 ### Authentication Issues
+
 - Check your JWT secret matches
 - Verify RLS policies are enabled
 - Test with the debug endpoints
@@ -196,11 +215,11 @@ When you need more resources:
 
 ## Cost Comparison
 
-| Service | Free Tier | Paid Start |
-|---------|-----------|------------|
-| Supabase | 500MB DB | $25/month |
-| Render DB | 1GB DB | $7/month |
-| PlanetScale | 5GB DB | $29/month |
-| AWS RDS | None | ~$15/month |
+| Service     | Free Tier | Paid Start |
+| ----------- | --------- | ---------- |
+| Supabase    | 500MB DB  | $25/month  |
+| Render DB   | 1GB DB    | $7/month   |
+| PlanetScale | 5GB DB    | $29/month  |
+| AWS RDS     | None      | ~$15/month |
 
 Supabase provides the best balance of features, free tier, and pricing for this project!

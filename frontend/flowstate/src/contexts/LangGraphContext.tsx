@@ -1,5 +1,11 @@
-"use client"
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+'use client';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from 'react';
 import { useAuth } from './AuthContext';
 import config from '@/lib/config';
 import { AgentStep } from '@/components/AgentLoadingCard';
@@ -17,12 +23,19 @@ interface LangGraphContextType {
   error: string | null;
   createThread: () => Promise<string>;
   sendMessage: (threadId: string, content: string) => Promise<string>;
-  sendMessageWithStreaming: (threadId: string, content: string, onStep: (step: AgentStep) => void, onComplete: (response: string) => void) => Promise<void>;
+  sendMessageWithStreaming: (
+    threadId: string,
+    content: string,
+    onStep: (step: AgentStep) => void,
+    onComplete: (response: string) => void
+  ) => Promise<void>;
   getThreadHistory: (threadId: string) => Promise<LangGraphMessage[]>;
   resetThread: () => Promise<string>;
 }
 
-const LangGraphContext = createContext<LangGraphContextType | undefined>(undefined);
+const LangGraphContext = createContext<LangGraphContextType | undefined>(
+  undefined
+);
 
 export const useLangGraph = () => {
   const context = useContext(LangGraphContext);
@@ -36,7 +49,9 @@ interface LangGraphProviderProps {
   children: ReactNode;
 }
 
-export const LangGraphProvider: React.FC<LangGraphProviderProps> = ({ children }) => {
+export const LangGraphProvider: React.FC<LangGraphProviderProps> = ({
+  children,
+}) => {
   const [isConnected, setIsConnected] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -72,7 +87,10 @@ export const LangGraphProvider: React.FC<LangGraphProviderProps> = ({ children }
     }
   };
 
-  const sendMessage = async (threadId: string, content: string): Promise<string> => {
+  const sendMessage = async (
+    threadId: string,
+    content: string
+  ): Promise<string> => {
     try {
       const token = localStorage.getItem('accessToken');
       if (!token) {
@@ -83,16 +101,16 @@ export const LangGraphProvider: React.FC<LangGraphProviderProps> = ({ children }
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           message: content,
           session_id: threadId,
-          user_id: user?.id || "default_user",
-          todo_category: "default"
+          user_id: user?.id || 'default_user',
+          todo_category: 'default',
         }),
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to send message');
@@ -107,9 +125,9 @@ export const LangGraphProvider: React.FC<LangGraphProviderProps> = ({ children }
   };
 
   const sendMessageWithStreaming = async (
-    threadId: string, 
-    content: string, 
-    onStep: (step: AgentStep) => void, 
+    threadId: string,
+    content: string,
+    onStep: (step: AgentStep) => void,
     onComplete: (response: string) => void
   ): Promise<void> => {
     try {
@@ -122,13 +140,13 @@ export const LangGraphProvider: React.FC<LangGraphProviderProps> = ({ children }
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           message: content,
           session_id: threadId,
-          user_id: user?.id || "default_user",
-          todo_category: "default"
+          user_id: user?.id || 'default_user',
+          todo_category: 'default',
         }),
       });
 
@@ -155,7 +173,7 @@ export const LangGraphProvider: React.FC<LangGraphProviderProps> = ({ children }
           for (const line of lines) {
             if (line.startsWith('data: ')) {
               const data = line.slice(6);
-              
+
               if (data === '[DONE]') {
                 // Streaming complete
                 if (finalResponse) {
@@ -168,20 +186,25 @@ export const LangGraphProvider: React.FC<LangGraphProviderProps> = ({ children }
 
               try {
                 const stepData = JSON.parse(data);
-                
+
                 if (stepData.type === 'error') {
                   throw new Error(stepData.content);
                 }
 
                 // Check if this is an agent step for the loading card
-                if (stepData.type && ['routing', 'action', 'tool', 'completion'].includes(stepData.type)) {
+                if (
+                  stepData.type &&
+                  ['routing', 'action', 'tool', 'completion'].includes(
+                    stepData.type
+                  )
+                ) {
                   console.log('Received agent step:', stepData); // Debug log
                   onStep({
                     type: stepData.type,
                     agent: stepData.agent,
                     message: stepData.message,
                     tool: stepData.tool,
-                    timestamp: stepData.timestamp
+                    timestamp: stepData.timestamp,
                   });
                 }
 
@@ -189,25 +212,42 @@ export const LangGraphProvider: React.FC<LangGraphProviderProps> = ({ children }
                 if (stepData.type === 'final_response') {
                   console.log('Received final response:', stepData.content); // Debug log
                   finalResponse = stepData.content;
-                  
+
                   // Check if response appears truncated
-                  if (finalResponse && (finalResponse.includes('<>') || finalResponse.includes('<Typography'))) {
+                  if (
+                    finalResponse &&
+                    (finalResponse.includes('<>') ||
+                      finalResponse.includes('<Typography'))
+                  ) {
                     // Basic JSX completeness check
-                    const openFragments = (finalResponse.match(/<>/g) || []).length;
-                    const closeFragments = (finalResponse.match(/<\/>/g) || []).length;
-                    const hasUnClosedQuotes = (finalResponse.match(/className="[^"]*$/g) || []).length > 0;
-                    const hasUnClosedTags = finalResponse.endsWith('<') || finalResponse.match(/<[^>]*$/g);
-                    
-                    if (openFragments !== closeFragments || hasUnClosedQuotes || hasUnClosedTags) {
-                      console.warn('JSX response appears truncated, length:', finalResponse.length);
+                    const openFragments = (finalResponse.match(/<>/g) || [])
+                      .length;
+                    const closeFragments = (finalResponse.match(/<\/>/g) || [])
+                      .length;
+                    const hasUnClosedQuotes =
+                      (finalResponse.match(/className="[^"]*$/g) || []).length >
+                      0;
+                    const hasUnClosedTags =
+                      finalResponse.endsWith('<') ||
+                      finalResponse.match(/<[^>]*$/g);
+
+                    if (
+                      openFragments !== closeFragments ||
+                      hasUnClosedQuotes ||
+                      hasUnClosedTags
+                    ) {
+                      console.warn(
+                        'JSX response appears truncated, length:',
+                        finalResponse.length
+                      );
                       // Add truncation warning to response
-                      finalResponse += '\n\n<!-- Response truncated during streaming -->';
+                      finalResponse +=
+                        '\n\n<!-- Response truncated during streaming -->';
                     }
                   }
-                  
+
                   // Don't call onComplete here, wait for [DONE]
                 }
-                
               } catch {
                 console.warn('Failed to parse streaming data:', data);
               }
@@ -217,14 +257,15 @@ export const LangGraphProvider: React.FC<LangGraphProviderProps> = ({ children }
       } finally {
         reader.releaseLock();
       }
-
     } catch (error) {
       console.error('Error in streaming message:', error);
       throw error;
     }
   };
 
-  const getThreadHistory = async (threadId: string): Promise<LangGraphMessage[]> => {
+  const getThreadHistory = async (
+    threadId: string
+  ): Promise<LangGraphMessage[]> => {
     // For now, return empty array since we're using stateless chat
     // In the future, you could implement message history retrieval from your backend
     console.log('Getting thread history for:', threadId); // Keep threadId for future use
@@ -246,7 +287,11 @@ export const LangGraphProvider: React.FC<LangGraphProviderProps> = ({ children }
     resetThread,
   };
 
-  return <LangGraphContext.Provider value={value}>{children}</LangGraphContext.Provider>;
+  return (
+    <LangGraphContext.Provider value={value}>
+      {children}
+    </LangGraphContext.Provider>
+  );
 };
 
 export default LangGraphProvider;
