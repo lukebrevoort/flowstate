@@ -22,9 +22,7 @@ from .configuration import Configuration
 
 import logging
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 llm = ChatAnthropic(model="claude-3-5-haiku-latest")
@@ -100,9 +98,7 @@ def parse_relative_datetime(date_description: str):
             hour = 0
 
         # Set the time component
-        parsed_date = parsed_date.replace(
-            hour=hour, minute=minute, second=0, microsecond=0
-        )
+        parsed_date = parsed_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
 
     if parsed_date:
         return parsed_date.isoformat()
@@ -214,9 +210,7 @@ def create_assignment_item(assignment_dict: Dict[str, Any], config: RunnableConf
             description=assignment_dict.get("description"),
             course_id=assignment_dict.get("course_id"),
             course_name=assignment_dict.get("course_name"),
-            status=assignment_dict.get(
-                "select", "Not started"
-            ),  # Changed from 'select' to 'status' to match expected input
+            status=assignment_dict.get("select", "Not started"),  # Changed from 'select' to 'status' to match expected input
             due_date=assignment_dict.get("due_date"),
             id=assignment_dict.get("id"),
             priority=assignment_dict.get("priority", "Medium"),
@@ -311,9 +305,7 @@ def update_assignment(
     if priority is not None:
         assignment_dict["priority"] = priority
     if status is not None:
-        assignment_dict["select"] = (
-            status  # NotionAPI will now use select instead of status internally
-        )
+        assignment_dict["select"] = status  # NotionAPI will now use select instead of status internally
     if due_date is not None:
         assignment_dict["due_date"] = due_date
     if description is not None:
@@ -433,9 +425,7 @@ def create_subtask_assignment(assignment_dict, config: RunnableConfig):
             description=assignment_dict.get("description"),
             course_id=assignment_dict.get("course_id"),
             course_name=assignment_dict.get("course_name"),
-            status=assignment_dict.get(
-                "select", "Not started"
-            ),  # Changed from 'select' to 'status' to match expected input
+            status=assignment_dict.get("select", "Not started"),  # Changed from 'select' to 'status' to match expected input
             due_date=assignment_dict.get("due_date"),
             id=assignment_dict.get("id"),
             priority=assignment_dict.get("priority", "Medium"),
@@ -464,9 +454,7 @@ def create_subtasks(assignment_dict, config: RunnableConfig):
         List of subtask dictionaries ready to be created in Notion.
     """
     user_id = get_user_id_from_config(config)
-    logger.info(
-        f"Generating subtasks for user {user_id}, assignment: {assignment_dict.get('name', 'Unknown')}"
-    )
+    logger.info(f"Generating subtasks for user {user_id}, assignment: {assignment_dict.get('name', 'Unknown')}")
 
     try:
         chain = subtask_prompt | llm
@@ -506,9 +494,7 @@ def create_subtasks(assignment_dict, config: RunnableConfig):
 
         # Make sure start date is before due date
         if start_date > due_date:
-            logger.warning(
-                f"Start date {start_date} is after due date {due_date}. Using current time."
-            )
+            logger.warning(f"Start date {start_date} is after due date {due_date}. Using current time.")
             start_date = datetime.now(timezone.utc)
 
         # Calculate time span in seconds
@@ -528,9 +514,7 @@ def create_subtasks(assignment_dict, config: RunnableConfig):
             elif 15 <= minute < 45:
                 subtask_due = subtask_due.replace(minute=30, second=0, microsecond=0)
             else:
-                subtask_due = subtask_due.replace(
-                    minute=0, second=0, microsecond=0
-                ) + timedelta(hours=1)
+                subtask_due = subtask_due.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
 
             # Format with consistent timezone
             subtask_due_str = subtask_due.isoformat()
@@ -545,8 +529,7 @@ def create_subtasks(assignment_dict, config: RunnableConfig):
                 "due_date": subtask_due_str,
                 "id": (
                     int(f"{assignment_dict.get('id')}_{i+1}")
-                    if assignment_dict.get("id")
-                    and str(assignment_dict.get("id")).isdigit()
+                    if assignment_dict.get("id") and str(assignment_dict.get("id")).isdigit()
                     else random.randint(100000, 999999)
                 ),
                 "priority": assignment_dict.get("priority", "Medium"),

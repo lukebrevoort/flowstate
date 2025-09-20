@@ -128,9 +128,7 @@ class UserTokenService:
             return bool(result and len(result) > 0)
 
         except Exception as e:
-            logger.error(
-                f"Error checking integration {integration_type} for user {user_id}: {str(e)}"
-            )
+            logger.error(f"Error checking integration {integration_type} for user {user_id}: {str(e)}")
             return False
 
     @staticmethod
@@ -164,9 +162,7 @@ class UserTokenService:
             return status
 
         except Exception as e:
-            logger.error(
-                f"Error getting integrations status for user {user_id}: {str(e)}"
-            )
+            logger.error(f"Error getting integrations status for user {user_id}: {str(e)}")
             return {"notion": False, "google_calendar": False, "google_drive": False}
 
 

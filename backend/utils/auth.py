@@ -33,9 +33,7 @@ def get_password_hash(password):
 # JWT token functions
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
-    expire = datetime.utcnow() + (
-        expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -91,9 +89,7 @@ class UserDict:
         self.name = user_data.get("name")
         self.email = user_data.get("email")
         self.notion_connected = user_data.get("notion_connected", False)
-        self.google_calendar_connected = user_data.get(
-            "google_calendar_connected", False
-        )
+        self.google_calendar_connected = user_data.get("google_calendar_connected", False)
 
 
 # New dependency for async endpoints

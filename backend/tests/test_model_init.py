@@ -20,11 +20,7 @@ try:
 
     # Test basic validation
     messages = []
-    validated = (
-        model.validate_messages(messages)
-        if hasattr(model, "validate_messages")
-        else messages
-    )
+    validated = model.validate_messages(messages) if hasattr(model, "validate_messages") else messages
     print(f"✅ Message validation works: {type(validated)}")
 
     print("\n🎉 All basic tests passed! The ResponseNotRead fix should be working.")

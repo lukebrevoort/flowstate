@@ -22,9 +22,7 @@ async def debug_token_retrieval():
         # Test the UserTokenService
         print("\n1. Testing UserTokenService...")
         token = await UserTokenService.get_user_notion_token(user_id)
-        print(
-            f"UserTokenService result: {token[:20]}..." if token else "No token found"
-        )
+        print(f"UserTokenService result: {token[:20]}..." if token else "No token found")
 
         # Test direct query with the same filters
         print("\n2. Testing direct query...")
