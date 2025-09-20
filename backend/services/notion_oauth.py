@@ -219,7 +219,7 @@ class NotionOAuthService:
 
             if existing:
                 # Update existing integration
-                result = await supabase.query(
+                await supabase.query(
                     "user_integrations",
                     "PATCH",
                     data={
@@ -231,7 +231,7 @@ class NotionOAuthService:
                 )
             else:
                 # Create new integration
-                result = await supabase.query(
+                await supabase.query(
                     "user_integrations",
                     "POST",
                     data={

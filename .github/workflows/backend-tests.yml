@@ -97,8 +97,10 @@ jobs:
 
       - name: Run mypy type checking
         working-directory: ./backend
+        env:
+          PYTHONPATH: ${{ github.workspace }}/backend:${{ github.workspace }}
         run: |
-          mypy . --ignore-missing-imports --no-strict-optional --disable-error-code=import --exclude="(venv|\.venv|env|site-packages|__pycache__|\.pytest_cache)" || true
+          mypy . --explicit-package-bases --ignore-missing-imports --no-strict-optional --disable-error-code=import --exclude="(venv|\.venv|env|site-packages|__pycache__|\.pytest_cache)" || true
 
       - name: Run pytest unit tests
         working-directory: ./backend

@@ -331,9 +331,9 @@ Remember: You are the conductor of the orchestra - coordinate the agents but let
 """
 
 # Trustcall instruction
-TRUSTCALL_INSTRUCTION = """Reflect on following interaction. 
+TRUSTCALL_INSTRUCTION = """Reflect on following interaction.
 
-Use the provided tools to retain any necessary memories about the user. 
+Use the provided tools to retain any necessary memories about the user.
 
 Use parallel tool calling to handle updates and insertions simultaneously.
 

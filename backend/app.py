@@ -211,7 +211,7 @@ async def login(user_data: UserLogin):
             },
         }
 
-    except Exception as e:
+    except Exception:
         if user_data.email == "test@flowstate.dev":
             # Fallback for test user if database fails
             return {

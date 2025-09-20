@@ -6,8 +6,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "../../.."))
 from datetime import datetime
 
 
-from notion_api import NotionAPI
-from models.assignment import Assignment
+from backend.notion_api import NotionAPI
+from backend.models.assignment import Assignment
 
 
 def test_notion_api():

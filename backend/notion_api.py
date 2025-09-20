@@ -8,7 +8,12 @@ from datetime import datetime
 import pytz
 from typing import Dict, Optional, Any
 from datetime import timezone
-from models.assignment import Assignment
+try:
+    # Try relative import (for CI/normal backend execution)
+    from models.assignment import Assignment
+except ImportError:
+    # Fall back to absolute import (for test scripts run from project root)
+    from backend.models.assignment import Assignment
 from bs4 import BeautifulSoup
 import re
 import logging
@@ -86,7 +91,12 @@ class NotionAPI:
             User's Notion access token if available
         """
         try:
-            from services.user_tokens import UserTokenService
+            try:
+                # Try relative import (for CI/normal backend execution)
+                from services.user_tokens import UserTokenService
+            except ImportError:
+                # Fall back to absolute import (for test scripts run from project root)
+                from backend.services.user_tokens import UserTokenService
             import asyncio
 
             async def fetch_token():
@@ -406,11 +416,8 @@ class NotionAPI:
         Returns:
             Dictionary mapping course names to their assignment page dicts
         """
-        payload = {
-            "filter": {
-                "property": "Type",
-            }
-        }
+        # TODO: Implement course retrieval logic
+        pass
 
     def _create_assignment_page(self, assignment: Assignment) -> Optional[Dict[str, Any]]:
         """
