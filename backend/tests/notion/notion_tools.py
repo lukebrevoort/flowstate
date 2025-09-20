@@ -32,6 +32,10 @@ def test_notion_api():
     page = notion._create_assignment_page(Assignment(id=2, name="HW 2", due_date=datetime(2025, 9, 22), description="Math homework", priority="High", course_name="Math"))
     print("Created page", page)
 
+    # Test getting Course Page
+    course_page = notion._get_course_page("Math")
+    print("Course page:", course_page)
+
 
 
 def main():
