@@ -84,8 +84,12 @@ async def run_all_tests() -> bool:
 def main():
     """Main test runner with command line options"""
     parser = argparse.ArgumentParser(description="Run Flowstate backend tests")
-    parser.add_argument("--oauth-only", action="store_true", help="Run only OAuth tests")
-    parser.add_argument("--integration-only", action="store_true", help="Run only integration tests")
+    parser.add_argument(
+        "--oauth-only", action="store_true", help="Run only OAuth tests"
+    )
+    parser.add_argument(
+        "--integration-only", action="store_true", help="Run only integration tests"
+    )
 
     args = parser.parse_args()
 

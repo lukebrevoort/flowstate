@@ -28,7 +28,9 @@ async def check_stored_tokens():
                 print(f"  - User ID: {integration.get('user_id')}")
                 print(f"    Type: {integration.get('integration_type')}")
                 print(f"    Active: {integration.get('is_active')}")
-                print(f"    Has Token: {'Yes' if integration.get('access_token') else 'No'}")
+                print(
+                    f"    Has Token: {'Yes' if integration.get('access_token') else 'No'}"
+                )
                 if integration.get("access_token"):
                     token = integration.get("access_token")
                     print(f"    Token (first 20 chars): {token[:20]}...")
@@ -38,14 +40,18 @@ async def check_stored_tokens():
 
         # Also check for Notion-specific integrations
         print("\nChecking specifically for Notion integrations:")
-        notion_result = await supabase.query("user_integrations", "GET", filters={"integration_type": "notion"})
+        notion_result = await supabase.query(
+            "user_integrations", "GET", filters={"integration_type": "notion"}
+        )
 
         if notion_result:
             print(f"Found {len(notion_result)} Notion integrations:")
             for integration in notion_result:
                 print(f"  - User ID: {integration.get('user_id')}")
                 print(f"    Active: {integration.get('is_active')}")
-                print(f"    Has Token: {'Yes' if integration.get('access_token') else 'No'}")
+                print(
+                    f"    Has Token: {'Yes' if integration.get('access_token') else 'No'}"
+                )
         else:
             print("No Notion integrations found")
 

@@ -39,7 +39,9 @@ class NotionOAuthTests:
         redirect_uri = os.getenv("NOTION_OAUTH_REDIRECT_URI")
 
         print(f"  Client ID: {client_id}")
-        print(f"  Client Secret: {'*' * len(client_secret) if client_secret else 'None'}")
+        print(
+            f"  Client Secret: {'*' * len(client_secret) if client_secret else 'None'}"
+        )
         print(f"  Redirect URI: {redirect_uri}")
 
         if not all([client_id, client_secret, redirect_uri]):
@@ -48,7 +50,9 @@ class NotionOAuthTests:
 
         # Validate redirect URI format
         if "oauth/authorize" in redirect_uri:
-            print("  ❌ REDIRECT_URI contains the full OAuth URL instead of just the callback endpoint!")
+            print(
+                "  ❌ REDIRECT_URI contains the full OAuth URL instead of just the callback endpoint!"
+            )
             return False
 
         if not redirect_uri.startswith("https://"):
@@ -127,7 +131,9 @@ class NotionOAuthTests:
         try:
             # Test getting integration status for a non-existent user
             test_user_id = "test-user-nonexistent"
-            is_connected = await self.user_token_service.is_integration_connected(test_user_id, "notion")
+            is_connected = await self.user_token_service.is_integration_connected(
+                test_user_id, "notion"
+            )
 
             if is_connected:
                 print("  ❌ Expected False for non-existent user, got True")
@@ -167,7 +173,9 @@ class NotionOAuthTests:
                     print("  ❌ State doesn't contain expected user ID")
                     return False
 
-                if len(token_part) < 32:  # URL-safe base64 tokens should be at least 32 chars
+                if (
+                    len(token_part) < 32
+                ):  # URL-safe base64 tokens should be at least 32 chars
                     print("  ❌ State token part seems too short")
                     return False
 

@@ -43,7 +43,9 @@ class BackendIntegrationTests:
                 return False
         except requests.exceptions.ConnectionError:
             print(f"  ❌ Cannot connect to backend at {self.base_url}")
-            print(f"  💡 Make sure your backend is running: cd backend && python app.py")
+            print(
+                f"  💡 Make sure your backend is running: cd backend && python app.py"
+            )
             return False
         except Exception as e:
             print(f"  ❌ Backend health check error: {e}")
@@ -69,11 +71,17 @@ class BackendIntegrationTests:
                     422,
                     405,
                 ]:  # Expected for protected endpoints
-                    print(f"  ✅ {endpoint} - endpoint exists (status: {response.status_code})")
+                    print(
+                        f"  ✅ {endpoint} - endpoint exists (status: {response.status_code})"
+                    )
                 elif response.status_code == 200:
-                    print(f"  ✅ {endpoint} - endpoint accessible (status: {response.status_code})")
+                    print(
+                        f"  ✅ {endpoint} - endpoint accessible (status: {response.status_code})"
+                    )
                 else:
-                    print(f"  ⚠️  {endpoint} - unexpected status: {response.status_code}")
+                    print(
+                        f"  ⚠️  {endpoint} - unexpected status: {response.status_code}"
+                    )
             except Exception as e:
                 print(f"  ❌ {endpoint} - error: {e}")
                 all_good = False
@@ -90,7 +98,9 @@ class BackendIntegrationTests:
             # If the backend is running, the database connection is likely working
             response = requests.get(f"{self.base_url}/", timeout=5)
             if response.status_code == 200:
-                print("  ✅ Database connectivity appears healthy (backend started successfully)")
+                print(
+                    "  ✅ Database connectivity appears healthy (backend started successfully)"
+                )
                 return True
             else:
                 print("  ⚠️  Cannot verify database connectivity")
@@ -141,7 +151,9 @@ class BackendIntegrationTests:
                 "Access-Control-Request-Method": "GET",
                 "Access-Control-Request-Headers": "authorization",
             }
-            response = requests.options(f"{self.base_url}/api/oauth/notion/status", headers=headers, timeout=5)
+            response = requests.options(
+                f"{self.base_url}/api/oauth/notion/status", headers=headers, timeout=5
+            )
 
             # Check CORS headers in response
             cors_headers = [

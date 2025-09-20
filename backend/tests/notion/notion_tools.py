@@ -1,13 +1,13 @@
 # This file is for testing out the implemented notion api tools that the agents will use
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '../../..'))
+
+sys.path.append(os.path.join(os.path.dirname(__file__), "../../.."))
 from datetime import datetime
 
 
 from backend.notion_api import NotionAPI
 from backend.models.assignment import Assignment
-
 
 
 def test_notion_api():
@@ -29,13 +29,21 @@ def test_notion_api():
                 print(f"  {name}: {prop['type']}")
 
     # Test creating page
-    page = notion._create_assignment_page(Assignment(id=2, name="HW 2", due_date=datetime(2025, 9, 22), description="Math homework", priority="High", course_name="Math"))
+    page = notion._create_assignment_page(
+        Assignment(
+            id=2,
+            name="HW 2",
+            due_date=datetime(2025, 9, 22),
+            description="Math homework",
+            priority="High",
+            course_name="Math",
+        )
+    )
     print("Created page", page)
 
     # Test getting Course Page
     course_page = notion._get_course_page("Math")
     print("Course page:", course_page)
-
 
 
 def main():
@@ -44,6 +52,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-

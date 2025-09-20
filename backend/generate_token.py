@@ -6,7 +6,9 @@ import logging
 import json
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 # Google API scopes
@@ -24,14 +26,20 @@ def generate_token():
     if not os.path.exists(credentials_file):
         logger.error(f"OAuth client secrets file not found at {credentials_file}")
         print(f"ERROR: OAuth Client ID JSON.json not found at {credentials_file}")
-        print("Please download OAuth credentials from Google Cloud Console and save them to this location.")
-        print("See https://developers.google.com/workspace/guides/create-credentials#oauth-client-id")
+        print(
+            "Please download OAuth credentials from Google Cloud Console and save them to this location."
+        )
+        print(
+            "See https://developers.google.com/workspace/guides/create-credentials#oauth-client-id"
+        )
         return False
 
     try:
         logger.info(f"Starting OAuth flow with credentials from {credentials_file}")
         print("Starting OAuth authentication flow...")
-        print("A browser window will open. Please login with your Google account and authorize the application.")
+        print(
+            "A browser window will open. Please login with your Google account and authorize the application."
+        )
 
         # Create OAuth flow and run local server
         flow = InstalledAppFlow.from_client_secrets_file(credentials_file, SCOPES)

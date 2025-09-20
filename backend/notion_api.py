@@ -48,10 +48,10 @@ class NotionAPI:
         Args:
             user_id: Optional user ID to fetch user-specific Notion token
         """
-        self.user_id = "99d11141-76eb-460f-8741-f2f5e767ba0f" # or user.id  # Default system user ID for testing purposes
+        self.user_id = "99d11141-76eb-460f-8741-f2f5e767ba0f"  # or user.id  # Default system user ID for testing purposes
         self.user_token = None
         self.data_source_id = None  # Store the data source ID for this database
-        self.database_id = None # Initialize database ID for OAuth users 
+        self.database_id = None  # Initialize database ID for OAuth users
 
         # If user_id is provided, try to get their token
         if user_id:
@@ -59,15 +59,19 @@ class NotionAPI:
             if self.user_token:
                 logger.info(f"Using OAuth token for user {user_id}")
             else:
-                logger.info(f"No OAuth token found for user {user_id}, falling back to system token")
+                logger.info(
+                    f"No OAuth token found for user {user_id}, falling back to system token"
+                )
         else:
             logger.info("No user_id provided, using system token")
 
         # Use user token if available, otherwise fall back to system token
 
-        token = self.user_token or NOTION_TOKEN # pulled from testing user
+        token = self.user_token or NOTION_TOKEN  # pulled from testing user
         if not token:
-            raise ValueError("No Notion token available (neither user token nor system token)")
+            raise ValueError(
+                "No Notion token available (neither user token nor system token)"
+            )
 
         self.notion = Client(auth=token, notion_version="2025-09-03")
 
@@ -108,7 +112,7 @@ class NotionAPI:
         except Exception as e:
             logger.warning(f"Could not fetch user token for {user_id}: {e}")
             return None
-        
+
     def _get_database_id(self) -> Optional[str]:
         """
         Get the Notion database ID, either from environment or by querying Notion.
@@ -121,13 +125,16 @@ class NotionAPI:
             response = self.notion.search(
                 filter={
                     "value": "data_source",  # Changed from "database" to "data_source" for new API
-                    "property": "object"
+                    "property": "object",
                 }
             )
             if response and "results" in response and len(response["results"]) > 0:
                 # Get the parent database ID from the first data source found
                 first_result = response["results"][0]
-                if "parent" in first_result and first_result["parent"]["type"] == "database_id":
+                if (
+                    "parent" in first_result
+                    and first_result["parent"]["type"] == "database_id"
+                ):
                     db_id = first_result["parent"]["database_id"]
                     logger.info(f"Found Notion database ID: {db_id}")
                     return db_id
@@ -149,25 +156,27 @@ class NotionAPI:
         """
         self.assignments_data_source_id = None
         self.courses_data_source_id = None
-        
+
         try:
             if not self.database_id:
                 logger.warning("No database_id configured")
                 return
-                
+
             # Get database info to retrieve data sources
             response = self.notion.databases.retrieve(database_id=self.database_id)
-            
+
             if response and "data_sources" in response:
                 data_sources = response["data_sources"]
                 logger.info(f"Found {len(data_sources)} data sources")
-                
+
                 for data_source in data_sources:
                     data_source_id = data_source["id"]
                     data_source_name = data_source.get("name", "").lower()
-                    
-                    logger.info(f"Data source: {data_source_name} (ID: {data_source_id})")
-                    
+
+                    logger.info(
+                        f"Data source: {data_source_name} (ID: {data_source_id})"
+                    )
+
                     # Identify data sources by name
                     if "assignment" in data_source_name:
                         self.assignments_data_source_id = data_source_id
@@ -175,18 +184,18 @@ class NotionAPI:
                     elif "course" in data_source_name:
                         self.courses_data_source_id = data_source_id
                         logger.info(f"Courses data source: {data_source_id}")
-                
+
                 # Set the primary data_source_id to assignments for backward compatibility
                 self.data_source_id = self.assignments_data_source_id
-                
+
                 if not self.assignments_data_source_id:
                     logger.warning("No assignments data source found")
                 if not self.courses_data_source_id:
                     logger.warning("No courses data source found")
-                    
+
             else:
                 logger.warning("No data_sources field in database response")
-                
+
         except Exception as e:
             logger.error(f"Failed to initialize data sources: {e}")
             # Fall back to using database_id if data source discovery fails
@@ -207,7 +216,9 @@ class NotionAPI:
             "courses_data_source_id": self.courses_data_source_id,
             "primary_data_source_id": self.data_source_id,
             "using_data_source": self.data_source_id is not None,
-            "has_both_data_sources": bool(self.assignments_data_source_id and self.courses_data_source_id),
+            "has_both_data_sources": bool(
+                self.assignments_data_source_id and self.courses_data_source_id
+            ),
         }
 
     def get_data_source_schema(self) -> Optional[Dict[str, Any]]:
@@ -221,9 +232,11 @@ class NotionAPI:
         if not self.data_source_id:
             logger.warning("No data source ID available")
             return None
-            
+
         try:
-            response = self._make_notion_request("retrieve_data_source", data_source_id=self.data_source_id)
+            response = self._make_notion_request(
+                "retrieve_data_source", data_source_id=self.data_source_id
+            )
             return response
         except Exception as e:
             logger.error(f"Failed to retrieve data source schema: {e}")
@@ -280,7 +293,9 @@ class NotionAPI:
         return {
             "user_id": self.user_id,
             "using_user_token": self.is_using_user_token,
-            "token_valid": (self.validate_token() if self.user_token or NOTION_TOKEN else False),
+            "token_valid": (
+                self.validate_token() if self.user_token or NOTION_TOKEN else False
+            ),
             "has_system_fallback": bool(NOTION_TOKEN),
         }
 
@@ -306,19 +321,18 @@ class NotionAPI:
             return self.notion.databases.query(**kwargs)
         elif operation_type == "query_data_source":
             # Use the correct data source query endpoint
-            data_source_id = kwargs.pop('data_source_id')
-            filter_obj = kwargs.pop('filter', {})
+            data_source_id = kwargs.pop("data_source_id")
+            filter_obj = kwargs.pop("filter", {})
             return self.notion.request(
                 method="POST",
                 path=f"data_sources/{data_source_id}/query",
-                body={"filter": filter_obj}
+                body={"filter": filter_obj},
             )
         elif operation_type == "retrieve_data_source":
             # Retrieve data source schema/properties
-            data_source_id = kwargs.pop('data_source_id')
+            data_source_id = kwargs.pop("data_source_id")
             return self.notion.request(
-                method="GET",
-                path=f"data_sources/{data_source_id}"
+                method="GET", path=f"data_sources/{data_source_id}"
             )
         elif operation_type == "update_page":
             return self.notion.pages.update(**kwargs)
@@ -388,9 +402,7 @@ class NotionAPI:
         payload = {
             "filter": {
                 "property": "Assignment Name",
-                "rich_text": {
-                    "contains": assignment.name
-                }
+                "rich_text": {"contains": assignment.name},
             }
         }
 
@@ -398,7 +410,12 @@ class NotionAPI:
             response = self._make_notion_request("databases/query", **payload)
             if response and "results" in response:
                 for page in response["results"]:
-                    if page["properties"]["Assignment Name"]["rich_text"][0]["text"]["content"] == assignment.name:
+                    if (
+                        page["properties"]["Assignment Name"]["rich_text"][0]["text"][
+                            "content"
+                        ]
+                        == assignment.name
+                    ):
                         return page
         except Exception as e:
             logger.error(f"Error fetching assignment page: {e}")
@@ -415,10 +432,11 @@ class NotionAPI:
             "filter": {
                 "property": "Type",
             }
-
         }
 
-    def _create_assignment_page(self, assignment: Assignment) -> Optional[Dict[str, Any]]:
+    def _create_assignment_page(
+        self, assignment: Assignment
+    ) -> Optional[Dict[str, Any]]:
         """
         Create a new Notion page for the given assignment.
 
@@ -429,59 +447,46 @@ class NotionAPI:
             Notion page dict if created successfully, else None
         """
 
-        course_id = self._get_course_page(assignment.course_name)["id"] if assignment.course_name else None
+        course_id = (
+            self._get_course_page(assignment.course_name)["id"]
+            if assignment.course_name
+            else None
+        )
         properties = {
-            "Assignment Name": {
-                "title": [
-                    {
-                        "text": {
-                            "content": assignment.name
-                        }
-                    }
-                ]
-            },
-            "Status": {
-                "status": {
-                    "name": assignment.status or "Not started"
-                }
-            },
+            "Assignment Name": {"title": [{"text": {"content": assignment.name}}]},
+            "Status": {"status": {"name": assignment.status or "Not started"}},
             "Due date": {
                 "date": {
-                    "start": assignment.due_date.strftime("%Y-%m-%d") if assignment.due_date else None
+                    "start": (
+                        assignment.due_date.strftime("%Y-%m-%d")
+                        if assignment.due_date
+                        else None
+                    )
                 }
             },
-            "Priority": {
-                "select": {
-                    "name": assignment.priority or "Low"
-                }
-            },
+            "Priority": {"select": {"name": assignment.priority or "Low"}},
             "Description": {
                 "rich_text": [
-                    {
-                        "text": {
-                            "content": self._clean_html(assignment.description)
-                        }
-                    }
+                    {"text": {"content": self._clean_html(assignment.description)}}
                 ]
             },
-            "Course": {
-                "relation": [
-                    {"id": course_id} if course_id else {}
-                ]
-            }
+            "Course": {"relation": [{"id": course_id} if course_id else {}]},
         }
 
         # Use assignments data_source_id if available (new 2025-09-03 API), fallback to database_id
         if self.assignments_data_source_id:
             payload = {
-                "parent": {"type": "data_source_id", "data_source_id": self.assignments_data_source_id},
-                "properties": properties
+                "parent": {
+                    "type": "data_source_id",
+                    "data_source_id": self.assignments_data_source_id,
+                },
+                "properties": properties,
             }
         else:
             # Fallback for older API or when data source discovery fails
             payload = {
                 "parent": {"database_id": self.database_id},
-                "properties": properties
+                "properties": properties,
             }
 
         try:
@@ -490,7 +495,7 @@ class NotionAPI:
         except Exception as e:
             logger.error(f"Error creating assignment page: {e}")
             return None
-        
+
     def _find_or_create_course_page(self, course_name: str) -> Optional[Dict[str, Any]]:
         """
         Find an existing Notion page for the course, or create one if it doesn't exist.
@@ -506,7 +511,9 @@ class NotionAPI:
             return course_page
         return self._create_course_page(course_name)
 
-    def _update_assignment_page(self, page_id: str, assignment: Assignment) -> Optional[Dict[str, Any]]:
+    def _update_assignment_page(
+        self, page_id: str, assignment: Assignment
+    ) -> Optional[Dict[str, Any]]:
         """
         Update an existing Notion page with new assignment data.
 
@@ -535,21 +542,24 @@ class NotionAPI:
             payload = {
                 "filter": {
                     "property": "Course Name",  # Assuming courses have a "Course Name" title property
-                    "title": {
-                        "equals": course_name
-                    }
+                    "title": {"equals": course_name},
                 }
             }
             try:
-                response = self._make_notion_request("query_data_source", data_source_id=self.courses_data_source_id, **payload)
+                response = self._make_notion_request(
+                    "query_data_source",
+                    data_source_id=self.courses_data_source_id,
+                    **payload,
+                )
                 if response and "results" in response and len(response["results"]) > 0:
                     return response["results"][0]  # Return the first matching course
             except Exception as e:
-                logger.error(f"Error fetching course page for {course_name} from courses data source: {e}")
+                logger.error(
+                    f"Error fetching course page for {course_name} from courses data source: {e}"
+                )
         else:
             logger.warning("No courses data source available")
         return None
-        
 
     def _create_course_page(self, course_name: str) -> Optional[Dict[str, Any]]:
         """
@@ -571,4 +581,3 @@ class NotionAPI:
             Dictionary mapping course names to their Notion page dicts
         """
         # IMPLEMENT LATER
-    
