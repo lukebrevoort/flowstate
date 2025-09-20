@@ -72,7 +72,9 @@ class Spy:
             if r.child_runs:
                 q.extend(r.child_runs)
             if r.run_type == "chat_model":
-                self.called_tools.append(r.outputs["generations"][0][0]["message"]["kwargs"]["tool_calls"])
+                self.called_tools.append(
+                    r.outputs["generations"][0][0]["message"]["kwargs"]["tool_calls"]
+                )
 
 
 # Extract information from tool calls for both patches and new memories in Trustcall
@@ -121,9 +123,13 @@ def extract_tool_info(tool_calls, schema_name="Memory"):
                 f"Added content: {change['value']}"
             )
         elif change["type"] == "no_update":
-            result_parts.append(f"Document {change['doc_id']} unchanged:\n" f"{change['planned_edits']}")
+            result_parts.append(
+                f"Document {change['doc_id']} unchanged:\n" f"{change['planned_edits']}"
+            )
         else:
-            result_parts.append(f"New {schema_name} created:\n" f"Content: {change['value']}")
+            result_parts.append(
+                f"New {schema_name} created:\n" f"Content: {change['value']}"
+            )
 
     return "\n\n".join(result_parts)
 
@@ -142,7 +148,9 @@ class Profile(BaseModel):
         description="Personal connection of the user, such as family members, friends, or coworkers",
         default_factory=list,
     )
-    interests: list[str] = Field(description="Interests that the user has", default_factory=list)
+    interests: list[str] = Field(
+        description="Interests that the user has", default_factory=list
+    )
 
 
 ## Initialize the model and tools
@@ -251,7 +259,9 @@ profile_extractor = create_extractor(
 
 
 ## Tools for handing over the messages to the model
-def create_supervisor_handoff_tool(*, agent_name: str, name: str | None, description: str | None) -> BaseTool:
+def create_supervisor_handoff_tool(
+    *, agent_name: str, name: str | None, description: str | None
+) -> BaseTool:
 
     @tool(name, description=description)
     def handoff_to_agent(
@@ -263,7 +273,11 @@ def create_supervisor_handoff_tool(*, agent_name: str, name: str | None, descrip
         tool_call_id: Annotated[str, InjectedToolCallId],
     ):
         # Ensure the content is never empty
-        content = f"Successfully transferred to {agent_name}" if agent_name else "Handoff completed"
+        content = (
+            f"Successfully transferred to {agent_name}"
+            if agent_name
+            else "Handoff completed"
+        )
 
         tool_message = ToolMessage(
             content=content,  # Non-empty content
@@ -373,7 +387,8 @@ project_management_agent = create_react_agent(
 response_agent = create_react_agent(
     model=model,
     tools=[],
-    prompt=response_prompt + "\nTask Description: {task_description}\nUser Profile: {user_profile}",
+    prompt=response_prompt
+    + "\nTask Description: {task_description}\nUser Profile: {user_profile}",
     name="ResponseAgent",
 )
 
@@ -410,17 +425,29 @@ def update_profile(state: MessagesState, config: RunnableConfig, store: BaseStor
     # Format the existing memories for the Trustcall extractor
     tool_name = "Profile"
     existing_memories = (
-        [(existing_item.key, tool_name, existing_item.value) for existing_item in existing_items] if existing_items else None
+        [
+            (existing_item.key, tool_name, existing_item.value)
+            for existing_item in existing_items
+        ]
+        if existing_items
+        else None
     )
 
     # Merge the chat history and the instruction
-    TRUSTCALL_INSTRUCTION_FORMATTED = TRUSTCALL_INSTRUCTION.format(time=datetime.now().isoformat())
+    TRUSTCALL_INSTRUCTION_FORMATTED = TRUSTCALL_INSTRUCTION.format(
+        time=datetime.now().isoformat()
+    )
     updated_messages = list(
-        merge_message_runs(messages=[SystemMessage(content=TRUSTCALL_INSTRUCTION_FORMATTED)] + state["messages"][:-1])
+        merge_message_runs(
+            messages=[SystemMessage(content=TRUSTCALL_INSTRUCTION_FORMATTED)]
+            + state["messages"][:-1]
+        )
     )
 
     # Invoke the extractor
-    result = profile_extractor.invoke({"messages": updated_messages, "existing": existing_memories})
+    result = profile_extractor.invoke(
+        {"messages": updated_messages, "existing": existing_memories}
+    )
 
     # Save save the memories from Trustcall to the store
     for r, rmeta in zip(result["responses"], result["response_metadata"]):
@@ -455,11 +482,17 @@ def update_instructions(state: MessagesState, config: RunnableConfig, store: Bas
     existing_memory = store.get(namespace, "user_instructions")
 
     # Format the memory in the system prompt
-    system_msg = CREATE_INSTRUCTIONS.format(current_instructions=existing_memory.value if existing_memory else None)
+    system_msg = CREATE_INSTRUCTIONS.format(
+        current_instructions=existing_memory.value if existing_memory else None
+    )
     new_memory = model.invoke(
         [SystemMessage(content=system_msg)]
         + state["messages"][:-1]
-        + [HumanMessage(content="Please update the instructions based on the conversation")]
+        + [
+            HumanMessage(
+                content="Please update the instructions based on the conversation"
+            )
+        ]
     )
 
     # Overwrite the existing memory in the store
@@ -556,7 +589,11 @@ def update_user_profile(
     tool_call_id: Annotated[str, InjectedToolCallId],
 ):
     """Update the user's profile based on conversation context"""
-    return {"messages": [ToolMessage(content="Profile update initiated", tool_call_id=tool_call_id)]}
+    return {
+        "messages": [
+            ToolMessage(content="Profile update initiated", tool_call_id=tool_call_id)
+        ]
+    }
 
 
 @tool
@@ -566,7 +603,13 @@ def update_user_instructions(
     tool_call_id: Annotated[str, InjectedToolCallId],
 ):
     """Update user instructions based on feedback"""
-    return {"messages": [ToolMessage(content="Instructions update initiated", tool_call_id=tool_call_id)]}
+    return {
+        "messages": [
+            ToolMessage(
+                content="Instructions update initiated", tool_call_id=tool_call_id
+            )
+        ]
+    }
 
 
 # Compile the graph
@@ -604,7 +647,9 @@ async def stream_response(user_input: str, config: dict):
 
                 # Safely extract node name
                 if isinstance(node_name, tuple):
-                    actual_node_name = str(node_name[0]) if len(node_name) > 0 else "Unknown"
+                    actual_node_name = (
+                        str(node_name[0]) if len(node_name) > 0 else "Unknown"
+                    )
                 else:
                     actual_node_name = str(node_name)
 
@@ -613,7 +658,9 @@ async def stream_response(user_input: str, config: dict):
                 # Safely extract messages from node_update
                 messages = []
                 if isinstance(node_update, dict):
-                    if "agent" in node_update and isinstance(node_update["agent"], dict):
+                    if "agent" in node_update and isinstance(
+                        node_update["agent"], dict
+                    ):
                         messages = node_update["agent"].get("messages", [])
                     else:
                         messages = node_update.get("messages", [])
@@ -626,7 +673,10 @@ async def stream_response(user_input: str, config: dict):
                     continue
 
                 # Handle supervisor routing decisions
-                if "Orchestrator Supervisor" in actual_node_name or "supervisor" in actual_node_name.lower():
+                if (
+                    "Orchestrator Supervisor" in actual_node_name
+                    or "supervisor" in actual_node_name.lower()
+                ):
                     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
                         for tool_call in last_message.tool_calls:
                             tool_name = tool_call.get("name", "")
@@ -678,7 +728,11 @@ async def stream_response(user_input: str, config: dict):
                             step_type = "completion"
 
                         message_content = str(last_message.content)
-                        truncated_content = message_content[:100] + "..." if len(message_content) > 100 else message_content
+                        truncated_content = (
+                            message_content[:100] + "..."
+                            if len(message_content) > 100
+                            else message_content
+                        )
 
                         yield {
                             "type": step_type,
@@ -702,24 +756,37 @@ async def stream_response(user_input: str, config: dict):
                         final_response_content = str(last_message.content)
 
                         # Log response length for debugging
-                        print(f"Final response length: {len(final_response_content)} characters")
+                        print(
+                            f"Final response length: {len(final_response_content)} characters"
+                        )
 
                         # Check if JSX response appears complete
-                        if "<>" in final_response_content or "<Typography" in final_response_content:
+                        if (
+                            "<>" in final_response_content
+                            or "<Typography" in final_response_content
+                        ):
                             # Basic JSX validation
                             open_fragments = final_response_content.count("<>")
                             close_fragments = final_response_content.count("</>")
-                            has_unclosed_quotes = bool(re.search(r'className="[^"]*$', final_response_content))
-                            has_unclosed_tags = final_response_content.endswith("<") or bool(
-                                re.search(r"<[^>]*$", final_response_content)
+                            has_unclosed_quotes = bool(
+                                re.search(r'className="[^"]*$', final_response_content)
                             )
+                            has_unclosed_tags = final_response_content.endswith(
+                                "<"
+                            ) or bool(re.search(r"<[^>]*$", final_response_content))
 
-                            if open_fragments != close_fragments or has_unclosed_quotes or has_unclosed_tags:
+                            if (
+                                open_fragments != close_fragments
+                                or has_unclosed_quotes
+                                or has_unclosed_tags
+                            ):
                                 print(
                                     f"⚠️ JSX appears incomplete - fragments: {open_fragments}/{close_fragments}, unclosed quotes: {has_unclosed_quotes}, unclosed tags: {has_unclosed_tags}"
                                 )
                                 # Add completion warning
-                                final_response_content += "\n<!-- JSX Response may be incomplete -->"
+                                final_response_content += (
+                                    "\n<!-- JSX Response may be incomplete -->"
+                                )
 
                         yield {
                             "type": "final_response",
@@ -755,7 +822,9 @@ async def stream_events(user_input: str, config: dict):
     try:
         initial_state = {"messages": [HumanMessage(content=user_input)]}
 
-        async for event in app.astream_events(initial_state, config=config, version="v2"):
+        async for event in app.astream_events(
+            initial_state, config=config, version="v2"
+        ):
             try:
                 # Handle different event types for more granular control
                 if event.get("event") == "on_chain_start":

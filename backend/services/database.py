@@ -52,7 +52,9 @@ class DatabaseService:
         """Get user by email"""
         return await self._get_user_by_email_supabase(email)
 
-    async def update_user_preferences(self, user_id: str, preferences: Dict[str, Any]) -> bool:
+    async def update_user_preferences(
+        self, user_id: str, preferences: Dict[str, Any]
+    ) -> bool:
         """Update user preferences"""
         return await self._update_user_preferences_supabase(user_id, preferences)
 
@@ -81,9 +83,15 @@ class DatabaseService:
                 # Verify the profile was created by the trigger using service client
                 try:
                     # Use service client to check if profile exists (bypasses RLS)
-                    profile_response = await self.supabase_service_client.query("profiles", "GET", filters={"id": user_id})
+                    profile_response = await self.supabase_service_client.query(
+                        "profiles", "GET", filters={"id": user_id}
+                    )
 
-                    if profile_response and isinstance(profile_response, list) and len(profile_response) > 0:
+                    if (
+                        profile_response
+                        and isinstance(profile_response, list)
+                        and len(profile_response) > 0
+                    ):
                         profile = profile_response[0]
                         print("✅ Profile found after trigger execution")
                         return {
@@ -91,11 +99,15 @@ class DatabaseService:
                             "name": profile.get("name"),
                             "email": profile.get("email"),
                             "notion_connected": profile.get("notion_connected", False),
-                            "google_calendar_connected": profile.get("google_calendar_connected", False),
+                            "google_calendar_connected": profile.get(
+                                "google_calendar_connected", False
+                            ),
                         }
                     else:
                         # If trigger didn't work, we need to handle this differently
-                        print("Warning: Profile not auto-created by trigger, this needs to be fixed in Supabase")
+                        print(
+                            "Warning: Profile not auto-created by trigger, this needs to be fixed in Supabase"
+                        )
                         return {
                             "id": user_id,
                             "name": user_data.name,
@@ -120,25 +132,37 @@ class DatabaseService:
             print(f"Supabase user creation error: {e}")
             raise e
 
-    async def _authenticate_user_supabase(self, user_data: UserLogin) -> Optional[Dict[str, Any]]:
+    async def _authenticate_user_supabase(
+        self, user_data: UserLogin
+    ) -> Optional[Dict[str, Any]]:
         """Authenticate user using Supabase Auth"""
         try:
-            auth_response = await self.supabase_client.auth_signin(email=user_data.email, password=user_data.password)
+            auth_response = await self.supabase_client.auth_signin(
+                email=user_data.email, password=user_data.password
+            )
 
             if auth_response.get("user"):
                 user_id = auth_response["user"]["id"]
 
                 # Get additional user data from profiles table using service client (bypasses RLS)
-                profile_response = await self.supabase_service_client.query("profiles", "GET", filters={"id": user_id})
+                profile_response = await self.supabase_service_client.query(
+                    "profiles", "GET", filters={"id": user_id}
+                )
 
-                if profile_response and isinstance(profile_response, list) and len(profile_response) > 0:
+                if (
+                    profile_response
+                    and isinstance(profile_response, list)
+                    and len(profile_response) > 0
+                ):
                     profile = profile_response[0]
                     return {
                         "id": user_id,
                         "name": profile.get("name"),
                         "email": profile.get("email"),
                         "notion_connected": profile.get("notion_connected", False),
-                        "google_calendar_connected": profile.get("google_calendar_connected", False),
+                        "google_calendar_connected": profile.get(
+                            "google_calendar_connected", False
+                        ),
                         "access_token": auth_response.get("access_token"),
                     }
                 else:
@@ -163,7 +187,9 @@ class DatabaseService:
         """Get user by ID from Supabase"""
         try:
             # Use service client to bypass RLS policies
-            response = await self.supabase_service_client.query("profiles", "GET", filters={"id": user_id})
+            response = await self.supabase_service_client.query(
+                "profiles", "GET", filters={"id": user_id}
+            )
 
             if response and isinstance(response, list) and len(response) > 0:
                 profile = response[0]
@@ -172,7 +198,9 @@ class DatabaseService:
                     "name": profile.get("name"),
                     "email": profile.get("email"),
                     "notion_connected": profile.get("notion_connected", False),
-                    "google_calendar_connected": profile.get("google_calendar_connected", False),
+                    "google_calendar_connected": profile.get(
+                        "google_calendar_connected", False
+                    ),
                 }
 
             return None
@@ -185,7 +213,9 @@ class DatabaseService:
         """Get user by email from Supabase"""
         try:
             # Use service client to bypass RLS policies
-            response = await self.supabase_service_client.query("profiles", "GET", filters={"email": email})
+            response = await self.supabase_service_client.query(
+                "profiles", "GET", filters={"email": email}
+            )
 
             if response and isinstance(response, list) and len(response) > 0:
                 profile = response[0]
@@ -194,7 +224,9 @@ class DatabaseService:
                     "name": profile.get("name"),
                     "email": profile.get("email"),
                     "notion_connected": profile.get("notion_connected", False),
-                    "google_calendar_connected": profile.get("google_calendar_connected", False),
+                    "google_calendar_connected": profile.get(
+                        "google_calendar_connected", False
+                    ),
                 }
 
             return None
@@ -203,10 +235,14 @@ class DatabaseService:
             print(f"Error getting user by email from Supabase: {e}")
             return None
 
-    async def _update_user_preferences_supabase(self, user_id: str, preferences: Dict[str, Any]) -> bool:
+    async def _update_user_preferences_supabase(
+        self, user_id: str, preferences: Dict[str, Any]
+    ) -> bool:
         """Update user preferences in Supabase"""
         try:
-            response = await self.supabase_client.query("profiles", "PATCH", data=preferences, filters={"id": user_id})
+            response = await self.supabase_client.query(
+                "profiles", "PATCH", data=preferences, filters={"id": user_id}
+            )
             return response is not None
 
         except Exception as e:

@@ -51,7 +51,9 @@ class SupabaseSecurityConfig:
 
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.patch(auth_config_url, headers=self.headers, json=config, timeout=30.0)
+                response = await client.patch(
+                    auth_config_url, headers=self.headers, json=config, timeout=30.0
+                )
 
                 if response.status_code in [200, 204]:
                     print("✅ Leaked password protection enabled successfully")
@@ -60,7 +62,9 @@ class SupabaseSecurityConfig:
                         "message": "Leaked password protection enabled",
                     }
                 else:
-                    print(f"⚠️ Failed to enable leaked password protection: {response.status_code}")
+                    print(
+                        f"⚠️ Failed to enable leaked password protection: {response.status_code}"
+                    )
                     print(f"Response: {response.text}")
                     return {
                         "status": "error",
@@ -90,7 +94,9 @@ class SupabaseSecurityConfig:
 
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.patch(auth_config_url, headers=self.headers, json=mfa_config, timeout=30.0)
+                response = await client.patch(
+                    auth_config_url, headers=self.headers, json=mfa_config, timeout=30.0
+                )
 
                 if response.status_code in [200, 204]:
                     print("✅ MFA settings configured successfully")
@@ -140,7 +146,9 @@ class SupabaseSecurityConfig:
                     print("✅ Additional auth security configured successfully")
                     return {"status": "success", "message": "Auth security configured"}
                 else:
-                    print(f"⚠️ Failed to configure auth security: {response.status_code}")
+                    print(
+                        f"⚠️ Failed to configure auth security: {response.status_code}"
+                    )
                     print(f"Response: {response.text}")
                     return {
                         "status": "warning",
@@ -161,7 +169,9 @@ class SupabaseSecurityConfig:
 
             async with httpx.AsyncClient() as client:
                 # Try to get database info
-                response = await client.get(query_url, headers=self.headers, timeout=10.0)
+                response = await client.get(
+                    query_url, headers=self.headers, timeout=10.0
+                )
 
                 if response.status_code == 200:
                     print("✅ Connected to PostgreSQL database")
@@ -191,7 +201,9 @@ class SupabaseSecurityConfig:
         results = {}
 
         # 1. Enable leaked password protection
-        results["leaked_password_protection"] = await self.enable_leaked_password_protection()
+        results["leaked_password_protection"] = (
+            await self.enable_leaked_password_protection()
+        )
         print()
 
         # 2. Configure MFA settings
@@ -214,8 +226,14 @@ class SupabaseSecurityConfig:
         total_count = len(results)
 
         for feature, result in results.items():
-            status_icon = "✅" if result["status"] == "success" else "⚠️" if result["status"] == "warning" else "❌"
-            print(f"{status_icon} {feature.replace('_', ' ').title()}: {result['message']}")
+            status_icon = (
+                "✅"
+                if result["status"] == "success"
+                else "⚠️" if result["status"] == "warning" else "❌"
+            )
+            print(
+                f"{status_icon} {feature.replace('_', ' ').title()}: {result['message']}"
+            )
             if result["status"] == "success":
                 success_count += 1
 
