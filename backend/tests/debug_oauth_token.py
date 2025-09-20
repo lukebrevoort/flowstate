@@ -5,8 +5,8 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
 
 import asyncio
-from backend.services.user_tokens import UserTokenService
-from backend.config.supabase import get_supabase_service_client
+from services.user_tokens import UserTokenService
+from config.supabase import get_supabase_service_client
 
 
 async def debug_oauth_token():

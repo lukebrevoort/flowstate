@@ -102,6 +102,8 @@ jobs:
 
       - name: Run pytest unit tests
         working-directory: ./backend
+        env:
+          PYTHONPATH: ${{ github.workspace }}/backend:${{ github.workspace }}
         run: |
           pytest tests/ -v --cov=. --cov-report=xml --cov-report=term-missing
 
@@ -115,6 +117,8 @@ jobs:
 
       - name: Test import statements
         working-directory: ./backend
+        env:
+          PYTHONPATH: ${{ github.workspace }}/backend:${{ github.workspace }}
         run: |
           python -c "import app; print('✅ App imports successfully')"
           python -c "import agents.supervisor; print('✅ Supervisor agent imports successfully')"
@@ -122,6 +126,8 @@ jobs:
 
       - name: Test LangGraph agent compilation
         working-directory: ./backend
+        env:
+          PYTHONPATH: ${{ github.workspace }}/backend:${{ github.workspace }}
         run: |
           python -c "
           try:

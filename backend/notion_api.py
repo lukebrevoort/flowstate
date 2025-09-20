@@ -8,7 +8,7 @@ from datetime import datetime
 import pytz
 from typing import Dict, Optional, Any
 from datetime import timezone
-from backend.models.assignment import Assignment
+from models.assignment import Assignment
 from bs4 import BeautifulSoup
 import re
 import logging
@@ -86,7 +86,7 @@ class NotionAPI:
             User's Notion access token if available
         """
         try:
-            from backend.services.user_tokens import UserTokenService
+            from services.user_tokens import UserTokenService
             import asyncio
 
             async def fetch_token():
