@@ -46,15 +46,21 @@ def test_langgraph_config():
     import json
     import os
 
-    config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "langgraph.json")
+    config_path = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), "langgraph.json"
+    )
     assert os.path.exists(config_path), "langgraph.json should exist"
 
     with open(config_path, "r") as f:
         config = json.load(f)
 
     assert "graphs" in config, "Config should have 'graphs' section"
-    assert "task_maistro" in config["graphs"], "Config should define 'task_maistro' graph"
-    assert config["graphs"]["task_maistro"] == "agents.supervisor:app", "Graph should point to supervisor app"
+    assert (
+        "task_maistro" in config["graphs"]
+    ), "Config should define 'task_maistro' graph"
+    assert (
+        config["graphs"]["task_maistro"] == "agents.supervisor:app"
+    ), "Graph should point to supervisor app"
 
 
 def test_streaming_functionality():

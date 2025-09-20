@@ -76,7 +76,9 @@ async def test_user_token_service():
 
     try:
         # Test with real user ID from database
-        token = await UserTokenService.get_user_notion_token("79ba6a8b-7aa7-498b-a9ed-a772d1dc34ef")
+        token = await UserTokenService.get_user_notion_token(
+            "79ba6a8b-7aa7-498b-a9ed-a772d1dc34ef"
+        )
 
         if token:
             print(f"✅ Retrieved token: {token[:20]}...")
