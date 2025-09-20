@@ -50,9 +50,7 @@ def list_calendars() -> List[Dict[str, Any]]:
     return []
 
 
-def get_events(
-    calendar_id="primary", time_min=None, time_max=None, max_results=10
-) -> List[Dict[str, Any]]:
+def get_events(calendar_id="primary", time_min=None, time_max=None, max_results=10) -> List[Dict[str, Any]]:
     """Placeholder function - OAuth not configured"""
     logger.warning("Google Calendar not configured - get_events disabled")
     return []
@@ -64,17 +62,13 @@ def create_event(calendar_id="primary", event_data=None) -> Dict[str, Any]:
     return {"id": "placeholder", "status": "disabled"}
 
 
-def update_event(
-    calendar_id="primary", event_id=None, event_data=None
-) -> Dict[str, Any]:
+def update_event(calendar_id="primary", event_id=None, event_data=None) -> Dict[str, Any]:
     """Placeholder function - OAuth not configured"""
     logger.warning("Google Calendar not configured - update_event disabled")
     return {"id": "placeholder", "status": "disabled"}
 
 
-def reschedule_event(
-    calendar_id="primary", event_id=None, new_start=None, new_end=None
-) -> Dict[str, Any]:
+def reschedule_event(calendar_id="primary", event_id=None, new_start=None, new_end=None) -> Dict[str, Any]:
     """Placeholder function - OAuth not configured"""
     logger.warning("Google Calendar not configured - reschedule_event disabled")
     return {"id": "placeholder", "status": "disabled"}

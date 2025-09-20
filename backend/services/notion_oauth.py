@@ -30,9 +30,7 @@ class NotionOAuthService:
         )
 
         if not self.client_id or not self.client_secret:
-            raise ValueError(
-                "NOTION_OAUTH_CLIENT_ID and NOTION_OAUTH_CLIENT_SECRET must be set"
-            )
+            raise ValueError("NOTION_OAUTH_CLIENT_ID and NOTION_OAUTH_CLIENT_SECRET must be set")
 
     def generate_auth_url(self, user_id: str) -> Dict[str, str]:
         """
@@ -128,9 +126,7 @@ class NotionOAuthService:
                 )
 
                 if response.status_code != 200:
-                    logger.error(
-                        f"Token exchange failed: {response.status_code} - {response.text}"
-                    )
+                    logger.error(f"Token exchange failed: {response.status_code} - {response.text}")
                     raise HTTPException(
                         status_code=400,
                         detail=f"Failed to exchange code for token: {response.text}",
@@ -160,9 +156,7 @@ class NotionOAuthService:
         """
         try:
             # Handle mock/test tokens
-            if user_id == "test-user-123" or token_data.get(
-                "access_token", ""
-            ).startswith("mock_"):
+            if user_id == "test-user-123" or token_data.get("access_token", "").startswith("mock_"):
                 logger.info(f"Mock token storage for user {user_id}")
                 return True
 
@@ -172,21 +166,15 @@ class NotionOAuthService:
             auth_header = supabase.headers.get("Authorization", "")
             if "anon" in auth_header:
                 logger.error("ERROR: Using anon key instead of service key!")
-                raise Exception(
-                    "Configuration error: anon key used instead of service key"
-                )
+                raise Exception("Configuration error: anon key used instead of service key")
             else:
                 logger.info("Using service role key for token storage")
 
             # First, verify the user exists in profiles table
-            existing_profile = await supabase.query(
-                "profiles", "GET", filters={"id": user_id}
-            )
+            existing_profile = await supabase.query("profiles", "GET", filters={"id": user_id})
 
             if not existing_profile:
-                logger.warning(
-                    f"User {user_id} not found in profiles table. Creating profile..."
-                )
+                logger.warning(f"User {user_id} not found in profiles table. Creating profile...")
 
                 # Create a basic profile for the user
                 # Note: In production, you'd want to get this info from the OAuth provider or have it from signup
@@ -201,9 +189,7 @@ class NotionOAuthService:
                     await supabase.query("profiles", "POST", data=profile_data)
                     logger.info(f"Created profile for user {user_id}")
                 except Exception as profile_error:
-                    logger.error(
-                        f"Failed to create profile for user {user_id}: {profile_error}"
-                    )
+                    logger.error(f"Failed to create profile for user {user_id}: {profile_error}")
                     # If we can't create a profile, we can't proceed
                     return False  # Extract relevant data from token response
             access_token = token_data.get("access_token")

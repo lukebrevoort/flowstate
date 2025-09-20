@@ -67,15 +67,11 @@ class SimpleSupabaseClient:
                 raise ValueError(f"Unsupported method: {method}")
 
             if response.status_code >= 400:
-                raise Exception(
-                    f"Supabase API error {response.status_code}: {response.text}"
-                )
+                raise Exception(f"Supabase API error {response.status_code}: {response.text}")
 
             return response.json() if response.text else {}
 
-    async def auth_signup(
-        self, email: str, password: str, user_metadata: Optional[Dict] = None
-    ) -> Dict[str, Any]:
+    async def auth_signup(self, email: str, password: str, user_metadata: Optional[Dict] = None) -> Dict[str, Any]:
         """Sign up a new user"""
         url = f"{self.url}/auth/v1/signup"
         data = {"email": email, "password": password}
@@ -86,9 +82,7 @@ class SimpleSupabaseClient:
             response = await client.post(url, headers=self.headers, json=data)
 
             if response.status_code >= 400:
-                raise Exception(
-                    f"Supabase auth error {response.status_code}: {response.text}"
-                )
+                raise Exception(f"Supabase auth error {response.status_code}: {response.text}")
 
             return response.json()
 
@@ -101,9 +95,7 @@ class SimpleSupabaseClient:
             response = await client.post(url, headers=self.headers, json=data)
 
             if response.status_code >= 400:
-                raise Exception(
-                    f"Supabase auth error {response.status_code}: {response.text}"
-                )
+                raise Exception(f"Supabase auth error {response.status_code}: {response.text}")
 
             return response.json()
 
@@ -117,9 +109,7 @@ class SupabaseConfig:
         self.service_key: str = os.getenv("SUPABASE_SERVICE_KEY", "")
 
         if not self.url or not self.key:
-            raise ValueError(
-                "SUPABASE_URL and SUPABASE_ANON_KEY must be set in environment variables"
-            )
+            raise ValueError("SUPABASE_URL and SUPABASE_ANON_KEY must be set in environment variables")
 
     def get_client(self, use_service_key: bool = False) -> SimpleSupabaseClient:
         """Create and return Supabase client"""
@@ -172,9 +162,7 @@ async def test_connection() -> bool:
         # Try a simple query to test connection - just get the first few rows without filters
         result = await client.query("profiles", "GET")
         print("✅ Supabase connection successful")
-        print(
-            f"   Found {len(result) if isinstance(result, list) else 'unknown'} profiles in database"
-        )
+        print(f"   Found {len(result) if isinstance(result, list) else 'unknown'} profiles in database")
         return True
     except Exception as e:
         print(f"❌ Supabase connection failed: {e}")

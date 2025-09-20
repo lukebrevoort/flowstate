@@ -43,9 +43,7 @@ def get_calendar_service():
         if not creds:
             oauth_file_path = "/etc/secrets/OAuthClientIDJSON.json"
             try:
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    oauth_file_path, SCOPES
-                )
+                flow = InstalledAppFlow.from_client_secrets_file(oauth_file_path, SCOPES)
                 # Use console flow instead of browser flow
                 creds = flow.run_console()
                 logger.info("Created new credentials through OAuth flow")
