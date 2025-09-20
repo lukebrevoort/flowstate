@@ -33,9 +33,9 @@ into manageable subtasks for completion. The project manager will be able to:
 1. Retrive assignments from a given Notion database
 2. Create substasks for each assignment
 3. Create a Todo item/assignment for each substask
-4. update assignment submission status and progress 
+4. update assignment submission status and progress
 5. Estimate total time of completion for each assignment
-6. (For the future) generate a schedule/study plan for each project 
+6. (For the future) generate a schedule/study plan for each project
 """
 
 
@@ -326,7 +326,7 @@ def update_assignment(
 time_prompt = PromptTemplate.from_template(
     """
 Given an {assignment}, give an Estimated Time of Completion. This should consider the following factors:
-- Due date: {due_date} 
+- Due date: {due_date}
 - Description: {description}
 - Current progress: {status}
 - Assignment Notes: {notes}
@@ -334,8 +334,8 @@ Given an {assignment}, give an Estimated Time of Completion. This should conside
 The time should be in hours and minutes, and should be a rough estimate.
 The output should be a simple string with the time in the format "X hours Y minutes" with some explaination as to why.
 For example:
-"Based on the current progress and the due date, I estimate that it will take approximately 3 hours and 30 minutes to complete this assignment. 
-This includes time for research, writing, and editing. Would you like me to create subtasks for this assignment?"                                                                                
+"Based on the current progress and the due date, I estimate that it will take approximately 3 hours and 30 minutes to complete this assignment.
+This includes time for research, writing, and editing. Would you like me to create subtasks for this assignment?"
 """
 )
 
@@ -614,7 +614,7 @@ You are an agent specialized in managing academic assignments in Notion. You hel
 - Creating subtasks for assignments
 - Deleting or archiving completed work
 - Reorganizing assignments
-                          
+
 ## Workflow Process
 For complex requests requiring both retrieval and modification:
 1. Gather necessary information about existing assignments

@@ -58,14 +58,14 @@ Example Response Format:
     </Typography>
   </div>
   <div className="flex flex-wrap gap-3">
-    <Button 
-      onClick={() => handleCheckAssignments()} 
+    <Button
+      onClick={() => handleCheckAssignments()}
       className="bg-flowstate-accent text-white px-4 py-2 rounded-md hover:bg-opacity-90 transition-colors"
     >
       Check Assignments
     </Button>
-    <Button 
-      onClick={() => handleCheckCourses()} 
+    <Button
+      onClick={() => handleCheckCourses()}
       className="bg-flowstate-header text-white px-4 py-2 rounded-md hover:bg-opacity-90 transition-colors"
     >
       Check Courses

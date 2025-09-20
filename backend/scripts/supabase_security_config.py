@@ -156,9 +156,6 @@ class SupabaseSecurityConfig:
         print("🐘 Checking PostgreSQL version...")
 
         try:
-            # Use REST API to execute a SQL query
-            sql_url = f"{self.url}/rest/v1/rpc/get_postgres_version"
-
             # First, let's try to get version via a simple query
             query_url = f"{self.url}/rest/v1/"
 

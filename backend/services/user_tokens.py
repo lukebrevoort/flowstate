@@ -5,7 +5,18 @@ Provides easy access to user tokens for agents and services
 
 import logging
 from typing import Optional, Dict, Any
-from backend.config.supabase import get_supabase_service_client
+from datetime import datetime, timedelta
+import uuid
+import os
+import asyncio
+from supabase import create_client, Client
+
+try:
+    # Try relative import (for CI/normal backend execution)
+    from config.supabase import get_supabase_service_client
+except ImportError:
+    # Fall back to absolute import (for test scripts run from project root)
+    from backend.config.supabase import get_supabase_service_client
 
 logger = logging.getLogger(__name__)
 
