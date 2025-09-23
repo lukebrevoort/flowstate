@@ -481,40 +481,28 @@ class NotionAPI:
                 - status: str - Filter by exact status
                 - priority: str - Filter by exact priority
                 - due_date: str - Filter by due date (on or after)
-        
+
         Returns:
             Dictionary of page IDs to page objects if found, else empty dict or None
         """
 
         filters = filters or {}
-        
+
         # Build filter conditions only for non-empty filter values
         filter_conditions = []
-        
+
         if filters.get("name"):
-            filter_conditions.append({
-                "property": "Assignment Name",
-                "title": {"contains": filters["name"]}
-            })
-        
+            filter_conditions.append({"property": "Assignment Name", "title": {"contains": filters["name"]}})
+
         if filters.get("status"):
-            filter_conditions.append({
-                "property": "Status",
-                "status": {"equals": filters["status"]}
-            })
-        
+            filter_conditions.append({"property": "Status", "status": {"equals": filters["status"]}})
+
         if filters.get("priority"):
-            filter_conditions.append({
-                "property": "Priority",
-                "select": {"equals": filters["priority"]}
-            })
-        
+            filter_conditions.append({"property": "Priority", "select": {"equals": filters["priority"]}})
+
         if filters.get("due_date"):
-            filter_conditions.append({
-                "property": "Due date",
-                "date": {"on_or_after": filters["due_date"]}
-            })
-        
+            filter_conditions.append({"property": "Due date", "date": {"on_or_after": filters["due_date"]}})
+
         # Build payload with proper filter structure
         if not filter_conditions:
             # No filters - query all pages
@@ -539,10 +527,12 @@ class NotionAPI:
         except Exception as e:
             logger.error(f"Error fetching assignment page: {e}")
         return None
-    
+
     # Add optional argument for a dictionary of assignments to update
     # This allows you to update multiple assignments at once
-    def _update_assignment_page(self, assignment: Optional[Assignment], updates: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    def _update_assignment_page(
+        self, assignment: Optional[Assignment], updates: Optional[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
         """
         Update an existing Notion page with new assignment data.
 
@@ -576,7 +566,9 @@ class NotionAPI:
                             or cur_assignment["properties"].get("Status", {}).get("status", {}).get("name", "Not started")
                         }
                     },
-                    "Due date": {"date": {"start": (assignment.due_date.strftime("%Y-%m-%d") if assignment.due_date else None)}},
+                    "Due date": {
+                        "date": {"start": (assignment.due_date.strftime("%Y-%m-%d") if assignment.due_date else None)}
+                    },
                     "Priority": {
                         "select": {
                             "name": assignment.priority
@@ -594,7 +586,7 @@ class NotionAPI:
             except Exception as e:
                 logger.error(f"Error updating assignment page: {e}")
                 return None
-            
+
         elif updates:
             for assignment in updates:
                 cur_assignment = self._find_assignment_page(assignment["name"])
@@ -618,7 +610,9 @@ class NotionAPI:
                                 or cur_assignment["properties"].get("Status", {}).get("status", {}).get("name", "Not started")
                             }
                         },
-                        "Due date": {"date": {"start": (assignment.due_date.strftime("%Y-%m-%d") if assignment.due_date else None)}},
+                        "Due date": {
+                            "date": {"start": (assignment.due_date.strftime("%Y-%m-%d") if assignment.due_date else None)}
+                        },
                         "Priority": {
                             "select": {
                                 "name": assignment.priority
@@ -682,16 +676,16 @@ class NotionAPI:
         if not self.courses_data_source_id:
             logger.warning("No courses data source available to create course page")
             return None
-        
+
         if self._get_course_page(course_name):
             logger.info(f"Course page for {course_name} already exists")
             return self._get_course_page(course_name)
-        
+
         properties = {
             "Course Name": {"title": [{"text": {"content": course_name}}]},
             "Currently Enrolled?": {"checkbox": True},  # Default to enrolled
             "Instructor": {"rich_text": [{"text": {"content": ""}}]},  # Placeholder
-        }   
+        }
 
         payload = {
             "parent": {
@@ -728,14 +722,14 @@ class NotionAPI:
                         "property": "Currently Enrolled?",
                         "checkbox": {"equals": True},
                     },
-                    )
+                )
                 courses = {}
                 if response and "results" in response:
                     for page in response["results"]:
                         course_name = page["properties"]["Course Name"]["title"][0]["text"]["content"]
                         courses[course_name] = page
                 return courses
-                
+
             except Exception as e:
                 logger.error(f"Error fetching course pages: {e}")
                 return {}
