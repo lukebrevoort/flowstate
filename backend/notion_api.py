@@ -478,8 +478,34 @@ class NotionAPI:
         if course_page:
             return course_page
         return self._create_course_page(course_name)
+    
+    def _find_assignment_page(self, assignment_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Find an existing Notion page for the given assignment.
 
-    def _update_assignment_page(self, page_id: str, assignment: Assignment) -> Optional[Dict[str, Any]]:
+        Args:
+            assignment: Assignment object
+        Returns:
+            Notion page dict if found, else None
+        """
+        payload = {
+            "filter": {
+                "property": "Assignment Name",
+                "title": {"contains": assignment_name},
+            }
+        }
+
+        try:
+            response = self._make_notion_request("query_data_source", data_source_id=self.assignments_data_source_id, **payload)
+            if response and "results" in response:
+                for page in response["results"]:
+                    if page["properties"]["Assignment Name"]["title"][0]["text"]["content"] == assignment_name:
+                        return page
+        except Exception as e:
+            logger.error(f"Error fetching assignment page: {e}")
+        return None
+
+    def _update_assignment_page(self, assignment: Assignment) -> Optional[Dict[str, Any]]:
         """
         Update an existing Notion page with new assignment data.
 
@@ -490,7 +516,32 @@ class NotionAPI:
         Returns:
             Updated Notion page dict if successful, else None
         """
-        # IMPLEMENT LATER
+        cur_assignment = self._find_assignment_page(assignment.name)
+        if not cur_assignment:
+            logger.warning(f"No existing page found for assignment {assignment.name}")
+            return None
+        page_id = assignment.id or cur_assignment["id"]
+
+        payload = {
+            "id": page_id,
+            "properties": {
+                "Assignment Name": {"title": [{"text": {"content": assignment.name}}]},
+                "Status": {"status": {"name": assignment.status or cur_assignment["properties"].get("Status", {}).get("status", {}).get("name", "Not started")}},
+                "Due date": {"date": {"start": (assignment.due_date.strftime("%Y-%m-%d") if assignment.due_date else None)}},
+                "Priority": {"select": {"name": assignment.priority or cur_assignment["properties"].get("Priority", {}).get("select", {}).get("name", "Low")}},
+                "Description": {"rich_text": [{"text": {"content": self._clean_html(assignment.description)}}]},
+                # Course relation is not updated here to avoid overwriting existing relations!
+            }
+        }
+
+        try:
+            response = self._make_notion_request("update_page", page_id=page_id, properties=payload["properties"])
+            return response
+        except Exception as e:
+            logger.error(f"Error updating assignment page: {e}")
+            return None
+            
+
 
     def _get_course_page(self, course_name: str) -> Optional[Dict[str, Any]]:
         """

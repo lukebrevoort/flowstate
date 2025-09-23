@@ -28,22 +28,25 @@ def test_notion_api():
             for name, prop in schema["properties"].items():
                 print(f"  {name}: {prop['type']}")
 
-    # Test creating page
-    page = notion._create_assignment_page(
-        Assignment(
-            id=2,
-            name="HW 2",
-            due_date=datetime(2025, 9, 22),
-            description="Math homework",
-            priority="High",
-            course_name="Math",
-        )
-    )
-    print("Created page", page)
+    # Test finding Assignment
+    assignment = notion._find_assignment_page("HW 1")
+    print("Found assignment:", assignment)
 
-    # Test getting Course Page
-    course_page = notion._get_course_page("Math")
-    print("Course page:", course_page)
+    # Test Updating Assignment Page
+    # This is really important for the model to be able to update the status of an assignment
+    
+    assignment = Assignment(
+        id=notion._find_assignment_page("HW 1")["id"] if notion._find_assignment_page("HW 1") else None,
+        name="HW 1",
+        due_date=datetime(2025, 10, 1),
+        description="Updated description",
+        course_name="Math",
+        status="Not Started",
+        priority="Low",
+    )
+
+    updated_page = notion._update_assignment_page(assignment)
+    print("Updated page:", updated_page)
 
 
 def main():
