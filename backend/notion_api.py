@@ -478,7 +478,7 @@ class NotionAPI:
         if course_page:
             return course_page
         return self._create_course_page(course_name)
-    
+
     def _find_assignment_page(self, assignment_name: str) -> Optional[Dict[str, Any]]:
         """
         Find an existing Notion page for the given assignment.
@@ -496,7 +496,9 @@ class NotionAPI:
         }
 
         try:
-            response = self._make_notion_request("query_data_source", data_source_id=self.assignments_data_source_id, **payload)
+            response = self._make_notion_request(
+                "query_data_source", data_source_id=self.assignments_data_source_id, **payload
+            )
             if response and "results" in response:
                 for page in response["results"]:
                     if page["properties"]["Assignment Name"]["title"][0]["text"]["content"] == assignment_name:
@@ -526,12 +528,22 @@ class NotionAPI:
             "id": page_id,
             "properties": {
                 "Assignment Name": {"title": [{"text": {"content": assignment.name}}]},
-                "Status": {"status": {"name": assignment.status or cur_assignment["properties"].get("Status", {}).get("status", {}).get("name", "Not started")}},
+                "Status": {
+                    "status": {
+                        "name": assignment.status
+                        or cur_assignment["properties"].get("Status", {}).get("status", {}).get("name", "Not started")
+                    }
+                },
                 "Due date": {"date": {"start": (assignment.due_date.strftime("%Y-%m-%d") if assignment.due_date else None)}},
-                "Priority": {"select": {"name": assignment.priority or cur_assignment["properties"].get("Priority", {}).get("select", {}).get("name", "Low")}},
+                "Priority": {
+                    "select": {
+                        "name": assignment.priority
+                        or cur_assignment["properties"].get("Priority", {}).get("select", {}).get("name", "Low")
+                    }
+                },
                 "Description": {"rich_text": [{"text": {"content": self._clean_html(assignment.description)}}]},
                 # Course relation is not updated here to avoid overwriting existing relations!
-            }
+            },
         }
 
         try:
@@ -540,8 +552,6 @@ class NotionAPI:
         except Exception as e:
             logger.error(f"Error updating assignment page: {e}")
             return None
-            
-
 
     def _get_course_page(self, course_name: str) -> Optional[Dict[str, Any]]:
         """

@@ -34,7 +34,7 @@ def test_notion_api():
 
     # Test Updating Assignment Page
     # This is really important for the model to be able to update the status of an assignment
-    
+
     assignment = Assignment(
         id=notion._find_assignment_page("HW 1")["id"] if notion._find_assignment_page("HW 1") else None,
         name="HW 1",
