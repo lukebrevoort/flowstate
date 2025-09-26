@@ -47,7 +47,7 @@ def get_user_id_from_config(config: Optional[RunnableConfig] = None) -> str:
             # TODO: Add Supabase lookup logic here if needed
             # For now, return the user_id from config
             return user_id
-    
+
     # Default user ID when none provided
     return "99d11141-76eb-460f-8741-f2f5e767ba0f"
 

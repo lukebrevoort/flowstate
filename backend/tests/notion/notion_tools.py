@@ -32,13 +32,14 @@ def main():
     # Example: Create a new assignment
     new_assignment_dict = {
         "name": "Test Assignment",
-        "course_name": "Math", 
+        "course_name": "Math",
         "description": "Test description",
         "priority": "Low",
-        "due_date": "2025-12-15"
+        "due_date": "2025-12-15",
     }
     created_assignment = create_assignment.invoke({"assignment": new_assignment_dict, "config": config})
     print("Created Assignment:", created_assignment)
+
 
 if __name__ == "__main__":
     main()

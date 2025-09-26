@@ -15,12 +15,15 @@ from fastapi import HTTPException
 # Handle supabase import gracefully
 try:
     from config.supabase import get_supabase_service_client
+
     SUPABASE_AVAILABLE = True
 except ImportError:
     logging.warning("Could not import supabase config. OAuth service will work in fallback mode.")
     SUPABASE_AVAILABLE = False
+
     def get_supabase_service_client():
         return None
+
 
 load_dotenv()
 

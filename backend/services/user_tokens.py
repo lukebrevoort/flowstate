@@ -13,12 +13,16 @@ import asyncio
 # Handle supabase import issues gracefully
 try:
     from supabase import create_client, Client as SupabaseClient
+
     SUPABASE_AVAILABLE = True
 except ImportError as e:
     logging.warning(f"Supabase import failed: {e}. Token service will work in fallback mode.")
     SUPABASE_AVAILABLE = False
+
     # Create mock classes for type hints
-    class SupabaseClient: pass
+    class SupabaseClient:
+        pass
+
 
 try:
     # Try relative import (for CI/normal backend execution)
@@ -29,8 +33,10 @@ except ImportError:
         from backend.config.supabase import get_supabase_service_client
     except ImportError:
         logging.warning("Could not import supabase config. Token service will work in fallback mode.")
+
         def get_supabase_service_client():
             return None
+
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +58,7 @@ class UserTokenService:
         if not SUPABASE_AVAILABLE:
             logger.warning("Supabase not available, cannot fetch user tokens")
             return None
-            
+
         try:
             supabase = get_supabase_service_client()
             if not supabase:
@@ -97,7 +103,7 @@ class UserTokenService:
         if not SUPABASE_AVAILABLE:
             logger.warning("Supabase not available, cannot fetch user tokens")
             return None
-            
+
         try:
             supabase = get_supabase_service_client()
             if not supabase:
@@ -173,7 +179,7 @@ class UserTokenService:
         if not SUPABASE_AVAILABLE:
             logger.warning("Supabase not available, cannot fetch user tokens")
             return {"notion": False, "google": False}
-            
+
         try:
             supabase = get_supabase_service_client()
             if not supabase:
