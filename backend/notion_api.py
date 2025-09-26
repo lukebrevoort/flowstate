@@ -503,7 +503,7 @@ class NotionAPI:
 
         if filters.get("due_date"):
             filter_conditions.append({"property": "Due date", "date": {"on_or_after": filters["due_date"]}})
-        
+
         if filters.get("course_name"):
             # For relation filtering, we need to get the course page ID first
             course_page = self.get_course_page(filters["course_name"])
@@ -522,9 +522,7 @@ class NotionAPI:
             payload = {"filter": {"and": filter_conditions}}
 
         try:
-            response = self.make_notion_request(
-                "query_data_source", data_source_id=self.assignments_data_source_id, **payload
-            )
+            response = self.make_notion_request("query_data_source", data_source_id=self.assignments_data_source_id, **payload)
             pages = {}
             if response and "results" in response:
                 for page in response["results"]:
