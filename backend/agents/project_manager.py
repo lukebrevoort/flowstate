@@ -388,14 +388,43 @@ Examples: "tomorrow at 5pm", "next Monday at 3pm", "in 2 days at noon"
 - **due_date**: datetime (ISO format YYYY-MM-DDTHH:MM:SSZ)
 - **description**: str (HTML will be cleaned automatically)
 
+
 #### Filter Dictionary Format:
 ```python
+# For single-value filters:
 filters = {
     "name": "partial_assignment_name",  # Contains search
     "status": "In progress",           # Exact match
-    "priority": "High",               # Exact match  
+    "priority": "High",               # Exact match
     "due_date": "2025-09-27",        # On or after date
     "course_name": "Physics 101"      # Course relation
+}
+
+# For multi-value filters (e.g., status IN ["Not started", "In progress"]):
+filters = {
+    "or": [
+        {"property": "Status", "status": {"equals": "Not started"}},
+        {"property": "Status", "status": {"equals": "In progress"}}
+    ]
+}
+```
+
+**IMPORTANT:**
+- Never pass a list to a property filter (e.g., `"status": ["Not started", "In progress"]` is invalid and will cause a Notion API error).
+- To filter for multiple values, always use an `or` filter with individual single-value conditions for each value.
+
+**Example for combining with other filters:**
+```python
+filters = {
+    "and": [
+        {
+            "or": [
+                {"property": "Status", "status": {"equals": "Not started"}},
+                {"property": "Status", "status": {"equals": "In progress"}}
+            ]
+        },
+        {"property": "Priority", "select": {"equals": "High"}}
+    ]
 }
 ```
 
