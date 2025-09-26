@@ -128,7 +128,7 @@ def retrieve_assignment(assignment_name: str, config: RunnableConfig):
 
 
 @tool
-def retrieve_assignments(config: RunnableConfig, filters: Optional[Dict[str, Any]] = None):
+def retrieve_assignments(config: RunnableConfig, filters: Dict[str, Any] = None):
     """
     Retrieve a list of assignments from Notion.
     Args:
@@ -404,6 +404,13 @@ filters = {
 #### "What's due tomorrow?" → 
 ```python
 retrieve_assignments(config, filters={"due_date": "2025-09-27"})
+```
+
+### What assignments do I have coming up? →
+```python
+get_current_time(config)
+current_time = parse_relative_datetime("now")
+retrieve_assignments(config, filters={"due_date": f"{current_time} to f"{(datetime.fromisoformat(current_time) + timedelta(days=7)).isoformat()}"})
 ```
 
 #### "Show my physics assignments" →
