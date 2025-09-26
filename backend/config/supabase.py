@@ -74,7 +74,7 @@ class SimpleSupabaseClient:
     async def auth_signup(self, email: str, password: str, user_metadata: Optional[Dict] = None) -> Dict[str, Any]:
         """Sign up a new user"""
         url = f"{self.url}/auth/v1/signup"
-        data = {"email": email, "password": password}
+        data: Dict[str, Any] = {"email": email, "password": password}
         if user_metadata:
             data["data"] = user_metadata
 

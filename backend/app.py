@@ -50,7 +50,7 @@ app.add_middleware(
 
 # Create an in-memory store for chat sessions
 memory_store = InMemoryStore()
-sessions = {}
+sessions: Dict[str, Any] = {}
 
 
 class ChatRequest(BaseModel):

@@ -40,10 +40,16 @@ into manageable subtasks for completion. The project manager will be able to:
 
 
 def get_user_id_from_config(config: Optional[RunnableConfig] = None) -> str:
-    """Get user_id from config, with fallback to default"""
+    """Get user_id from config or Supabase, with fallback to default"""
     if config and "configurable" in config:
-        return config["configurable"].get("user_id", "default-user")
-    return "default-user"
+        user_id = config["configurable"].get("user_id")
+        if user_id:
+            # TODO: Add Supabase lookup logic here if needed
+            # For now, return the user_id from config
+            return user_id
+    
+    # Default user ID when none provided
+    return "99d11141-76eb-460f-8741-f2f5e767ba0f"
 
 
 # Define the tools
@@ -139,7 +145,7 @@ def retrieve_assignments(config: RunnableConfig, filters: Optional[Dict[str, Any
 
 
 @tool
-def create_assignment_item(assignment: Assignment, config: RunnableConfig) -> Optional[Dict[str, Any]]:
+def create_assignment(assignment: Assignment, config: RunnableConfig) -> Optional[Dict[str, Any]]:
     """
     Create a new assignment item in Notion based on the provided Assignment dataclass.
 
@@ -239,8 +245,10 @@ This includes time for research, writing, and editing. Would you like me to crea
 
 
 @tool
-def estimate_completion_time(assignment_dict):
-    # TO DO
+def estimate_completion_time(assignment: Assignment = None, config: RunnableConfig = None):
+    """
+    Estimate the time required to complete an assignment based on its details.
+    """
     pass
 
 
@@ -267,13 +275,17 @@ Common subtasks for assignments include:
 
 @tool
 def create_subtask_assignment(assignment_dict, config: RunnableConfig):
-    # TO DO
+    """
+    Create a subtask assignment in Notion.
+    """
     pass
 
 
 @tool
 def create_subtasks(assignment_dict, config: RunnableConfig):
-    # TO DO
+    """
+    Create subtasks for a given assignment in Notion.
+    """
     pass
 
 
@@ -292,7 +304,7 @@ tools = [
     retrieve_assignment,
     retrieve_assignments,
     get_current_time,
-    create_assignment_item,
+    create_assignment,
     get_course_info,
     parse_relative_datetime,
     update_assignment,

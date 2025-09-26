@@ -9,14 +9,28 @@ from datetime import datetime, timedelta
 import uuid
 import os
 import asyncio
-from supabase import create_client, Client
+
+# Handle supabase import issues gracefully
+try:
+    from supabase import create_client, Client as SupabaseClient
+    SUPABASE_AVAILABLE = True
+except ImportError as e:
+    logging.warning(f"Supabase import failed: {e}. Token service will work in fallback mode.")
+    SUPABASE_AVAILABLE = False
+    # Create mock classes for type hints
+    class SupabaseClient: pass
 
 try:
     # Try relative import (for CI/normal backend execution)
     from config.supabase import get_supabase_service_client
 except ImportError:
     # Fall back to absolute import (for test scripts run from project root)
-    from backend.config.supabase import get_supabase_service_client
+    try:
+        from backend.config.supabase import get_supabase_service_client
+    except ImportError:
+        logging.warning("Could not import supabase config. Token service will work in fallback mode.")
+        def get_supabase_service_client():
+            return None
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +49,15 @@ class UserTokenService:
         Returns:
             Access token if found and valid, None otherwise
         """
+        if not SUPABASE_AVAILABLE:
+            logger.warning("Supabase not available, cannot fetch user tokens")
+            return None
+            
         try:
             supabase = get_supabase_service_client()
+            if not supabase:
+                logger.warning("Supabase client not available")
+                return None
 
             result = await supabase.query(
                 "user_integrations",
@@ -73,8 +94,15 @@ class UserTokenService:
         Returns:
             Dict with access_token, refresh_token, expires_at if found, None otherwise
         """
+        if not SUPABASE_AVAILABLE:
+            logger.warning("Supabase not available, cannot fetch user tokens")
+            return None
+            
         try:
             supabase = get_supabase_service_client()
+            if not supabase:
+                logger.warning("Supabase client not available")
+                return None
 
             result = await supabase.query(
                 "user_integrations",
@@ -142,8 +170,15 @@ class UserTokenService:
         Returns:
             Dict mapping integration types to their connection status
         """
+        if not SUPABASE_AVAILABLE:
+            logger.warning("Supabase not available, cannot fetch user tokens")
+            return {"notion": False, "google": False}
+            
         try:
             supabase = get_supabase_service_client()
+            if not supabase:
+                logger.warning("Supabase client not available")
+                return {"notion": False, "google": False}
 
             result = await supabase.query(
                 "user_integrations",
