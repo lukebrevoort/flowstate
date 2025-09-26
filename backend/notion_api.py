@@ -384,32 +384,6 @@ class NotionAPI:
             logger.warning(f"Error cleaning HTML content: {e}")
             return html_content[:2000]
 
-    def get_assignment_page(self, assignment: Assignment) -> Optional[Dict[str, Any]]:
-        """
-        Check if a Notion page already exists for the given assignment.
-
-        Args:
-            assignment: Assignment object
-        Returns:
-            Notion page dict if found, else None
-        """
-        payload = {
-            "filter": {
-                "property": "Assignment Name",
-                "rich_text": {"contains": assignment.name},
-            }
-        }
-
-        try:
-            response = self.make_notion_request("databases/query", **payload)
-            if response and "results" in response:
-                for page in response["results"]:
-                    if page["properties"]["Assignment Name"]["rich_text"][0]["text"]["content"] == assignment.name:
-                        return page
-        except Exception as e:
-            logger.error(f"Error fetching assignment page: {e}")
-        return None
-
     def create_assignment_page(self, assignment: Assignment) -> Optional[Dict[str, Any]]:
         """
         Create a new Notion page for the given assignment.
@@ -470,9 +444,31 @@ class NotionAPI:
             return course_page
         return self.get_or_create_course_page(course_name)
 
+    def find_assignment_page(self, assignment_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Find a Notion page for the given assignment name.
+
+        Args:
+            assignment_name: Name of the assignment to find
+
+        Returns:
+            Notion page dict if found, else None
+        """
+
+        filters = {"name": assignment_name}
+        pages = self.find_assignment_pages(filters=filters)
+        if pages and len(pages) == 1:
+            return pages[next(iter(pages))]  # Return the single page found
+        elif pages and len(pages) > 1:
+            logger.warning(f"Found {len(pages)} pages for assignment '{assignment_name}', using the first one")
+            return pages[next(iter(pages))]  # Return the first page found
+        else:
+            logger.info(f"No pages found for assignment '{assignment_name}'")
+            return None
+
     # Add more arguments to allow this function to get a dictionary of assignments
     # Allows you to filter by course, date, status, priority, etc.
-    def find_assignment_page(self, filters: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    def find_assignment_pages(self, filters: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
         """
         Find assignment pages in Notion based on filters.
 
@@ -536,17 +532,18 @@ class NotionAPI:
     # Add optional argument for a dictionary of assignments to update
     # This allows you to update multiple assignments at once
     def update_assignment_page(
-        self, assignment: Optional[Assignment], updates: Optional[Dict[str, Any]]
+        self, assignment: Optional[Assignment] = None, updates: Optional[Dict[str, Assignment]] = None
     ) -> Optional[Dict[str, Any]]:
         """
         Update an existing Notion page with new assignment data.
 
         Args:
-            page_id: Notion page ID to update
-            assignment: Assignment object with updated data
+            assignment: Single Assignment object with updated data
+            updates: Dictionary mapping assignment names to Assignment objects for batch updates
 
         Returns:
-            Updated Notion page dict if successful, else None
+            Updated Notion page dict if successful (single update),
+            or dict of results for batch updates, else None
         """
 
         if not assignment and not updates:
@@ -554,86 +551,83 @@ class NotionAPI:
             return None
         if assignment and updates:
             logger.warning("Both assignment and updates provided; using assignment data for update")
+
         if assignment:
-            cur_assignment = self.find_assignment_page(assignment.name)
-            if not cur_assignment:
-                logger.warning(f"No existing page found for assignment {assignment.name}")
-                return None
-            page_id = assignment.id or cur_assignment["id"]
-
-            payload = {
-                "id": page_id,
-                "properties": {
-                    "Assignment Name": {"title": [{"text": {"content": assignment.name}}]},
-                    "Status": {
-                        "status": {
-                            "name": assignment.status
-                            or cur_assignment["properties"].get("Status", {}).get("status", {}).get("name", "Not started")
-                        }
-                    },
-                    "Due date": {
-                        "date": {"start": (assignment.due_date.strftime("%Y-%m-%d") if assignment.due_date else None)}
-                    },
-                    "Priority": {
-                        "select": {
-                            "name": assignment.priority
-                            or cur_assignment["properties"].get("Priority", {}).get("select", {}).get("name", "Low")
-                        }
-                    },
-                    "Description": {"rich_text": [{"text": {"content": self.clean_html(assignment.description)}}]},
-                    # Course relation is not updated here to avoid overwriting existing relations!
-                },
-            }
-
-            try:
-                response = self.make_notion_request("update_page", page_id=page_id, properties=payload["properties"])
-                return response
-            except Exception as e:
-                logger.error(f"Error updating assignment page: {e}")
-                return None
+            # Handle single assignment update
+            return self._update_single_assignment(assignment)
 
         elif updates:
-            for assignment in updates:
-                cur_assignment = self.find_assignment_page(assignment["name"])
-                if not cur_assignment:
-                    logger.warning(f"No existing page found for assignment {assignment['name']}")
-                    continue
-                page_id = assignment.get("id") or cur_assignment["id"]
+            # Handle batch assignment updates
+            return self._update_multiple_assignments(updates)
 
-                payload = {
-                    "id": page_id,
-                    "properties": {},
-                }
+    def _update_single_assignment(self, assignment: Assignment) -> Optional[Dict[str, Any]]:
+        """
+        Update a single assignment page.
 
-                payload = {
-                    "id": page_id,
-                    "properties": {
-                        "Assignment Name": {"title": [{"text": {"content": assignment.name}}]},
-                        "Status": {
-                            "status": {
-                                "name": assignment.status
-                                or cur_assignment["properties"].get("Status", {}).get("status", {}).get("name", "Not started")
-                            }
-                        },
-                        "Due date": {
-                            "date": {"start": (assignment.due_date.strftime("%Y-%m-%d") if assignment.due_date else None)}
-                        },
-                        "Priority": {
-                            "select": {
-                                "name": assignment.priority
-                                or cur_assignment["properties"].get("Priority", {}).get("select", {}).get("name", "Low")
-                            }
-                        },
-                        "Description": {"rich_text": [{"text": {"content": self._clean_html(assignment.description)}}]},
-                        # Course relation is not updated here to avoid overwriting existing relations!
-                    },
-                }
+        Args:
+            assignment: Assignment object with updated data
 
-                try:
-                    response = self._make_notion_request("update_page", page_id=page_id, properties=payload["properties"])
-                    return response
-                except Exception as e:
-                    logger.error(f"Error updating assignment page: {e}")
+        Returns:
+            Updated Notion page dict if successful, else None
+        """
+        cur_assignment = self.find_assignment_page(assignment.name)
+        if not cur_assignment:
+            logger.warning(f"No existing page found for assignment {assignment.name}")
+            return None
+
+        page_id = assignment.id or cur_assignment["id"]
+
+        payload = {
+            "page_id": page_id,
+            "properties": {
+                "Assignment Name": {"title": [{"text": {"content": assignment.name}}]},
+                "Status": {
+                    "status": {
+                        "name": assignment.status
+                        or cur_assignment["properties"].get("Status", {}).get("status", {}).get("name", "Not started")
+                    }
+                },
+                "Due date": {"date": {"start": (assignment.due_date.strftime("%Y-%m-%d") if assignment.due_date else None)}},
+                "Priority": {
+                    "select": {
+                        "name": assignment.priority
+                        or cur_assignment["properties"].get("Priority", {}).get("select", {}).get("name", "Low")
+                    }
+                },
+                "Description": {"rich_text": [{"text": {"content": self.clean_html(assignment.description)}}]},
+                # Course relation is not updated here to avoid overwriting existing relations!
+            },
+        }
+
+        try:
+            response = self.make_notion_request("update_page", **payload)
+            return response
+        except Exception as e:
+            logger.error(f"Error updating assignment page: {e}")
+            return None
+
+    def _update_multiple_assignments(self, updates: Dict[str, Assignment]) -> Dict[str, Any]:
+        """
+        Update multiple assignment pages in batch.
+
+        Args:
+            updates: Dictionary mapping assignment names to Assignment objects
+
+        Returns:
+            Dictionary mapping assignment names to their update results
+        """
+        results = {}
+
+        for assignment_name, assignment in updates.items():
+            try:
+                logger.info(f"Updating assignment: {assignment_name}")
+                result = self._update_single_assignment(assignment)
+                results[assignment_name] = {"success": result is not None, "data": result, "error": None}
+            except Exception as e:
+                logger.error(f"Error updating assignment {assignment_name}: {e}")
+                results[assignment_name] = {"success": False, "data": None, "error": str(e)}
+
+        return results
 
     def get_course_page(self, course_name: str) -> Optional[Dict[str, Any]]:
         """
