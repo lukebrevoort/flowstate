@@ -6,7 +6,7 @@
 from notion_client import Client
 from datetime import datetime
 import pytz
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 from datetime import timezone
 
 try:
@@ -54,14 +54,14 @@ class NotionAPI:
         Args:
             user_id: Optional user ID to fetch user-specific Notion token
         """
-        self.user_id = "99d11141-76eb-460f-8741-f2f5e767ba0f"  # or user.id  # Default system user ID for testing purposes
+        self.user_id = user_id  # Default system user ID for testing purposes
         self.user_token = None
         self.data_source_id = None  # Store the data source ID for this database
         self.database_id = None  # Initialize database ID for OAuth users
 
         # If user_id is provided, try to get their token
         if user_id:
-            self.user_token = self._get_user_token(user_id)
+            self.user_token = self.get_user_token(user_id)
             if self.user_token:
                 logger.info(f"Using OAuth token for user {user_id}")
             else:
@@ -77,11 +77,11 @@ class NotionAPI:
 
         self.notion = Client(auth=token, notion_version="2025-09-03")
 
-        self.database_id = self._get_database_id() or NOTION_DATABASE_ID
+        self.database_id = self.get_database_id() or NOTION_DATABASE_ID
         # Initialize data source ID
-        self._initialize_data_source()
+        self.initialize_data_source()
 
-    def _get_user_token(self, user_id: str) -> Optional[str]:
+    def get_user_token(self, user_id: str) -> Optional[str]:
         """
         Get user's Notion token from database using UserTokenService
 
@@ -120,7 +120,7 @@ class NotionAPI:
             logger.warning(f"Could not fetch user token for {user_id}: {e}")
             return None
 
-    def _get_database_id(self) -> Optional[str]:
+    def get_database_id(self) -> Optional[str]:
         """
         Get the Notion database ID, either from environment or by querying Notion.
 
@@ -152,7 +152,7 @@ class NotionAPI:
             logger.error(f"Error fetching Notion databases, using system ID: {e}")
             return NOTION_DATABASE_ID
 
-    def _initialize_data_source(self) -> None:
+    def initialize_data_source(self) -> None:
         """
         Initialize data source IDs by fetching from the database.
         This handles multiple data sources (Assignments and Courses).
@@ -234,7 +234,7 @@ class NotionAPI:
             return None
 
         try:
-            response = self._make_notion_request("retrieve_data_source", data_source_id=self.data_source_id)
+            response = self.make_notion_request("retrieve_data_source", data_source_id=self.data_source_id)
             return response
         except Exception as e:
             logger.error(f"Failed to retrieve data source schema: {e}")
@@ -255,7 +255,7 @@ class NotionAPI:
         if not self.user_id:
             return False
 
-        new_token = self._get_user_token(self.user_id)
+        new_token = self.get_user_token(self.user_id)
         if new_token and new_token != self.user_token:
             self.user_token = new_token
             # Reinitialize Notion client with new token
@@ -298,7 +298,7 @@ class NotionAPI:
     @sleep_and_retry
     @limits(calls=MAX_REQUESTS_PER_SECOND, period=ONE_SECOND)
     @backoff.on_exception(backoff.expo, Exception, max_tries=5)
-    def _make_notion_request(self, operation_type: str, **kwargs):
+    def make_notion_request(self, operation_type: str, **kwargs):
         """
         Rate-limited wrapper for Notion API calls with exponential backoff.
         Supports both legacy database operations and new data source operations.
@@ -338,7 +338,7 @@ class NotionAPI:
             return self.notion.blocks.children.append(**kwargs)
         raise ValueError(f"Unknown operation type: {operation_type}")
 
-    def _parse_date(self, date_str) -> Optional[datetime]:
+    def parse_date(self, date_str) -> Optional[datetime]:
         """Helper to parse dates from various formats"""
         if not date_str:
             return None
@@ -359,7 +359,7 @@ class NotionAPI:
 
         return dt
 
-    def _clean_html(self, html_content: str) -> str:
+    def clean_html(self, html_content: str) -> str:
         """
         Converts HTML content to plain text and truncates to Notion's 2000 char limit.
 
@@ -384,7 +384,7 @@ class NotionAPI:
             logger.warning(f"Error cleaning HTML content: {e}")
             return html_content[:2000]
 
-    def _get_assignment_page(self, assignment: Assignment) -> Optional[Dict[str, Any]]:
+    def get_assignment_page(self, assignment: Assignment) -> Optional[Dict[str, Any]]:
         """
         Check if a Notion page already exists for the given assignment.
 
@@ -401,7 +401,7 @@ class NotionAPI:
         }
 
         try:
-            response = self._make_notion_request("databases/query", **payload)
+            response = self.make_notion_request("databases/query", **payload)
             if response and "results" in response:
                 for page in response["results"]:
                     if page["properties"]["Assignment Name"]["rich_text"][0]["text"]["content"] == assignment.name:
@@ -410,7 +410,7 @@ class NotionAPI:
             logger.error(f"Error fetching assignment page: {e}")
         return None
 
-    def _create_assignment_page(self, assignment: Assignment) -> Optional[Dict[str, Any]]:
+    def create_assignment_page(self, assignment: Assignment) -> Optional[Dict[str, Any]]:
         """
         Create a new Notion page for the given assignment.
 
@@ -421,14 +421,15 @@ class NotionAPI:
             Notion page dict if created successfully, else None
         """
 
-        course_id = self._get_course_page(assignment.course_name)["id"] if assignment.course_name else None
+        course_page = self.get_course_page(assignment.course_name) if assignment.course_name else None
+        course_id = course_page["id"] if course_page else None
         properties = {
             "Assignment Name": {"title": [{"text": {"content": assignment.name}}]},
             "Status": {"status": {"name": assignment.status or "Not started"}},
             "Due date": {"date": {"start": (assignment.due_date.strftime("%Y-%m-%d") if assignment.due_date else None)}},
             "Priority": {"select": {"name": assignment.priority or "Low"}},
-            "Description": {"rich_text": [{"text": {"content": self._clean_html(assignment.description)}}]},
-            "Course": {"relation": [{"id": course_id} if course_id else {}]},
+            "Description": {"rich_text": [{"text": {"content": self.clean_html(assignment.description)}}]},
+            "Course": {"relation": [{"id": course_id}] if course_id else []},
         }
 
         # Use assignments data_source_id if available (new 2025-09-03 API), fallback to database_id
@@ -448,13 +449,13 @@ class NotionAPI:
             }
 
         try:
-            response = self._make_notion_request("create_page", **payload)
+            response = self.make_notion_request("create_page", **payload)
             return response
         except Exception as e:
             logger.error(f"Error creating assignment page: {e}")
             return None
 
-    def _find_or_create_course_page(self, course_name: str) -> Optional[Dict[str, Any]]:
+    def find_or_create_course_page(self, course_name: str) -> Optional[Dict[str, Any]]:
         """
         Find an existing Notion page for the course, or create one if it doesn't exist.
 
@@ -464,14 +465,14 @@ class NotionAPI:
             Notion page dict if found or created, else None
         """
 
-        course_page = self._get_course_page(course_name)
+        course_page = self.get_course_page(course_name)
         if course_page:
             return course_page
-        return self._create_course_page(course_name)
+        return self.get_or_create_course_page(course_name)
 
     # Add more arguments to allow this function to get a dictionary of assignments
     # Allows you to filter by course, date, status, priority, etc.
-    def _find_assignment_page(self, filters: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    def find_assignment_page(self, filters: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
         """
         Find assignment pages in Notion based on filters.
 
@@ -502,6 +503,12 @@ class NotionAPI:
 
         if filters.get("due_date"):
             filter_conditions.append({"property": "Due date", "date": {"on_or_after": filters["due_date"]}})
+        
+        if filters.get("course_name"):
+            # For relation filtering, we need to get the course page ID first
+            course_page = self.get_course_page(filters["course_name"])
+            if course_page:
+                filter_conditions.append({"property": "Course", "relation": {"contains": course_page["id"]}})
 
         # Build payload with proper filter structure
         if not filter_conditions:
@@ -515,7 +522,7 @@ class NotionAPI:
             payload = {"filter": {"and": filter_conditions}}
 
         try:
-            response = self._make_notion_request(
+            response = self.make_notion_request(
                 "query_data_source", data_source_id=self.assignments_data_source_id, **payload
             )
             pages = {}
@@ -530,7 +537,7 @@ class NotionAPI:
 
     # Add optional argument for a dictionary of assignments to update
     # This allows you to update multiple assignments at once
-    def _update_assignment_page(
+    def update_assignment_page(
         self, assignment: Optional[Assignment], updates: Optional[Dict[str, Any]]
     ) -> Optional[Dict[str, Any]]:
         """
@@ -550,7 +557,7 @@ class NotionAPI:
         if assignment and updates:
             logger.warning("Both assignment and updates provided; using assignment data for update")
         if assignment:
-            cur_assignment = self._find_assignment_page(assignment.name)
+            cur_assignment = self.find_assignment_page(assignment.name)
             if not cur_assignment:
                 logger.warning(f"No existing page found for assignment {assignment.name}")
                 return None
@@ -575,13 +582,13 @@ class NotionAPI:
                             or cur_assignment["properties"].get("Priority", {}).get("select", {}).get("name", "Low")
                         }
                     },
-                    "Description": {"rich_text": [{"text": {"content": self._clean_html(assignment.description)}}]},
+                    "Description": {"rich_text": [{"text": {"content": self.clean_html(assignment.description)}}]},
                     # Course relation is not updated here to avoid overwriting existing relations!
                 },
             }
 
             try:
-                response = self._make_notion_request("update_page", page_id=page_id, properties=payload["properties"])
+                response = self.make_notion_request("update_page", page_id=page_id, properties=payload["properties"])
                 return response
             except Exception as e:
                 logger.error(f"Error updating assignment page: {e}")
@@ -589,7 +596,7 @@ class NotionAPI:
 
         elif updates:
             for assignment in updates:
-                cur_assignment = self._find_assignment_page(assignment["name"])
+                cur_assignment = self.find_assignment_page(assignment["name"])
                 if not cur_assignment:
                     logger.warning(f"No existing page found for assignment {assignment['name']}")
                     continue
@@ -630,7 +637,7 @@ class NotionAPI:
                 except Exception as e:
                     logger.error(f"Error updating assignment page: {e}")
 
-    def _get_course_page(self, course_name: str) -> Optional[Dict[str, Any]]:
+    def get_course_page(self, course_name: str) -> Optional[Dict[str, Any]]:
         """
         Find a Notion page for the given course name in the courses data source.
 
@@ -650,7 +657,7 @@ class NotionAPI:
                 }
             }
             try:
-                response = self._make_notion_request(
+                response = self.make_notion_request(
                     "query_data_source",
                     data_source_id=self.courses_data_source_id,
                     **payload,
@@ -663,7 +670,7 @@ class NotionAPI:
             logger.warning("No courses data source available")
         return None
 
-    def _get_or_create_course_page(self, course_name: str) -> Optional[Dict[str, Any]]:
+    def get_or_create_course_page(self, course_name: str) -> Optional[Dict[str, Any]]:
         """
         Create a new Notion page for the given course.
 
@@ -677,9 +684,9 @@ class NotionAPI:
             logger.warning("No courses data source available to create course page")
             return None
 
-        if self._get_course_page(course_name):
+        if self.get_course_page(course_name):
             logger.info(f"Course page for {course_name} already exists")
-            return self._get_course_page(course_name)
+            return self.get_course_page(course_name)
 
         properties = {
             "Course Name": {"title": [{"text": {"content": course_name}}]},
@@ -696,13 +703,13 @@ class NotionAPI:
         }
 
         try:
-            response = self._make_notion_request("create_page", **payload)
+            response = self.make_notion_request("create_page", **payload)
             return response
         except Exception as e:
             logger.error(f"Error creating course page for {course_name}: {e}")
             return None
 
-    def _get_all_course_pages(self) -> Dict[str, Dict[str, Any]]:
+    def get_all_course_pages(self) -> Dict[str, Dict[str, Any]]:
         """
         Retrieve all course pages from the Notion course database.
 
@@ -715,7 +722,7 @@ class NotionAPI:
                     logger.warning("No courses data source available")
                     return {}
 
-                response = self._make_notion_request(
+                response = self.make_notion_request(
                     "query_data_source",
                     data_source_id=self.courses_data_source_id,
                     filter={

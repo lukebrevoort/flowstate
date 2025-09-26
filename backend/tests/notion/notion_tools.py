@@ -31,9 +31,8 @@ def test_notion_api():
     # Test finding Assignment
     filters = {
         "name": "HW",
-        "status": "In Progress",
     }
-    assignment = notion._find_assignment_page(filters)
+    assignment = notion.find_assignment_page(filters)
     print("Found assignment:", assignment)
 
 
