@@ -22,23 +22,8 @@ def main():
     config = {"configurable": {"user_id": "99d11141-76eb-460f-8741-f2f5e767ba0f"}}
 
     # Example: Retrieve assignments
-    assignments = retrieve_assignments.invoke({"config": config, "filters": {"name": "HW"}})
+    assignments = retrieve_assignments.invoke({"config": config, "filters": {"status": "Not started"}})
     print("Assignments:", assignments)
-
-    # Example: Retrieve a specific assignment
-    assignment = retrieve_assignment.invoke({"assignment_name": "HW 1", "config": config})
-    print("Assignment:", assignment)
-
-    # Example: Create a new assignment
-    new_assignment_dict = {
-        "name": "Test Assignment",
-        "course_name": "Math",
-        "description": "Test description",
-        "priority": "Low",
-        "due_date": "2025-12-15",
-    }
-    created_assignment = create_assignment.invoke({"assignment": new_assignment_dict, "config": config})
-    print("Created Assignment:", created_assignment)
 
 
 if __name__ == "__main__":

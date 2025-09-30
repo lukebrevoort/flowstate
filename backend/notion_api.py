@@ -497,8 +497,11 @@ class NotionAPI:
         if filters.get("priority"):
             filter_conditions.append({"property": "Priority", "select": {"equals": filters["priority"]}})
 
-        if filters.get("due_date"):
+        if filters.get("due_date") and not (filters.get("due_date_start") or filters.get("due_date_end")):
             filter_conditions.append({"property": "Due date", "date": {"on_or_after": filters["due_date"]}})
+
+        if filters.get("due_date_start") and filters.get("due_date_end") and not filters.get("due_date"):
+            filter_conditions.append({"property": "Due date", "date": {"on_or_after": filters["due_date_start"], "on_or_before": filters["due_date_end"]}})
 
         if filters.get("course_name"):
             # For relation filtering, we need to get the course page ID first
