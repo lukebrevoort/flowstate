@@ -324,6 +324,81 @@ async def get_integrations_status(current_user=Depends(get_current_user_dependen
         }
 
 
+# Google Calendar OAuth endpoints
+@app.get("/api/oauth/google-calendar/authorize")
+async def google_calendar_authorize(current_user=Depends(get_current_user_dependency)):
+    """Initialize Google Calendar OAuth flow"""
+    try:
+        from services.google_calendar_oauth import GoogleCalendarOAuthService
+
+        oauth_service = GoogleCalendarOAuthService()
+
+        auth_data = oauth_service.generate_auth_url(current_user.id)
+
+        return {"auth_url": auth_data["auth_url"], "state": auth_data["state"]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate Google Calendar auth URL: {str(e)}")
+
+
+@app.get("/api/oauth/google-calendar/callback")
+async def google_calendar_callback(code: str, state: str):
+    """Handle Google Calendar OAuth callback"""
+    try:
+        from services.google_calendar_oauth import GoogleCalendarOAuthService
+
+        oauth_service = GoogleCalendarOAuthService()
+
+        # Extract user ID from state parameter for security
+        if ":" not in state:
+            raise HTTPException(status_code=400, detail="Invalid state parameter")
+
+        user_id, _ = state.split(":", 1)
+
+        # Exchange code for token
+        token_data = await oauth_service.exchange_code_for_token(code, state)
+
+        # Store tokens in database
+        success = await oauth_service.store_user_tokens(user_id, token_data)
+
+        if success:
+            user_info = token_data.get("user_info", {})
+            return {
+                "success": True,
+                "message": "Google Calendar connected successfully",
+                "user_email": user_info.get("email"),
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to store Google Calendar tokens")
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"OAuth callback failed: {str(e)}")
+
+
+@app.get("/api/oauth/google-calendar/status")
+async def google_calendar_status(current_user=Depends(get_current_user_dependency)):
+    """Check Google Calendar connection status for current user"""
+    try:
+        from services.google_calendar_oauth import GoogleCalendarOAuthService
+
+        oauth_service = GoogleCalendarOAuthService()
+
+        token_data = await oauth_service.get_user_google_token(current_user.id)
+
+        if token_data and token_data.get("access_token"):
+            # Test the connection
+            test_result = await oauth_service.test_google_calendar_connection(token_data["access_token"])
+            return {
+                "connected": test_result["success"],
+                "token_valid": test_result["success"],
+                "calendar_info": (test_result.get("data") if test_result["success"] else None),
+            }
+        else:
+            return {"connected": False, "token_valid": False, "calendar_info": None}
+
+    except Exception as e:
+        return {"connected": False, "token_valid": False, "error": str(e)}
+
+
 @app.post("/debug-agent")
 async def debug_agent(current_user=Depends(get_current_user_dependency)):
     try:

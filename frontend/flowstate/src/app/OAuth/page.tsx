@@ -38,12 +38,12 @@ function OAuthContent() {
       } else if (email) {
         successMessage = `${success} (${email})`;
       }
-      
+
       setMessages(prev => ({
         ...prev,
         success: successMessage,
       }));
-      
+
       // Refresh connection status
       checkNotionStatus();
       checkGoogleCalendarStatus();
@@ -358,7 +358,7 @@ function OAuthContent() {
           </motion.button>
 
           {/* Google Calendar Authentication Button */}
-                    {/* Google Calendar Authentication Button */}
+          {/* Google Calendar Authentication Button */}
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
@@ -395,11 +395,7 @@ function OAuthContent() {
               <span>Connecting to Google Calendar...</span>
             ) : (
               <div className='flex items-center'>
-                <svg
-                  className='w-6 h-6 mr-3'
-                  viewBox='0 0 48 48'
-                  fill='none'
-                >
+                <svg className='w-6 h-6 mr-3' viewBox='0 0 48 48' fill='none'>
                   <path
                     fill='#FFC107'
                     d='M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z'
