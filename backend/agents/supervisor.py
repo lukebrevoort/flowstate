@@ -636,6 +636,8 @@ async def stream_response(user_input: str, config: dict):
                                     target_agent = "Project Management Agent"
                                 elif "Response-Agent" in tool_name:
                                     target_agent = "Response Agent"
+                                elif "Scheduler-Handoff" in tool_name:
+                                    target_agent = "Scheduler Agent"
                                 else:
                                     target_agent = "Agent"
 
@@ -646,7 +648,52 @@ async def stream_response(user_input: str, config: dict):
                                     "timestamp": datetime.now().isoformat(),
                                 }
 
-                # Handle sub-agent actions
+                # Handle Scheduler Agent actions
+                elif "Scheduler Agent" in actual_node_name:
+                    # Check for tool calls
+                    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+                        for tool_call in last_message.tool_calls:
+                            tool_name = tool_call.get("name", "Unknown Tool")
+                            yield {
+                                "type": "tool",
+                                "agent": "Scheduler Agent",
+                                "message": tool_name,
+                                "tool": tool_name,
+                                "timestamp": datetime.now().isoformat(),
+                            }
+
+                    # Check for AI message content
+                    elif hasattr(last_message, "content") and last_message.content:
+                        content = str(last_message.content).lower()
+                        if any(
+                            word in content
+                            for word in [
+                                "getting",
+                                "retrieving",
+                                "checking",
+                                "analyzing",
+                                "processing",
+                                "creating",
+                                "updating",
+                                "deleting",
+                                "finding",
+                            ]
+                        ):
+                            step_type = "action"
+                        else:
+                            step_type = "completion"
+
+                        message_content = str(last_message.content)
+                        truncated_content = message_content[:100] + "..." if len(message_content) > 100 else message_content
+
+                        yield {
+                            "type": step_type,
+                            "agent": "Scheduler Agent",
+                            "message": truncated_content,
+                            "timestamp": datetime.now().isoformat(),
+                        }
+
+                # Handle Project Management Agent actions
                 elif "PMAgent" in actual_node_name:
                     # Check for tool calls
                     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
