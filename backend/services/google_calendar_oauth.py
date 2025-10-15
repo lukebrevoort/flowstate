@@ -292,9 +292,9 @@ class GoogleCalendarOAuthService:
             user_info = token_data.get("user_info", {})
 
             # Calculate token expiration time
-            from datetime import datetime, timedelta
+            from datetime import datetime, timedelta, timezone
 
-            token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+            token_expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
 
             # Prepare integration data
             integration_data = {
@@ -392,11 +392,11 @@ class GoogleCalendarOAuthService:
                 token_expires_at = integration.get("token_expires_at")
 
                 # Check if token is expired and refresh if needed
-                from datetime import datetime, timedelta
+                from datetime import datetime, timedelta, timezone
 
                 if token_expires_at:
                     expires_at = datetime.fromisoformat(token_expires_at.replace("Z", "+00:00"))
-                    now = datetime.utcnow()
+                    now = datetime.now(timezone.utc)
 
                     # Refresh token if it expires in less than 5 minutes
                     if now >= expires_at or (expires_at - now).total_seconds() < 300:
@@ -405,7 +405,7 @@ class GoogleCalendarOAuthService:
                             new_token_data = await self.refresh_access_token(refresh_token)
 
                             # Update stored tokens
-                            new_expires_at = datetime.utcnow() + timedelta(seconds=new_token_data.get("expires_in", 3600))
+                            new_expires_at = datetime.now(timezone.utc) + timedelta(seconds=new_token_data.get("expires_in", 3600))
 
                             await supabase.query(
                                 "user_integrations",
