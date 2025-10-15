@@ -5,6 +5,7 @@ Simple test to verify the model initialization works correctly
 
 import sys
 import os
+from typing import List, Any
 
 # Add the backend directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -19,7 +20,7 @@ try:
     print(f"✅ Streaming model streaming setting: {streaming_model.streaming}")
 
     # Test basic validation
-    messages = []
+    messages: List[Any] = []
     validated = model.validate_messages(messages) if hasattr(model, "validate_messages") else messages
     print(f"✅ Message validation works: {type(validated)}")
 

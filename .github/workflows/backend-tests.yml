@@ -97,11 +97,15 @@ jobs:
 
       - name: Run mypy type checking
         working-directory: ./backend
+        env:
+          PYTHONPATH: ${{ github.workspace }}/backend:${{ github.workspace }}
         run: |
-          mypy . --ignore-missing-imports --no-strict-optional --disable-error-code=import --exclude="(venv|\.venv|env|site-packages|__pycache__|\.pytest_cache)" || true
+          mypy . --explicit-package-bases --ignore-missing-imports --no-strict-optional --disable-error-code=import --exclude="(venv|\.venv|env|site-packages|__pycache__|\.pytest_cache)" || true
 
       - name: Run pytest unit tests
         working-directory: ./backend
+        env:
+          PYTHONPATH: ${{ github.workspace }}/backend:${{ github.workspace }}
         run: |
           pytest tests/ -v --cov=. --cov-report=xml --cov-report=term-missing
 
@@ -115,6 +119,8 @@ jobs:
 
       - name: Test import statements
         working-directory: ./backend
+        env:
+          PYTHONPATH: ${{ github.workspace }}/backend:${{ github.workspace }}
         run: |
           python -c "import app; print('✅ App imports successfully')"
           python -c "import agents.supervisor; print('✅ Supervisor agent imports successfully')"
@@ -122,6 +128,8 @@ jobs:
 
       - name: Test LangGraph agent compilation
         working-directory: ./backend
+        env:
+          PYTHONPATH: ${{ github.workspace }}/backend:${{ github.workspace }}
         run: |
           python -c "
           try:

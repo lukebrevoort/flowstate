@@ -83,7 +83,7 @@ async def test_token_storage():
         }
 
         print(f"🔄 Attempting to insert test integration...")
-        result = await service_client.query("user_integrations", "POST", data=test_data)
+        await service_client.query("user_integrations", "POST", data=test_data)
         print(f"✅ Test insertion successful!")
 
         # Clean up - delete the test record

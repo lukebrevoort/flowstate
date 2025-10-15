@@ -77,3 +77,4 @@ bandit>=1.7.5
 safety>=2.3.0
 
 # Supabase integration (using custom HTTP client to avoid conflicts)
+supabase==2.8.1

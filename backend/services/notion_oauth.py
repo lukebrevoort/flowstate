@@ -11,7 +11,19 @@ from typing import Dict, Optional, Any
 from urllib.parse import urlencode
 from dotenv import load_dotenv
 from fastapi import HTTPException
-from config.supabase import get_supabase_service_client
+
+# Handle supabase import gracefully
+try:
+    from config.supabase import get_supabase_service_client
+
+    SUPABASE_AVAILABLE = True
+except ImportError:
+    logging.warning("Could not import supabase config. OAuth service will work in fallback mode.")
+    SUPABASE_AVAILABLE = False
+
+    def get_supabase_service_client():
+        return None
+
 
 load_dotenv()
 
@@ -219,7 +231,7 @@ class NotionOAuthService:
 
             if existing:
                 # Update existing integration
-                result = await supabase.query(
+                await supabase.query(
                     "user_integrations",
                     "PATCH",
                     data={
@@ -231,7 +243,7 @@ class NotionOAuthService:
                 )
             else:
                 # Create new integration
-                result = await supabase.query(
+                await supabase.query(
                     "user_integrations",
                     "POST",
                     data={

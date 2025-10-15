@@ -39,7 +39,7 @@ def execute_sql_file(supabase: Client, file_path: str, description: str):
         for i, statement in enumerate(statements):
             if statement:
                 try:
-                    result = supabase.postgrest.rpc("exec_sql", {"sql": statement}).execute()
+                    supabase.postgrest.rpc("exec_sql", {"sql": statement}).execute()
                     print(f"   ✅ Statement {i+1}/{len(statements)} executed successfully")
                 except Exception as e:
                     print(f"   ⚠️  Statement {i+1}/{len(statements)} failed: {str(e)}")

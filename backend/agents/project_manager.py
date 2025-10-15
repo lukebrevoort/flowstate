@@ -25,7 +25,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-llm = ChatAnthropic(model="claude-3-5-haiku-latest")
+llm = ChatAnthropic(model="claude-3-5-sonnet-latest")
 
 """
 Lets create a project manager that will seperate specific Notion pulled assignments
@@ -33,17 +33,23 @@ into manageable subtasks for completion. The project manager will be able to:
 1. Retrive assignments from a given Notion database
 2. Create substasks for each assignment
 3. Create a Todo item/assignment for each substask
-4. update assignment submission status and progress 
+4. update assignment submission status and progress
 5. Estimate total time of completion for each assignment
-6. (For the future) generate a schedule/study plan for each project 
+6. (For the future) generate a schedule/study plan for each project
 """
 
 
 def get_user_id_from_config(config: Optional[RunnableConfig] = None) -> str:
-    """Get user_id from config, with fallback to default"""
+    """Get user_id from config or Supabase, with fallback to default"""
     if config and "configurable" in config:
-        return config["configurable"].get("user_id", "default-user")
-    return "default-user"
+        user_id = config["configurable"].get("user_id")
+        if user_id:
+            # TODO: Add Supabase lookup logic here if needed
+            # For now, return the user_id from config
+            return user_id
+
+    # Default user ID when none provided
+    return "99d11141-76eb-460f-8741-f2f5e767ba0f"
 
 
 # Define the tools
@@ -59,7 +65,7 @@ def get_current_time(config: RunnableConfig):
     user_id = get_user_id_from_config(config)
     notion_api = NotionAPI(user_id=user_id)
     current_time = datetime.now()
-    time = notion_api._parse_date(current_time)
+    time = notion_api.parse_date(current_time)
     return time
 
 
@@ -108,225 +114,123 @@ def parse_relative_datetime(date_description: str):
 @tool
 def retrieve_assignment(assignment_name: str, config: RunnableConfig):
     """
-    Retrieve assignments from a given Notion database
+    Retrieve a specific assignment by name from Notion.
+    Args:
+        assignment_name: Name of the assignment to retrieve
+        config: RunnableConfig containing user-specific configuration
 
-    returns a object with all assignment information included
+    Returns:
+        Notion page dict if found, else None
     """
     user_id = get_user_id_from_config(config)
     notion_api = NotionAPI(user_id=user_id)
-    assignment = notion_api.get_assignment_page(assignment_name)
-    return assignment
+    return notion_api.find_assignment_page(assignment_name)
 
 
 @tool
-def retrieve_all_assignments(current_time: str, end_time: str, config: RunnableConfig):
+def retrieve_assignments(config: RunnableConfig, filters: Dict[str, Any] = None):
     """
-    Retrieve all assignments from the Notion database with date filtering.
-
+    Retrieve a list of assignments from Notion.
     Args:
-        current_time: ISO datetime string to filter assignments after this time
-        end_time: ISO datetime string to filter assignments before this time
+        config: RunnableConfig containing user-specific configuration
+        filters: Optional filters to apply when retrieving assignments
 
     Returns:
-        A list of assignment objects with details including name, due date, status, and course
+        List of Notion page dicts if found, else empty list
     """
     user_id = get_user_id_from_config(config)
     notion_api = NotionAPI(user_id=user_id)
-    assignments = notion_api.get_all_assignments(current_time, end_time)
-    return assignments
+    return notion_api.find_assignment_pages(filters=filters)
+    pass
 
 
 @tool
-def find_assignment(query: str, config: RunnableConfig):
+def create_assignment(assignment: Assignment, config: RunnableConfig) -> Optional[Dict[str, Any]]:
     """
-    Find an assignment using fuzzy matching on the name.
+    Create a new assignment item in Notion based on the provided Assignment dataclass.
 
     Args:
-        query: Text to search for in assignment names
-
+        assignment: Assignment dataclass instance containing assignment details
+        config: RunnableConfig containing user-specific configuration
     Returns:
-        The best matching assignment or a list of possible matches
+        Notion page dict if created successfully, else None
     """
     user_id = get_user_id_from_config(config)
     notion_api = NotionAPI(user_id=user_id)
-    assignments = notion_api.get_all_assignments()
-
-    # Extract just the names for matching
-    names = [a["name"] for a in assignments]
-
-    # If exact match exists, return it
-    if query in names:
-        for assignment in assignments:
-            if assignment["name"] == query:
-                return assignment
-
-    # Try fuzzy matching
-    matches = get_close_matches(query, names, n=3, cutoff=0.6)
-
-    if not matches:
-        return f"No assignments found matching '{query}'"
-
-    if len(matches) == 1:
-        # Return the single match
-        for assignment in assignments:
-            if assignment["name"] == matches[0]:
-                return assignment
-
-    # Return possible matches for clarification
-    return {
-        "message": f"Multiple assignments found matching '{query}'",
-        "matches": matches,
-    }
+    return notion_api.create_assignment_page(assignment)
 
 
 @tool
-def create_assignment_item(assignment_dict: Dict[str, Any], config: RunnableConfig):
+def get_course_info(course_name: str = None, config: RunnableConfig = None) -> Optional[Dict[str, Any]]:
     """
-    Create a assignment in Notion that follows the imported Assignment schema.
-    Below is an example of the schema:
+    Retreives course information from Notion based on course name.
 
-    assignment = Assignment(
-        name="Midterm Research Paper",
-        description="<p>Write a 10-page research paper on a topic of your choice.</p>",
-        course_id=77456,  # Maps to a Notion course page via course_mapping
-        status="Not started",
-        due_date="2025-04-15T23:59:00Z",
-        id=67890,
-        priority="High",
-        group_name="Papers",
-        group_weight=30.0,
-        grade=None
-    )
+    Args:
+        course_name: Name of the course to retrieve information for
+        config: RunnableConfig containing user-specific configuration
 
-
-    returns the created assignment object
-
+    Returns:
+        Course information dict if found, else None
     """
     user_id = get_user_id_from_config(config)
-
-    if isinstance(assignment_dict, dict):
-        assignment = Assignment(
-            name=assignment_dict.get("name"),
-            description=assignment_dict.get("description"),
-            course_id=assignment_dict.get("course_id"),
-            course_name=assignment_dict.get("course_name"),
-            status=assignment_dict.get("select", "Not started"),  # Changed from 'select' to 'status' to match expected input
-            due_date=assignment_dict.get("due_date"),
-            id=assignment_dict.get("id"),
-            priority=assignment_dict.get("priority", "Medium"),
-            group_name=assignment_dict.get("group_name"),
-            group_weight=assignment_dict.get("group_weight"),
-            grade=assignment_dict.get("grade"),
-        )
-    else:
-        assignment = assignment_dict
-
     notion_api = NotionAPI(user_id=user_id)
-    print(f"Creating assignment with due date: {assignment.due_date}")
-    notion_api.create_assignment(assignment)
-    return assignment
+    return notion_api.get_course_page(course_name)
 
 
 @tool
-def get_course_info(course_name: str = None, config: RunnableConfig = None):
+def get_all_courses(config: RunnableConfig = None) -> Optional[Dict[str, Any]]:
     """
-    Get course information from Notion database.
+    Retreives all course information from Notion.
 
     Args:
-        course_name: (Optional) Name or code of the course to search for
+        config: RunnableConfig containing user-specific configuration
 
     Returns:
-        If course_name is provided and found: Dict with course_id and course_name
-        If course_name is provided but not found: Dict with all course names and their IDs
-        If course_name is not provided: Dict with all course names and their IDs
+        List of course information dicts if found, else empty list
     """
-    user_id = get_user_id_from_config(config) if config else "default-user"
+    user_id = get_user_id_from_config(config)
     notion_api = NotionAPI(user_id=user_id)
-
-    # Get mappings
-    course_name_dict = notion_api._get_course_id_name_mapping()
-    course_id_dict = notion_api._get_course_id_mapping()
-
-    # Create a comprehensive dict with both names and IDs
-    course_info = {}
-    for name, notion_id in course_name_dict.items():
-        canvas_id = None
-        # Find the canvas_id that maps to this notion_id
-        for canvas_key, notion_value in course_id_dict.items():
-            if notion_value == notion_id:
-                canvas_id = canvas_key
-                break
-
-        course_info[name] = {"notion_id": notion_id, "course_id": canvas_id}
-
-    # If no course name provided, return all course info
-    if not course_name:
-        return course_info
-
-    # Try to find the course by exact match
-    if course_name in course_info:
-        return {course_name: course_info[course_name]}
-
-    # Try to find by case-insensitive partial match
-    for name in course_info:
-        if course_name.lower() in name.lower():
-            return {name: course_info[name]}
-
-    # If not found, return all course info
-    return course_info
+    return notion_api.get_all_course_pages()
 
 
 @tool
-def update_assignment(
-    name: str,
-    priority: str = None,
-    status: str = None,
-    due_date: str = None,
-    description: str = None,
-    config: RunnableConfig = None,
-) -> str:
+def update_assignment(assignment: Assignment, config: RunnableConfig) -> Dict[str, Any]:
     """
-    Update an assignment in Notion.
+    Update an existing assignment in Notion.
 
     Args:
-        name: Name of the assignment to update (required)
-        priority: Priority level (High, Medium, Low)
-        status: Status (Not started, In progress, Completed)
-        due_date: Due date in ISO format
-        description: Description text
+        assignment: Assignment dataclass instance containing updated assignment details
+        config: RunnableConfig containing user-specific configuration
 
     Returns:
-        String confirmation of update or error message
+        Updated Notion page dict if successful, else None
     """
-    user_id = get_user_id_from_config(config) if config else "default-user"
-
-    # Build the dictionary from the individual parameters
-    assignment_dict = {"name": name}
-    if priority is not None:
-        assignment_dict["priority"] = priority
-    if status is not None:
-        assignment_dict["select"] = status  # NotionAPI will now use select instead of status internally
-    if due_date is not None:
-        assignment_dict["due_date"] = due_date
-    if description is not None:
-        assignment_dict["description"] = description
-
-    # Initialize the NotionAPI
+    user_id = get_user_id_from_config(config)
     notion_api = NotionAPI(user_id=user_id)
-    try:
-        # Attempt to update the assignment
-        updated_assignment = notion_api.update_assignment(assignment_dict)
-        return f"Assignment updated successfully: {updated_assignment.get('title', 'Unknown')}"
-    except Exception as e:
-        # Log the error and return a message
-        logger.error(f"Error updating assignment: {e}")
-        return f"Failed to update assignment: {e}"
+    return notion_api.update_assignment_page(assignment)
+
+
+@tool
+def update_bulk_pages(updates: Dict[Assignment, Any], config: RunnableConfig) -> Dict[str, Any]:
+    """
+    Update multiple Notion pages in bulk.
+
+    Args:
+        updates: Dictionary mapping assignment names to Assignment datacclass instances with updated details
+        config: RunnableConfig containing user-specific configuration
+
+    Returns:
+        Dictionary containing the results of the update operations
+    """
+    user_id = get_user_id_from_config(config)
+    notion_api = NotionAPI(user_id=user_id)
+    return notion_api.update_assignment_page(updates)
 
 
 time_prompt = PromptTemplate.from_template(
     """
 Given an {assignment}, give an Estimated Time of Completion. This should consider the following factors:
-- Due date: {due_date} 
+- Due date: {due_date}
 - Description: {description}
 - Current progress: {status}
 - Assignment Notes: {notes}
@@ -334,46 +238,17 @@ Given an {assignment}, give an Estimated Time of Completion. This should conside
 The time should be in hours and minutes, and should be a rough estimate.
 The output should be a simple string with the time in the format "X hours Y minutes" with some explaination as to why.
 For example:
-"Based on the current progress and the due date, I estimate that it will take approximately 3 hours and 30 minutes to complete this assignment. 
-This includes time for research, writing, and editing. Would you like me to create subtasks for this assignment?"                                                                                
+"Based on the current progress and the due date, I estimate that it will take approximately 3 hours and 30 minutes to complete this assignment.
+This includes time for research, writing, and editing. Would you like me to create subtasks for this assignment?"
 """
 )
 
 
 @tool
-def estimate_completion_time(assignment_dict):
+def estimate_completion_time(assignment: Assignment = None, config: RunnableConfig = None):
     """
-    Generate an estimated time of completion given an assignment dictionary.
-
-    Args:
-        assignment_dict: Dictionary containing assignment details.
-        MUST INCLUDE 'name', 'due_date', 'status', and 'description'.
-
-    Returns:
-        Estimated time of completion as a string.
+    Estimate the time required to complete an assignment based on its details.
     """
-    chain = time_prompt | llm
-
-    # Get the current time
-    current_time = datetime.now()
-
-    estimated_time = chain.invoke(
-        {
-            "assignment": assignment_dict["name"],
-            "due_date": assignment_dict["due_date"],
-            "status": assignment_dict.get("select", "Not started"),
-            "description": assignment_dict.get("description", ""),
-            "current_time": current_time.isoformat(),
-            "notes": get_assignment_notes(assignment_dict["name"]),
-        }
-    )
-
-    if estimated_time:
-        return estimated_time.content
-    else:
-        logger.error("Failed to estimate completion time.")
-        return "Failed to estimate completion time."
-
     pass
 
 
@@ -401,250 +276,206 @@ Common subtasks for assignments include:
 @tool
 def create_subtask_assignment(assignment_dict, config: RunnableConfig):
     """
-    Creates assignment subtasks in notion that follow the Assignment Schema
-
-    assignment = Assignment(
-        name="Midterm Research Paper",
-        description="<p>Write a 10-page research paper on a topic of your choice.</p>",
-        course_id=77456,  # Maps to a Notion course page via course_mapping
-        status="Not started",
-        due_date="2025-04-15T23:59:00Z",
-        id=67890,
-        priority="High",
-        group_name="Papers",
-        group_weight=30.0,
-        grade=None
-    )
+    Create a subtask assignment in Notion.
     """
-
-    user_id = get_user_id_from_config(config)
-
-    if isinstance(assignment_dict, dict):
-        assignment = Assignment(
-            name=assignment_dict.get("name"),
-            description=assignment_dict.get("description"),
-            course_id=assignment_dict.get("course_id"),
-            course_name=assignment_dict.get("course_name"),
-            status=assignment_dict.get("select", "Not started"),  # Changed from 'select' to 'status' to match expected input
-            due_date=assignment_dict.get("due_date"),
-            id=assignment_dict.get("id"),
-            priority=assignment_dict.get("priority", "Medium"),
-            group_name=assignment_dict.get("group_name"),
-            group_weight=assignment_dict.get("group_weight"),
-            grade=assignment_dict.get("grade"),
-        )
-    else:
-        assignment = assignment_dict
-
-    notion_api = NotionAPI(user_id=user_id)
-    print(f"Creating assignment with due date: {assignment.due_date}")
-    notion_api.create_assignment(assignment)
-    return assignment
+    pass
 
 
 @tool
 def create_subtasks(assignment_dict, config: RunnableConfig):
     """
-    Create subtasks for a given assignment and add them to Notion.
-
-    Args:
-        assignment: Dictionary containing assignment details.
-
-    Returns:
-        List of subtask dictionaries ready to be created in Notion.
+    Create subtasks for a given assignment in Notion.
     """
-    user_id = get_user_id_from_config(config)
-    logger.info(f"Generating subtasks for user {user_id}, assignment: {assignment_dict.get('name', 'Unknown')}")
-
-    try:
-        chain = subtask_prompt | llm
-
-        if "current_date" not in assignment_dict:
-            current_time = datetime.now().replace(microsecond=0)
-            assignment_dict["current_date"] = current_time.isoformat()
-
-        # Get subtasks from LLM
-        subtasks_result = chain.invoke(
-            {
-                "assignment": assignment_dict["name"],
-                "current_date": assignment_dict["current_date"],
-                "due_date": assignment_dict["due_date"],
-                "status": assignment_dict.get("select", "Not started"),
-                "description": assignment_dict.get("description", ""),
-                "notes": get_assignment_notes(assignment_dict["name"]),
-            }
-        )
-
-        # Parse the LLM output into a list of subtask names
-        subtask_names = subtasks_result.content.strip().split("\n")
-
-        # Calculate time gap for evenly spaced subtasks
-        from dateutil import parser
-        import random
-
-        # Parse dates properly with consistent timezone handling
-        start_date = parser.parse(assignment_dict["current_date"])
-        due_date = parser.parse(assignment_dict["due_date"])
-
-        # Ensure both dates have timezone info (use UTC if not specified)
-        if start_date.tzinfo is None:
-            start_date = start_date.replace(tzinfo=timezone.utc)
-        if due_date.tzinfo is None:
-            due_date = due_date.replace(tzinfo=timezone.utc)
-
-        # Make sure start date is before due date
-        if start_date > due_date:
-            logger.warning(f"Start date {start_date} is after due date {due_date}. Using current time.")
-            start_date = datetime.now(timezone.utc)
-
-        # Calculate time span in seconds
-        time_span = max((due_date - start_date).total_seconds(), 3600)  # Minimum 1 hour
-        time_step = time_span / (len(subtask_names) + 1)
-
-        # Create a list of dictionaries for each subtask
-        subtask_dicts = []
-        for i, subtask_name in enumerate(subtask_names):
-            # Calculate subtask due time
-            subtask_due = start_date + timedelta(seconds=(i + 1) * time_step)
-
-            # Round to the nearest half hour
-            minute = subtask_due.minute
-            if minute < 15:
-                subtask_due = subtask_due.replace(minute=0, second=0, microsecond=0)
-            elif 15 <= minute < 45:
-                subtask_due = subtask_due.replace(minute=30, second=0, microsecond=0)
-            else:
-                subtask_due = subtask_due.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
-
-            # Format with consistent timezone
-            subtask_due_str = subtask_due.isoformat()
-
-            # Create subtask dictionary
-            subtask_dict = {
-                "name": f"{subtask_name} - {assignment_dict['name']}",
-                "description": f"<p>Subtask for: {assignment_dict['name']}</p>",
-                "course_id": assignment_dict.get("course_id"),
-                "course_name": assignment_dict.get("course_name"),
-                "status": "Not started",
-                "due_date": subtask_due_str,
-                "id": (
-                    int(f"{assignment_dict.get('id')}_{i+1}")
-                    if assignment_dict.get("id") and str(assignment_dict.get("id")).isdigit()
-                    else random.randint(100000, 999999)
-                ),
-                "priority": assignment_dict.get("priority", "Medium"),
-                "group_name": "Subtasks",
-                "group_weight": None,
-                "grade": None,
-                "parent_assignment": assignment_dict.get("id"),
-            }
-            subtask_dicts.append(subtask_dict)
-
-        # Create each subtask in Notion
-        for subtask in subtask_dicts:
-            create_subtask_assignment(subtask, config)
-        return subtask_dicts
-    except Exception as e:
-        logger.error(f"Error creating subtasks: {e}")
-        return f"Failed to create subtasks: {e}"
+    pass
 
 
 @tool
-def get_assignment_notes(assignment_name: str, config: RunnableConfig):
+def smart_schedule(config: RunnableConfig):
     """
-    Get notes from an assignment by name
-
-    Args:
-        assignment_name: Name of the assignment to retrieve notes from
-
-    Returns:
-        Notes associated with the assignment
+    Created a smart schedule for the user based on their assignments and deadlines.
+    This will analyze all assignments, their due dates, and estimated completion times to create a study/work schedule.
+    Information will be passed to scheduler agent for further processing.
     """
-    user_id = get_user_id_from_config(config)
-    notion_api = NotionAPI(user_id=user_id)
-    notes = notion_api.get_assignment_notes(assignment_name)
-
-    if notes:
-        return notes
-    else:
-        return f"No assignment found with the name '{assignment_name}'"
+    # TO DO
+    pass
 
 
 tools = [
     retrieve_assignment,
-    retrieve_all_assignments,
+    retrieve_assignments,
     get_current_time,
-    create_assignment_item,
+    create_assignment,
     get_course_info,
+    get_all_courses,
+    update_bulk_pages,
     parse_relative_datetime,
     update_assignment,
-    find_assignment,
     create_subtasks,
-    get_assignment_notes,
     estimate_completion_time,
+    smart_schedule,
 ]
 
 project_manager_prompt = """
 
-# Project Management Agent for Notion
+# Project Management Agent for Notion - Tool Usage Guide
 
 ## Primary Role
-You are an agent specialized in managing academic assignments in Notion. You help users track, organize, and complete their academic work efficiently.
+You are an agent specialized in managing academic assignments in Notion using OAuth-authenticated user tokens. You help users track, organize, and complete their academic work efficiently through precise tool usage.
 
-## Core Responsibilities
-- Understand user requests related to assignment management
-- Retrieve information about assignments and courses
-- Create and modify assignments and subtasks in Notion
-- Estimate completion times and help with time management
-- Present information back to the user in a clear, helpful format
+## CRITICAL TOOL USAGE ETIQUETTE
 
-## Request Handling Capabilities
+### 1. ALWAYS Use Config Parameter
+- EVERY tool call MUST include the `config` parameter containing user authentication
+- The config contains user_id for OAuth token retrieval
+- Never attempt operations without proper user authentication
 
-### Information Retrieval Tasks:
-- Assignments lookup
-- Status checking
-- Due date inquiries
-- Finding relevant course information
-- Analyzing workload and scheduling
-- Generating reports or summaries
+### 2. Tool Selection Rules
 
-### Modification Tasks:
-- Creating new assignments and tasks
-- Updating assignment properties (status, priority, due dates)
-- Creating subtasks for assignments
-- Deleting or archiving completed work
-- Reorganizing assignments
-                          
-## Workflow Process
-For complex requests requiring both retrieval and modification:
-1. Gather necessary information about existing assignments
-2. Process and analyze the retrieved data
-3. Make required modifications with precise parameters
-4. Verify the changes were made successfully
+#### For Information Retrieval - Use These Tools:
+- **`get_current_time`** - Get current date/time in user's timezone
+- **`retrieve_assignment`** - Find ONE specific assignment by exact name
+- **`retrieve_assignments`** - Find MULTIPLE assignments with filters (name, status, priority, due_date, course_name)
+- **`get_course_info`** - Get details about a specific course by name
+- **`get_all_courses`** - Get all enrolled courses
 
-## Key Data Formats
+#### For Data Creation - Use These Tools:
+- **`create_assignment`** - Create new assignment (requires Assignment dataclass)
+- **`create_subtasks`** - Break down assignment into manageable subtasks
+- **`create_subtask_assignment`** - Create individual subtask as assignment
 
-When working with assignments, ensure proper formatting:
-- Assignment dictionary must include 'name' key
-- Date formats should follow ISO 8601 (YYYY-MM-DDTHH:MM:SSZ)
-- Required fields for new assignments: name, course_id/course_name
-- Optional fields: description, status, due_date, priority
+#### For Data Modification - Use These Tools:
+- **`update_assignment`** - Update single assignment properties (requires Assignment dataclass)
+- **`update_bulk_pages`** - Update multiple assignments simultaneously (requires dict of Assignment dataclasses)
+- **`parse_relative_datetime`** - Convert "tomorrow at 5pm" to ISO format
 
-## Common Request Patterns
+#### For Analysis - Use These Tools:
+- **`estimate_completion_time`** - Calculate time needed for assignment completion
+- **`smart_schedule`** - Generate study/work schedule based on all assignments
 
-- "Show my assignments for next week"
-- "Create a new essay due Friday"
-- "Change the priority of my physics homework"
-- "What's due tomorrow?"
-- "Add subtasks to my research paper"
-- "Move all my completed assignments to Done"
+### 3. MANDATORY Tool Usage Patterns
 
-## Error Handling
+#### For "Show my assignments" requests:
+```
+ALWAYS use: retrieve_assignments() with appropriate filters
+NEVER use: retrieve_assignment() for multiple items
+```
 
-- If you encounter an error, analyze the cause and retry with adjusted parameters
-- If information is ambiguous, ask the user for clarification before proceeding
-- For fuzzy matches on assignment names, confirm with the user before making changes
-- Verify all operations completed successfully before reporting completion to the user
+#### For "Create new assignment" requests:
+```
+1. FIRST: get_course_info() if course mentioned
+2. THEN: create_assignment() with Assignment dataclass
+3. VERIFY: retrieve_assignment() to confirm creation
+```
 
-Always maintain the context of the ongoing task and current state of the user's Notion workspace to provide continuity between operations.
+#### For "Update assignment status" requests:
+```
+1. FIRST: retrieve_assignment() to get current data
+2. THEN: update_assignment() with modified Assignment object
+3. VERIFY: retrieve_assignment() to confirm changes
+```
+
+#### For date/time parsing requests:
+```
+ALWAYS use: parse_relative_datetime() for natural language dates
+Examples: "tomorrow at 5pm", "next Monday at 3pm", "in 2 days at noon"
+```
+
+### 4. Data Format Requirements
+
+#### Assignment Dataclass MUST Include:
+- **name**: str (REQUIRED - assignment title)
+- **description**: str (REQUIRED - assignment description)
+- **course_name**: str (REQUIRED - for course relation)
+- **due_date**: datetime (ISO format YYYY-MM-DDTHH:MM:SSZ) (REQUIRED)
+- **id**: Optional[int] (Assigned by Notion as UUID when created, don't assume a value)
+- **status**: str (Not started, In progress, Done)
+- **priority**: str (Low, Medium, High)
+
+
+#### Filter Dictionary Format:
+```python
+# For filters here are all the ways you can filter::
+filters = {
+    "name": "partial_assignment_name",  # Contains search
+    "status": "In progress",           # Exact match
+    "priority": "High",               # Exact match
+    "due_date": "2025-09-27",        # On or after date, used for single date filters for on_and_after filtering, MUST NOT be used with due_date_start or due_date_end
+    "due_date_start": "2025-09-27",  # On or after date, used for range filtering and MUST be used with due_date_end and WITHOUT due_date
+    "due_date_end": "2025-10-04",    # On or before date, used for range filtering and MUST be used with due_date_start and WITHOUT due_date
+    "course_name": "Physics 101"      # Course relation
+}
+
+### 5. Common Request Mappings
+
+#### "What's due tomorrow?" → 
+```python
+retrieve_assignments(config, filters={"due_date": "2025-09-27"})
+```
+
+### What assignments do I have coming up? →
+```python
+get_current_time(config)
+current_time = parse_relative_datetime("now")
+retrieve_assignments(config, filters={"status": "Not Started", "due_date_start": f"{current_time}", "due_date_end": f"{(datetime.fromisoformat(current_time) + timedelta(days=7)).isoformat()}"})
+```
+
+#### "Show my physics assignments" →
+```python
+get_course_info("Physics", config) # Should always return correct course name if there is a slight variation from user input such as "Physics 103" vs "Physics"
+retrieve_assignments(config, filters={"course_name": "Physics 103"})
+```
+
+#### "Create an assignment for my Essay due this Friday" →
+```python
+1. parse_relative_datetime("Friday")
+2. get_all_courses(config) # see if there is some english course that would have an essay assignment. If not ask user for clarification on course name.
+3. create_assignment(Assignment(name="Essay", description="Write an essay", course_name="English 103", due_date=parsed_date, priority="High"), config)
+```
+
+#### "Mark my most recent math homework as completed" →
+```python
+1. get_course_info("Math", config) # Ensure we have the correct course name
+2. retrieve_assignments(config, filters={"course_name": "Math 101", "name": "homework"}) # Get all homework assignments from math course
+2. update_assignment(Assignment(name="Homework 5", description="Complete all exercises", due_date="2025-09-30T23:59:59Z", course_name="Math 101", status="Done"), config)
+```
+
+### 6. Error Recovery Protocol
+
+#### If tool fails:
+1. Check if user_id exists in config
+2. Verify assignment/course names are exact matches
+3. Ensure date formats are ISO compliant
+4. Retry with corrected parameters
+5. If still failing, ask user for clarification
+
+#### For ambiguous requests:
+- Ask for specific assignment names
+- Confirm course names with get_all_courses()
+- Use fuzzy matching cautiously and confirm with user
+
+### 7. NEVER DO THESE:
+- ❌ Call tools without config parameter
+- ❌ Use retrieve_assignment() for multiple items
+- ❌ Create assignments without course information
+- ❌ Update assignments without retrieving current data first
+- ❌ Assume assignment names - always verify exact matches
+- ❌ Use raw datetime strings - always parse with parse_relative_datetime()
+
+### 8. ALWAYS DO THESE:
+- ✅ Include config in every tool call
+- ✅ Verify operations completed successfully
+- ✅ Use appropriate filters for multi-item retrieval
+- ✅ Parse dates through parse_relative_datetime() for natural language
+- ✅ Get current course list before creating assignments
+- ✅ Confirm assignment names with user if uncertain
+- ✅ Provide clear status updates after operations
+
+## Response Format
+Always provide:
+1. Clear confirmation of actions taken
+2. Summary of retrieved data in readable format
+3. Next suggested actions if applicable
+4. Error explanations with suggested corrections
+
+This tool usage protocol ensures reliable, secure, and efficient interaction with user's Notion workspace through proper OAuth authentication and precise API operations.
 """

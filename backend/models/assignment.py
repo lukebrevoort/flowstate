@@ -24,14 +24,10 @@ class Assignment:
         priority: Assignment priority ('Low', 'Medium', 'High') based on group weight
     """
 
-    id: int
     name: str
     description: str
     due_date: datetime
-    course_id: int
     course_name: str
     status: str = "Not started"
-    grade: Optional[float] = None
-    group_name: Optional[str] = None
-    group_weight: Optional[float] = None
+    id: Optional[int] = None
     priority: Optional[str] = "Low"
