@@ -306,6 +306,8 @@ tools = [
     get_current_time,
     create_assignment,
     get_course_info,
+    get_all_courses,
+    update_bulk_pages,
     parse_relative_datetime,
     update_assignment,
     create_subtasks,
