@@ -24,8 +24,10 @@ from agents.project_manager import (
     tools as project_management_tools,
     project_manager_prompt,
 )
-
-# from agents.scheduler import tools as scheduler_tools, scheduler_prompt
+from agents.scheduler import (
+    tools as scheduler_tools,
+    scheduler_prompt,
+)
 from agents.response import response_prompt
 
 from tenacity import (
@@ -294,10 +296,12 @@ MODEL_SYSTEM_MESSAGE = """
 You are a supervisor agent responsible for orchestrating user interactions through specialized sub-agents. Your role is to coordinate between agents and ensure every user interaction concludes with a properly formatted response.
 
 AVAILABLE AGENTS:
+- Scheduler Agent (Scheduler Agent): Handles Google Calendar operations including viewing events, creating/updating/deleting calendar events, finding available time slots, and managing schedules
 - Project Manager Agent (PMAgent): Handles assignments, tasks, exams, projects, Notion database operations, subtask creation, progress tracking, and time estimation
 - Response Agent (ResponseAgent): Generates final JSX-formatted responses for the frontend UI (REQUIRED for all interactions)
 
 AGENT ROUTING RULES:
+- For calendar viewing, event creation/modification, availability checks, or scheduling → use Scheduler-Handoff-Tool
 - For assignments, tasks, exams, projects, Notion operations, subtasks, progress updates, or time estimates → use Project-Management-Handoff-Tool
 - After gathering ALL necessary information from sub-agents → ALWAYS use Response-Agent-Handoff-Tool (MANDATORY FINAL STEP)
 
@@ -323,6 +327,7 @@ CRITICAL REQUIREMENTS:
 - If no specialized processing is needed, still route to Response Agent for proper formatting
 
 HANDOFF PROTOCOL:
+- When routing to Scheduler Agent: Include specific details about calendar operations, date/time requirements, event details, and scheduling preferences
 - When routing to PMAgent: Include specific details about assignments, deadlines, Notion requirements
 - When routing to ResponseAgent: Include all gathered information, user context, and specify the JSX formatting requirements
 - Task descriptions should be comprehensive and include relevant user profile details
@@ -353,15 +358,13 @@ Your current instructions are:
 ## Node definitions
 
 
-# Currently, only using project management to avoid OAuth issues with Google Calendar
-"""
 scheduler_agent = create_react_agent(
     model=model,
     tools=scheduler_tools,
     prompt=scheduler_prompt + "\nTask Description: {task_description}",
     name="Scheduler Agent",
 )
-"""
+
 
 project_management_agent = create_react_agent(
     model=model,
@@ -499,14 +502,11 @@ response_agent_handoff = create_supervisor_handoff_tool(
 
 
 # Modify the orchestrator_agent definition
-# Currently, only using project management to avoid OAuth issues with Google Calendar
-# scheduler_agent
-
-
 orchestrator_agent = create_supervisor(
-    [project_management_agent, response_agent],
+    [scheduler_agent, project_management_agent, response_agent],
     model=model,
     tools=[
+        scheduler_handoff,
         project_manager_handoff,
         response_agent_handoff,
     ],
