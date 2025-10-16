@@ -405,7 +405,9 @@ class GoogleCalendarOAuthService:
                             new_token_data = await self.refresh_access_token(refresh_token)
 
                             # Update stored tokens
-                            new_expires_at = datetime.now(timezone.utc) + timedelta(seconds=new_token_data.get("expires_in", 3600))
+                            new_expires_at = datetime.now(timezone.utc) + timedelta(
+                                seconds=new_token_data.get("expires_in", 3600)
+                            )
 
                             await supabase.query(
                                 "user_integrations",

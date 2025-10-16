@@ -4,9 +4,11 @@ Test to verify the datetime timezone fix in Google Calendar OAuth service
 """
 
 import asyncio
+import pytest
 from datetime import datetime, timedelta, timezone
 
 
+@pytest.mark.asyncio
 async def test_timezone_fix():
     """Test that datetime comparisons work correctly with timezone-aware datetimes"""
     print("=" * 80)
@@ -38,7 +40,7 @@ async def test_timezone_fix():
         else:
             seconds_until_expiry = (expires_at - now).total_seconds()
             print(f"  ✅ SUCCESS! Token is valid for {seconds_until_expiry:.0f} more seconds")
-            
+
             if seconds_until_expiry < 300:
                 print("  (Would refresh - expires in less than 5 minutes)")
             else:
@@ -46,7 +48,7 @@ async def test_timezone_fix():
     except TypeError as e:
         print(f"  ❌ FAILED with error: {e}")
         return False
-    
+
     print()
     print("=" * 80)
     print("✅ TIMEZONE FIX VERIFIED!")
@@ -57,29 +59,32 @@ async def test_timezone_fix():
     print("  • Code now uses datetime.now(timezone.utc)")
     print("  • Comparison works without errors")
     print()
-    
+
     return True
 
 
+@pytest.mark.asyncio
 async def test_oauth_service_import():
     """Test that the OAuth service imports correctly with the fix"""
     print("=" * 80)
     print("TESTING OAUTH SERVICE IMPORT")
     print("=" * 80)
     print()
-    
+
     try:
         from services.google_calendar_oauth import GoogleCalendarOAuthService
+
         print("✅ GoogleCalendarOAuthService imported successfully")
-        
+
         service = GoogleCalendarOAuthService()
         print("✅ Service instance created successfully")
         print()
-        
+
         return True
     except Exception as e:
         print(f"❌ Failed to import/create service: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -87,13 +92,13 @@ async def test_oauth_service_import():
 async def main():
     """Run all tests"""
     print()
-    
+
     # Test 1: Timezone fix
     test1_passed = await test_timezone_fix()
-    
+
     # Test 2: Service import
     test2_passed = await test_oauth_service_import()
-    
+
     if test1_passed and test2_passed:
         print("=" * 80)
         print("✅ ALL TESTS PASSED!")
