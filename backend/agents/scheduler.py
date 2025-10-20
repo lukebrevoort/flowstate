@@ -8,7 +8,7 @@ import httpx
 from typing import Dict, Any, Optional, List, Union
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from langchain.agents import tool
+from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 
 logger = logging.getLogger(__name__)
