@@ -1,6 +1,6 @@
 # Import relevant functionality
 from langchain_core.tools import tool
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 import os, sys
 
 # Add the parent directory to the path
