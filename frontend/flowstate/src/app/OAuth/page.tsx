@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 function OAuthContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, isAuthenticated, loading: authLoading } = useAuth();
+  const { isAuthenticated, loading: authLoading } = useAuth();
 
   const [loading, setLoading] = useState({
     notion: false,
@@ -25,6 +25,58 @@ function OAuthContent() {
     success: '',
     error: '',
   });
+
+  const checkNotionStatus = useCallback(async () => {
+    try {
+      // Get auth token from localStorage - should exist if user is authenticated
+      const token = localStorage.getItem('accessToken');
+      if (!token || !isAuthenticated) {
+        console.log('No token or not authenticated, skipping Notion status check');
+        return;
+      }
+
+      const response = await fetch('/api/oauth/notion/status', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setConnectionStatus(prev => ({ ...prev, notion: data.connected }));
+      } else {
+        console.error('Failed to check Notion status:', response.status);
+      }
+    } catch (error) {
+      console.error('Error checking Notion status:', error);
+    }
+  }, [isAuthenticated]);
+
+  const checkGoogleCalendarStatus = useCallback(async () => {
+    try {
+      // Get auth token from localStorage - should exist if user is authenticated
+      const token = localStorage.getItem('accessToken');
+      if (!token || !isAuthenticated) {
+        console.log('No token or not authenticated, skipping Google Calendar status check');
+        return;
+      }
+
+      const response = await fetch('/api/oauth/google-calendar/status', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setConnectionStatus(prev => ({ ...prev, google: data.connected }));
+      } else {
+        console.error('Failed to check Google Calendar status:', response.status);
+      }
+    } catch (error) {
+      console.error('Error checking Google Calendar status:', error);
+    }
+  }, [isAuthenticated]);
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -84,7 +136,7 @@ function OAuthContent() {
         setMessages({ success: '', error: '' });
       }, 5000);
     }
-  }, [searchParams, authLoading, isAuthenticated]);
+  }, [searchParams, authLoading, isAuthenticated, checkNotionStatus, checkGoogleCalendarStatus]);
 
   // Check connection status on mount
   useEffect(() => {
@@ -93,59 +145,7 @@ function OAuthContent() {
     
     checkNotionStatus();
     checkGoogleCalendarStatus();
-  }, [authLoading, isAuthenticated]);
-
-  const checkNotionStatus = async () => {
-    try {
-      // Get auth token from localStorage - should exist if user is authenticated
-      const token = localStorage.getItem('accessToken');
-      if (!token || !isAuthenticated) {
-        console.log('No token or not authenticated, skipping Notion status check');
-        return;
-      }
-
-      const response = await fetch('/api/oauth/notion/status', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setConnectionStatus(prev => ({ ...prev, notion: data.connected }));
-      } else {
-        console.error('Failed to check Notion status:', response.status);
-      }
-    } catch (error) {
-      console.error('Error checking Notion status:', error);
-    }
-  };
-
-  const checkGoogleCalendarStatus = async () => {
-    try {
-      // Get auth token from localStorage - should exist if user is authenticated
-      const token = localStorage.getItem('accessToken');
-      if (!token || !isAuthenticated) {
-        console.log('No token or not authenticated, skipping Google Calendar status check');
-        return;
-      }
-
-      const response = await fetch('/api/oauth/google-calendar/status', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setConnectionStatus(prev => ({ ...prev, google: data.connected }));
-      } else {
-        console.error('Failed to check Google Calendar status:', response.status);
-      }
-    } catch (error) {
-      console.error('Error checking Google Calendar status:', error);
-    }
-  };
+  }, [authLoading, isAuthenticated, checkNotionStatus, checkGoogleCalendarStatus]);
 
   const handleNotionAuth = async () => {
     setLoading(prev => ({ ...prev, notion: true }));
