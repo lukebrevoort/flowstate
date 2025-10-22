@@ -75,12 +75,12 @@ async def get_current_user_async(token: str) -> Optional[Dict[str, Any]]:
 
         db_service = get_database_service()
         user_data = await db_service.get_user_by_id(user_id)
-        
+
         if user_data:
             print(f"✅ User data retrieved from database: {user_data.get('email')}")
         else:
             print(f"❌ No user data found for user_id: {user_id}")
-        
+
         return user_data
 
     except JWTError as e:
@@ -89,6 +89,7 @@ async def get_current_user_async(token: str) -> Optional[Dict[str, Any]]:
     except Exception as e:
         print(f"❌ Error getting current user: {e}")
         import traceback
+
         traceback.print_exc()
         return None
 
