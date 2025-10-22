@@ -43,11 +43,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Helper function to get token from localStorage or cookie
+  const getAuthToken = (): string | null => {
+    // Try localStorage first
+    let token = localStorage.getItem('accessToken');
+    
+    // If not in localStorage, try cookie (useful after OAuth redirect)
+    if (!token) {
+      const cookies = document.cookie.split(';');
+      for (const cookie of cookies) {
+        const [name, value] = cookie.trim().split('=');
+        if (name === 'accessToken') {
+          token = value;
+          // Restore to localStorage for future use
+          if (token) {
+            localStorage.setItem('accessToken', token);
+          }
+          break;
+        }
+      }
+    }
+    
+    return token;
+  };
+
   useEffect(() => {
     // Check if user is already logged in
     const checkAuthStatus = async () => {
       try {
-        const token = localStorage.getItem('accessToken');
+        const token = getAuthToken();
         if (!token) {
           setLoading(false);
           return;
@@ -78,10 +102,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setUser(userData);
         } else {
           localStorage.removeItem('accessToken');
+          // Also clear cookie
+          document.cookie = 'accessToken=; path=/; max-age=0';
         }
       } catch (error) {
         console.error('Authentication error:', error);
         localStorage.removeItem('accessToken');
+        // Also clear cookie
+        document.cookie = 'accessToken=; path=/; max-age=0';
       } finally {
         setLoading(false);
       }
@@ -89,6 +117,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     checkAuthStatus();
   }, []);
+
+  // Helper function to store token in both localStorage and cookie
+  const storeAuthToken = (token: string) => {
+    localStorage.setItem('accessToken', token);
+    // Also store in cookie for OAuth redirect persistence
+    // Cookie expires in 7 days, httpOnly is false (client-side access needed)
+    document.cookie = `accessToken=${token}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
+  };
 
   const login = async (email: string, password: string) => {
     setLoading(true);
@@ -104,8 +140,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           google_calendar_connected: false,
         };
 
-        // Set mock token
-        localStorage.setItem('accessToken', 'mock-test-token-123');
+        // Set mock token in both localStorage and cookie
+        storeAuthToken('mock-test-token-123');
         setUser(mockUser);
         setLoading(false);
         return;
@@ -125,7 +161,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       const data = await response.json();
-      localStorage.setItem('accessToken', data.token);
+      storeAuthToken(data.token);
       setUser(data.user);
     } catch (error) {
       console.error('Login error:', error);
@@ -148,7 +184,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           google_calendar_connected: false,
         };
 
-        localStorage.setItem('accessToken', 'mock-test-token-123');
+        storeAuthToken('mock-test-token-123');
         setUser(mockUser);
         setLoading(false);
         return;
@@ -168,7 +204,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       const data = await response.json();
-      localStorage.setItem('accessToken', data.token);
+      storeAuthToken(data.token);
       setUser(data.user);
     } catch (error) {
       console.error('Signup error:', error);
@@ -181,6 +217,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = async () => {
     try {
       localStorage.removeItem('accessToken');
+      // Also clear the cookie
+      document.cookie = 'accessToken=; path=/; max-age=0';
       setUser(null);
     } catch (error) {
       console.error('Logout error:', error);

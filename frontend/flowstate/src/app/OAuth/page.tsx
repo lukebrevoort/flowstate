@@ -79,17 +79,26 @@ function OAuthContent() {
   }, [isAuthenticated]);
 
   // Redirect to login if not authenticated
+  // BUT: Don't redirect if we're returning from an OAuth flow
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
+      // Check if we're returning from OAuth - if so, give auth time to rehydrate
+      const oauthInProgress = sessionStorage.getItem('oauth_in_progress');
+      const hasOAuthParams = searchParams.get('success') || searchParams.get('error');
+      
+      if (oauthInProgress || hasOAuthParams) {
+        // We're in the middle of OAuth flow - don't redirect yet
+        // Give it a moment to rehydrate auth state
+        console.log('Returning from OAuth flow, waiting for auth rehydration...');
+        return;
+      }
+      
       router.push('/Login?redirect=/OAuth');
     }
-  }, [authLoading, isAuthenticated, router]);
+  }, [authLoading, isAuthenticated, router, searchParams]);
 
   // Check for OAuth return and handle completion
   useEffect(() => {
-    // Wait for auth to load before checking status
-    if (authLoading || !isAuthenticated) return;
-
     const success = searchParams.get('success');
     const error = searchParams.get('error');
     const workspace = searchParams.get('workspace');
@@ -97,15 +106,25 @@ function OAuthContent() {
 
     // Check if we're returning from OAuth flow
     const oauthInProgress = sessionStorage.getItem('oauth_in_progress');
-    if (oauthInProgress) {
-      console.log(`Returning from ${oauthInProgress} OAuth flow`);
-      sessionStorage.removeItem('oauth_in_progress');
+    
+    // If we have OAuth params or flag, process even if not authenticated yet
+    // (auth might still be rehydrating from cookie)
+    if (oauthInProgress || success || error) {
+      if (oauthInProgress) {
+        console.log(`Returning from ${oauthInProgress} OAuth flow`);
+        sessionStorage.removeItem('oauth_in_progress');
+      }
       
-      // Give a moment for the backend to process the OAuth callback
-      setTimeout(() => {
-        checkNotionStatus();
-        checkGoogleCalendarStatus();
-      }, 500);
+      // If authenticated, check status immediately
+      if (isAuthenticated && !authLoading) {
+        // Give a moment for the backend to process the OAuth callback
+        setTimeout(() => {
+          checkNotionStatus();
+          checkGoogleCalendarStatus();
+        }, 500);
+      }
+      // If not yet authenticated but we have OAuth params, 
+      // the status will be checked when auth loads (see next useEffect)
     }
 
     if (success) {
@@ -246,7 +265,14 @@ function OAuthContent() {
     return <OAuthLoading />;
   }
 
-  // If not authenticated, don't render anything (redirect will happen)
+  // Special case: If returning from OAuth with success/error params but not yet authenticated,
+  // show loading briefly to allow auth rehydration
+  const hasOAuthParams = searchParams.get('success') || searchParams.get('error');
+  if (!isAuthenticated && hasOAuthParams) {
+    return <OAuthLoading />;
+  }
+
+  // If not authenticated and no OAuth params, don't render anything (redirect will happen)
   if (!isAuthenticated) {
     return null;
   }
