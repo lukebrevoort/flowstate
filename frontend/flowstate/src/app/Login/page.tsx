@@ -11,7 +11,7 @@ function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login, loading } = useAuth();
-  
+
   const redirectTo = searchParams.get('redirect') || '/Chat';
 
   const [formData, setFormData] = useState({
@@ -271,7 +271,13 @@ function LoginContent() {
 
 export default function Login() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-flowstate-bg"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-flowstate-dark"></div></div>}>
+    <Suspense
+      fallback={
+        <div className='min-h-screen flex items-center justify-center bg-flowstate-bg'>
+          <div className='animate-spin rounded-full h-12 w-12 border-b-2 border-flowstate-dark'></div>
+        </div>
+      }
+    >
       <LoginContent />
     </Suspense>
   );

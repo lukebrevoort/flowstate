@@ -47,7 +47,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const getAuthToken = (): string | null => {
     // Try localStorage first
     let token = localStorage.getItem('accessToken');
-    
+
     // If not in localStorage, try cookie (useful after OAuth redirect)
     if (!token) {
       const cookies = document.cookie.split(';');
@@ -63,7 +63,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
       }
     }
-    
+
     return token;
   };
 
