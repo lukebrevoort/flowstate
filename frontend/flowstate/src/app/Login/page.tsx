@@ -44,7 +44,8 @@ function LoginContent() {
       let message = 'An error occurred during login';
       if (err instanceof Error) {
         if ('code' in err) {
-          switch ((err as any).code) {
+          const errorWithCode = err as Error & { code?: string };
+          switch (errorWithCode.code) {
             case 'INVALID_CREDENTIALS':
               message = 'Incorrect email or password.';
               break;
