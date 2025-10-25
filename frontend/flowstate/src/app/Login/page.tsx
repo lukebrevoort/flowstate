@@ -50,7 +50,8 @@ function LoginContent() {
               message = 'Incorrect email or password.';
               break;
             case 'email_not_confirmed':
-              message = 'Your email has not been verified. Please check your inbox.';
+              message =
+                'Your email has not been verified. Please check your inbox.';
               break;
             default:
               message = err.message;

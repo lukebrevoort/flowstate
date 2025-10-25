@@ -78,15 +78,14 @@ export default function Signup() {
           case 'email_address_invalid':
             message = 'Please enter a valid email address.';
           case 'email_exists':
-            message = 'An account with this email already exists, try Logging In!';
+            message =
+              'An account with this email already exists, try Logging In!';
           case 'invalid_credentials':
             message = 'invalid credientials provided, try again';
-            defualt:
-            message = err.message;
+            defualt: message = err.message;
         }
       }
       setError(message);
-
     }
   };
 
