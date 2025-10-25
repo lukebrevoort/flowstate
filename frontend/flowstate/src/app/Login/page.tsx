@@ -3,13 +3,16 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 
-export default function Login() {
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login, loading } = useAuth();
+
+  const redirectTo = searchParams.get('redirect') || '/Chat';
 
   const [formData, setFormData] = useState({
     email: '',
@@ -35,8 +38,8 @@ export default function Login() {
       // Call login function from AuthContext
       await login(formData.email, formData.password);
 
-      // Redirect to chat page on successful login
-      router.push('/Chat');
+      // Redirect to the page they came from, or to chat page
+      router.push(redirectTo);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : 'An error occurred during login'
@@ -263,5 +266,19 @@ export default function Login() {
         </div>
       </motion.div>
     </div>
+  );
+}
+
+export default function Login() {
+  return (
+    <Suspense
+      fallback={
+        <div className='min-h-screen flex items-center justify-center bg-flowstate-bg'>
+          <div className='animate-spin rounded-full h-12 w-12 border-b-2 border-flowstate-dark'></div>
+        </div>
+      }
+    >
+      <LoginContent />
+    </Suspense>
   );
 }

@@ -94,15 +94,25 @@ class DatabaseService:
                             "google_calendar_connected": profile.get("google_calendar_connected", False),
                         }
                     else:
-                        # If trigger didn't work, we need to handle this differently
-                        print("Warning: Profile not auto-created by trigger, this needs to be fixed in Supabase")
-                        return {
+                        # If trigger didn't work, manually create the profile
+                        print("⚠️  Profile not auto-created by trigger, creating manually...")
+
+                        # Manually create profile using service client
+                        profile_data = {
                             "id": user_id,
                             "name": user_data.name,
                             "email": user_data.email,
                             "notion_connected": False,
                             "google_calendar_connected": False,
                         }
+
+                        try:
+                            await self.supabase_service_client.query("profiles", "POST", data=profile_data)
+                            print("✅ Profile created manually")
+                        except Exception as manual_create_error:
+                            print(f"❌ Failed to create profile manually: {manual_create_error}")
+
+                        return profile_data
                 except Exception as profile_check_error:
                     print(f"Profile verification failed: {profile_check_error}")
                     # Return basic user info even if profile check fails

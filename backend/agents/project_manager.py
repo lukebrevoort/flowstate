@@ -1,11 +1,6 @@
 # Import relevant functionality
-from langchain.agents import tool
-from langchain.agents.format_scratchpad.openai_tools import (
-    format_to_openai_tool_messages,
-)
-from langchain.agents.output_parsers.openai_tools import OpenAIToolsAgentOutputParser
-from langchain.prompts import PromptTemplate
-from notion_client import Client
+from langchain_core.tools import tool
+from langchain_core.prompts import PromptTemplate
 import os, sys
 
 # Add the parent directory to the path

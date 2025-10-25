@@ -14,6 +14,11 @@ concurrency:
   group: frontend-tests-${{ github.ref }}
   cancel-in-progress: true
 
+# Add permissions for the workflow to push changes
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   frontend-tests:
     runs-on: ubuntu-latest
@@ -62,8 +67,27 @@ jobs:
 
       - name: Format check with Prettier
         run: |
-          npx prettier --check "src/**/*.{ts,tsx,js,jsx,json,css,md}"
-          echo "✅ Code formatting is consistent"
+          if ! npx prettier --check "src/**/*.{ts,tsx,js,jsx,json,css,md}"; then
+            echo "⚠️ Formatting issues detected. Applying fixes..."
+            npx prettier --write "src/**/*.{ts,tsx,js,jsx,json,css,md}"
+            echo "✅ Code formatting fixed automatically"
+          else
+            echo "✅ Code formatting is consistent"
+          fi
+
+      - name: Commit formatting changes
+        if: success() && github.event_name == 'push'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add -A
+          if git diff --staged --quiet; then
+            echo "No formatting changes to commit"
+          else
+            git commit -m "style: auto-format code with Prettier [skip ci]"
+            git push origin HEAD:${{ github.ref }}
+            echo "✅ Formatting changes committed and pushed"
+          fi
 
       - name: Run unit tests
         run: |

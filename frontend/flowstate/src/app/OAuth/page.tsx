@@ -1,13 +1,15 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
+import { useAuth } from '@/contexts/AuthContext';
 
 function OAuthContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { isAuthenticated, loading: authLoading } = useAuth();
 
   const [loading, setLoading] = useState({
     notion: false,
@@ -24,12 +26,116 @@ function OAuthContent() {
     error: '',
   });
 
-  // Check for URL parameters on component mount
+  const checkNotionStatus = useCallback(async () => {
+    try {
+      // Get auth token from localStorage - should exist if user is authenticated
+      const token = localStorage.getItem('accessToken');
+      if (!token || !isAuthenticated) {
+        console.log(
+          'No token or not authenticated, skipping Notion status check'
+        );
+        return;
+      }
+
+      const response = await fetch('/api/oauth/notion/status', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setConnectionStatus(prev => ({ ...prev, notion: data.connected }));
+      } else {
+        console.error('Failed to check Notion status:', response.status);
+      }
+    } catch (error) {
+      console.error('Error checking Notion status:', error);
+    }
+  }, [isAuthenticated]);
+
+  const checkGoogleCalendarStatus = useCallback(async () => {
+    try {
+      // Get auth token from localStorage - should exist if user is authenticated
+      const token = localStorage.getItem('accessToken');
+      if (!token || !isAuthenticated) {
+        console.log(
+          'No token or not authenticated, skipping Google Calendar status check'
+        );
+        return;
+      }
+
+      const response = await fetch('/api/oauth/google-calendar/status', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setConnectionStatus(prev => ({ ...prev, google: data.connected }));
+      } else {
+        console.error(
+          'Failed to check Google Calendar status:',
+          response.status
+        );
+      }
+    } catch (error) {
+      console.error('Error checking Google Calendar status:', error);
+    }
+  }, [isAuthenticated]);
+
+  // Redirect to login if not authenticated
+  // BUT: Don't redirect if we're returning from an OAuth flow
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      // Check if we're returning from OAuth - if so, give auth time to rehydrate
+      const oauthInProgress = sessionStorage.getItem('oauth_in_progress');
+      const hasOAuthParams =
+        searchParams.get('success') || searchParams.get('error');
+
+      if (oauthInProgress || hasOAuthParams) {
+        // We're in the middle of OAuth flow - don't redirect yet
+        // Give it a moment to rehydrate auth state
+        console.log(
+          'Returning from OAuth flow, waiting for auth rehydration...'
+        );
+        return;
+      }
+
+      router.push('/Login?redirect=/OAuth');
+    }
+  }, [authLoading, isAuthenticated, router, searchParams]);
+
+  // Check for OAuth return and handle completion
   useEffect(() => {
     const success = searchParams.get('success');
     const error = searchParams.get('error');
     const workspace = searchParams.get('workspace');
     const email = searchParams.get('email');
+
+    // Check if we're returning from OAuth flow
+    const oauthInProgress = sessionStorage.getItem('oauth_in_progress');
+
+    // If we have OAuth params or flag, process even if not authenticated yet
+    // (auth might still be rehydrating from cookie)
+    if (oauthInProgress || success || error) {
+      if (oauthInProgress) {
+        console.log(`Returning from ${oauthInProgress} OAuth flow`);
+        sessionStorage.removeItem('oauth_in_progress');
+      }
+
+      // If authenticated, check status immediately
+      if (isAuthenticated && !authLoading) {
+        // Give a moment for the backend to process the OAuth callback
+        setTimeout(() => {
+          checkNotionStatus();
+          checkGoogleCalendarStatus();
+        }, 500);
+      }
+      // If not yet authenticated but we have OAuth params,
+      // the status will be checked when auth loads (see next useEffect)
+    }
 
     if (success) {
       let successMessage = success;
@@ -59,64 +165,38 @@ function OAuthContent() {
         setMessages({ success: '', error: '' });
       }, 5000);
     }
-  }, [searchParams]);
+  }, [
+    searchParams,
+    authLoading,
+    isAuthenticated,
+    checkNotionStatus,
+    checkGoogleCalendarStatus,
+  ]);
 
   // Check connection status on mount
   useEffect(() => {
+    // Wait for auth to load before checking status
+    if (authLoading || !isAuthenticated) return;
+
     checkNotionStatus();
     checkGoogleCalendarStatus();
-  }, []);
-
-  const checkNotionStatus = async () => {
-    try {
-      // Get auth token from localStorage or your auth context
-      const token = localStorage.getItem('accessToken');
-      if (!token) return;
-
-      const response = await fetch('/api/oauth/notion/status', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setConnectionStatus(prev => ({ ...prev, notion: data.connected }));
-      }
-    } catch (error) {
-      console.error('Error checking Notion status:', error);
-    }
-  };
-
-  const checkGoogleCalendarStatus = async () => {
-    try {
-      // Get auth token from localStorage or your auth context
-      const token = localStorage.getItem('accessToken');
-      if (!token) return;
-
-      const response = await fetch('/api/oauth/google-calendar/status', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setConnectionStatus(prev => ({ ...prev, google: data.connected }));
-      }
-    } catch (error) {
-      console.error('Error checking Google Calendar status:', error);
-    }
-  };
+  }, [
+    authLoading,
+    isAuthenticated,
+    checkNotionStatus,
+    checkGoogleCalendarStatus,
+  ]);
 
   const handleNotionAuth = async () => {
     setLoading(prev => ({ ...prev, notion: true }));
     try {
-      // Get auth token from localStorage or your auth context
+      // Get auth token from localStorage
       const token = localStorage.getItem('accessToken');
-      if (!token) {
+      if (!token || !isAuthenticated) {
         throw new Error('Please log in first');
       }
+
+      console.log('Initiating Notion OAuth with token present');
 
       const response = await fetch('/api/oauth/notion/authorize', {
         headers: {
@@ -125,10 +205,14 @@ function OAuthContent() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to initialize Notion OAuth');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to initialize Notion OAuth');
       }
 
       const data = await response.json();
+
+      // Store a flag to indicate we're in OAuth flow
+      sessionStorage.setItem('oauth_in_progress', 'notion');
 
       // Redirect to Notion's OAuth page
       window.location.href = data.auth_url;
@@ -141,7 +225,6 @@ function OAuthContent() {
             ? error.message
             : 'Failed to connect to Notion',
       }));
-    } finally {
       setLoading(prev => ({ ...prev, notion: false }));
     }
   };
@@ -149,11 +232,13 @@ function OAuthContent() {
   const handleGoogleAuth = async () => {
     setLoading(prev => ({ ...prev, google: true }));
     try {
-      // Get auth token from localStorage or your auth context
+      // Get auth token from localStorage
       const token = localStorage.getItem('accessToken');
-      if (!token) {
+      if (!token || !isAuthenticated) {
         throw new Error('Please log in first');
       }
+
+      console.log('Initiating Google Calendar OAuth with token present');
 
       const response = await fetch('/api/oauth/google-calendar/authorize', {
         headers: {
@@ -162,10 +247,16 @@ function OAuthContent() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to initialize Google Calendar OAuth');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.error || 'Failed to initialize Google Calendar OAuth'
+        );
       }
 
       const data = await response.json();
+
+      // Store a flag to indicate we're in OAuth flow
+      sessionStorage.setItem('oauth_in_progress', 'google');
 
       // Redirect to Google's OAuth page
       window.location.href = data.auth_url;
@@ -178,7 +269,6 @@ function OAuthContent() {
             ? error.message
             : 'Failed to connect to Google Calendar',
       }));
-    } finally {
       setLoading(prev => ({ ...prev, google: false }));
     }
   };
@@ -192,6 +282,24 @@ function OAuthContent() {
     // Redirect to chat page after OAuth setup
     router.push('/Chat');
   };
+
+  // Show loading state while auth is being verified
+  if (authLoading) {
+    return <OAuthLoading />;
+  }
+
+  // Special case: If returning from OAuth with success/error params but not yet authenticated,
+  // show loading briefly to allow auth rehydration
+  const hasOAuthParams =
+    searchParams.get('success') || searchParams.get('error');
+  if (!isAuthenticated && hasOAuthParams) {
+    return <OAuthLoading />;
+  }
+
+  // If not authenticated and no OAuth params, don't render anything (redirect will happen)
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <div className='relative min-h-screen flex justify-center items-center p-5 overflow-hidden bg-flowstate-bg'>
