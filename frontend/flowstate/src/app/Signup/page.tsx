@@ -73,7 +73,9 @@ export default function Signup() {
     } catch (err) {
       let message = 'An error occurred during signup';
       if (err && typeof err === 'object' && 'response' in err) {
-        const errorWithResponse = err as { response?: { data?: { message?: string } } };
+        const errorWithResponse = err as {
+          response?: { data?: { message?: string } };
+        };
         if (errorWithResponse.response?.data?.message) {
           message = errorWithResponse.response.data.message;
         }
