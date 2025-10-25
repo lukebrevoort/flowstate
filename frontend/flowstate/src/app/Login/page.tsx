@@ -46,10 +46,10 @@ function LoginContent() {
         if ('code' in err) {
           const errorWithCode = err as Error & { code?: string };
           switch (errorWithCode.code) {
-            case 'INVALID_CREDENTIALS':
+            case 'invalid_credientials':
               message = 'Incorrect email or password.';
               break;
-            case 'EMAIL_NOT_VERIFIED':
+            case 'email_not_confirmed':
               message = 'Your email has not been verified. Please check your inbox.';
               break;
             default:
