@@ -70,10 +70,14 @@ export default function Signup() {
 
       // Redirect to OAuth page on successful signup
       router.push('/OAuth');
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'An error occurred during signup'
-      );
+    } catch (err: any) {
+      let message = 'An error occurred during signup';
+      if (err?.response?.data?.message) {
+        message = err.response.data.message;
+      } else if (err instanceof Error && err.message) {
+        message = err.message;
+      }
+      setError(message);
     }
   };
 
