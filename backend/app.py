@@ -192,9 +192,7 @@ async def login(user_data: UserLogin):
                 "name": user_data_dict["name"],
                 "email": user_data_dict["email"],
                 "notion_connected": user_data_dict["notion_connected"],
-                "google_calendar_connected": user_data_dict[
-                    "google_calendar_connected"
-                ],
+                "google_calendar_connected": user_data_dict["google_calendar_connected"],
             },
         }
 
@@ -233,9 +231,7 @@ async def notion_authorize(current_user=Depends(get_current_user_dependency)):
 
         return {"auth_url": auth_data["auth_url"], "state": auth_data["state"]}
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to generate Notion auth URL: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to generate Notion auth URL: {str(e)}")
 
 
 @app.get("/api/oauth/notion/callback")
@@ -287,9 +283,7 @@ async def notion_status(current_user=Depends(get_current_user_dependency)):
             return {
                 "connected": test_result["success"],
                 "token_valid": test_result["success"],
-                "user_info": (
-                    test_result.get("data") if test_result["success"] else None
-                ),
+                "user_info": (test_result.get("data") if test_result["success"] else None),
             }
         else:
             return {"connected": False, "token_valid": False, "user_info": None}
@@ -362,9 +356,7 @@ async def google_calendar_callback(code: str, state: str):
                 "user_email": user_info.get("email"),
             }
         else:
-            raise HTTPException(
-                status_code=500, detail="Failed to store Google Calendar tokens"
-            )
+            raise HTTPException(status_code=500, detail="Failed to store Google Calendar tokens")
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"OAuth callback failed: {str(e)}")
@@ -382,15 +374,11 @@ async def google_calendar_status(current_user=Depends(get_current_user_dependenc
 
         if token_data and token_data.get("access_token"):
             # Test the connection
-            test_result = await oauth_service.test_google_calendar_connection(
-                token_data["access_token"]
-            )
+            test_result = await oauth_service.test_google_calendar_connection(token_data["access_token"])
             return {
                 "connected": test_result["success"],
                 "token_valid": test_result["success"],
-                "calendar_info": (
-                    test_result.get("data") if test_result["success"] else None
-                ),
+                "calendar_info": (test_result.get("data") if test_result["success"] else None),
             }
         else:
             return {"connected": False, "token_valid": False, "calendar_info": None}
@@ -424,15 +412,9 @@ async def debug_agent(current_user=Depends(get_current_user_dependency)):
             "success": True,
             "thread_id": test_thread_id,
             "result_type": str(type(result)),
-            "result_keys": (
-                list(result.keys()) if isinstance(result, dict) else "Not a dict"
-            ),
-            "message_count": (
-                len(result.get("messages", [])) if isinstance(result, dict) else 0
-            ),
-            "result_sample": (
-                str(result)[:500] + "..." if len(str(result)) > 500 else str(result)
-            ),
+            "result_keys": (list(result.keys()) if isinstance(result, dict) else "Not a dict"),
+            "message_count": (len(result.get("messages", [])) if isinstance(result, dict) else 0),
+            "result_sample": (str(result)[:500] + "..." if len(str(result)) > 500 else str(result)),
         }
 
     except Exception as e:
@@ -479,9 +461,7 @@ async def chat(request: ChatRequest, current_user=Depends(get_current_user_depen
 
             print(f"Agent result: {result}")
             print(f"Result type: {type(result)}")
-            print(
-                f"Result keys: {result.keys() if isinstance(result, dict) else 'Not a dict'}"
-            )
+            print(f"Result keys: {result.keys() if isinstance(result, dict) else 'Not a dict'}")
 
             # Extract the assistant's response
             if isinstance(result, dict):
@@ -497,9 +477,7 @@ async def chat(request: ChatRequest, current_user=Depends(get_current_user_depen
                         if hasattr(msg, "type") and msg.type == "ai":
                             ai_messages.append(str(msg.content))
                             print(f"Found AI message: {msg.content}")
-                        elif (
-                            hasattr(msg, "__class__") and "AI" in msg.__class__.__name__
-                        ):
+                        elif hasattr(msg, "__class__") and "AI" in msg.__class__.__name__:
                             ai_messages.append(str(msg.content))
                             print(f"Found AI message by class name: {msg.content}")
 
@@ -547,9 +525,7 @@ async def chat(request: ChatRequest, current_user=Depends(get_current_user_depen
 
 
 @app.post("/api/chat/stream")
-async def stream_chat(
-    request: ChatRequest, current_user=Depends(get_current_user_dependency)
-):
+async def stream_chat(request: ChatRequest, current_user=Depends(get_current_user_dependency)):
     user_input = request.message
     session_id = request.session_id or str(uuid.uuid4())
 
@@ -593,9 +569,7 @@ async def stream_chat(
 
 
 @app.post("/api/chat/events")
-async def stream_events_endpoint(
-    request: ChatRequest, current_user=Depends(get_current_user_dependency)
-):
+async def stream_events_endpoint(request: ChatRequest, current_user=Depends(get_current_user_dependency)):
     user_input = request.message
     session_id = request.session_id or str(uuid.uuid4())
 
