@@ -112,21 +112,6 @@ async def signup(user_data: UserCreate):
     from services.database import get_database_service
 
     try:
-        # BACKDOOR FOR TESTING - Allow test signup without database
-        if user_data.email == "test@flowstate.dev" or "test" in user_data.email:
-            access_token = "mock-test-token-123"
-            return {
-                "token": access_token,
-                "token_type": "bearer",
-                "user": {
-                    "id": "test-user-123",
-                    "name": user_data.name,
-                    "email": user_data.email,
-                    "notion_connected": False,
-                    "google_calendar_connected": False,
-                },
-            }
-
         db_service = get_database_service()
 
         # Check if user already exists
@@ -210,7 +195,7 @@ async def login(user_data: UserLogin):
                     "google_calendar_connected": False,
                 },
             }
-        raise HTTPException(status_code=401, detail="Authentication failed")
+        raise HTTPException(status_code=401, detail="Email or Password incorrect, try again")
 
 
 @app.get("/api/auth/user", response_model=UserResponse)

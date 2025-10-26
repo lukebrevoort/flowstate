@@ -146,7 +146,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (data.code) {
           error.code = data.code;
         }
-        console.log('Error was: ' + data);
+        console.log('Error was: ' + data.code);
         throw error;
       }
 
@@ -164,21 +164,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const signup = async (name: string, email: string, password: string) => {
     setLoading(true);
     try {
-      // BACKDOOR FOR TESTING - Allow test signup without database
-      if (email === 'test@flowstate.dev' || email.includes('test')) {
-        const mockUser: User = {
-          id: 'test-user-123',
-          name: name || 'Test User',
-          email: email,
-          notion_connected: false,
-          google_calendar_connected: false,
-        };
-
-        storeAuthToken('mock-test-token-123');
-        setUser(mockUser);
-        setLoading(false);
-        return;
-      }
 
       const response = await fetch('/api/auth/signup', {
         method: 'POST',
@@ -190,14 +175,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (!response.ok) {
         const data = await response.json();
-        const error = new Error(data.error || 'Signup failed') as Error & {
+        const error = new Error(data.detail) as Error & {
           code?: string;
         };
+
         if (data.code) {
           error.code = data.code;
         }
+        console.log('Error was: ' + data.message);
         throw error;
       }
+
 
       const data = await response.json();
       storeAuthToken(data.token);
