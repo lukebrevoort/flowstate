@@ -129,7 +129,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const login = async (email: string, password: string) => {
     setLoading(true);
     try {
-
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
