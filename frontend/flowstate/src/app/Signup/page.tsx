@@ -433,7 +433,13 @@ export default function Signup() {
 
           {/* Error display */}
           {error && (
-            <div className='mt-4 text-red-500 text-center'>{error}</div>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.4, ease: 'easeInOut' }}
+              className='mt-5 bg-red-400 border-red-500 border-4 text-red-50 text-center rounded-full font-alegreya text-[20px]'>
+              {error}
+            </motion.div>
           )}
 
           {/* Development backdoor info */}
