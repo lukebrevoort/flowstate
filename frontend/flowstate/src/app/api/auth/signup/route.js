@@ -37,7 +37,10 @@ export async function POST(request) {
       const errorDetail = data.detail || {};
       return NextResponse.json(
         {
-          message: typeof errorDetail === 'string' ? errorDetail : errorDetail.message || 'Signup failed',
+          message:
+            typeof errorDetail === 'string'
+              ? errorDetail
+              : errorDetail.message || 'Signup failed',
           code: errorDetail.code || 'signup_error',
         },
         { status: response.status }

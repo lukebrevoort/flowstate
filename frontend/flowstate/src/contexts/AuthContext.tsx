@@ -140,7 +140,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (!response.ok) {
         const data = await response.json();
         // API route now returns { message, code } for errors
-        const error = new Error(data.message || 'Authentication failed') as Error & {
+        const error = new Error(
+          data.message || 'Authentication failed'
+        ) as Error & {
           code?: string;
         };
 

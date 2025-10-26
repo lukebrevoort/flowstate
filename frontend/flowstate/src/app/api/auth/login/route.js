@@ -40,7 +40,10 @@ export async function POST(request) {
       const errorDetail = data.detail || {};
       return NextResponse.json(
         {
-          message: typeof errorDetail === 'string' ? errorDetail : errorDetail.message || 'Authentication failed',
+          message:
+            typeof errorDetail === 'string'
+              ? errorDetail
+              : errorDetail.message || 'Authentication failed',
           code: errorDetail.code || 'authentication_error',
         },
         { status: response.status }
