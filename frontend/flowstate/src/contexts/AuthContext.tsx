@@ -146,7 +146,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (data.code) {
           error.code = data.code;
         }
-        console.log('Error was: ' + data)
+        console.log('Error was: ' + data);
         throw error;
       }
 
