@@ -117,7 +117,10 @@ async def signup(user_data: UserCreate):
         # Check if user already exists
         existing_user = await db_service.get_user_by_email(user_data.email)
         if existing_user:
-            raise HTTPException(status_code=400, detail="Email already registered")
+            raise HTTPException(
+                status_code=400,
+                detail={"message": "An account with this email already exists", "code": "email_exists"}
+            )
 
         # Create new user
         new_user_data = await db_service.create_user(user_data)
@@ -127,6 +130,8 @@ async def signup(user_data: UserCreate):
 
         return {"token": access_token, "token_type": "bearer", "user": new_user_data}
 
+    except HTTPException:
+        raise
     except Exception as e:
         if "test" in user_data.email.lower():
             # Fallback for test users if database fails
@@ -141,7 +146,29 @@ async def signup(user_data: UserCreate):
                     "google_calendar_connected": False,
                 },
             }
-        raise HTTPException(status_code=400, detail=str(e))
+        
+        # Parse Supabase error messages
+        error_str = str(e).lower()
+        if "email" in error_str and "invalid" in error_str:
+            raise HTTPException(
+                status_code=400,
+                detail={"message": "Please enter a valid email address", "code": "email_address_invalid"}
+            )
+        elif "user already registered" in error_str or "already exists" in error_str:
+            raise HTTPException(
+                status_code=400,
+                detail={"message": "An account with this email already exists", "code": "email_exists"}
+            )
+        elif "password" in error_str and ("weak" in error_str or "short" in error_str):
+            raise HTTPException(
+                status_code=400,
+                detail={"message": "Password does not meet security requirements", "code": "weak_password"}
+            )
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail={"message": "An error occurred during signup. Please try again.", "code": "signup_error"}
+            )
 
 
 @app.post("/api/auth/login", response_model=dict)
@@ -159,7 +186,7 @@ async def login(user_data: UserLogin):
         if not user_data_dict:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect email or password",
+                detail={"message": "Incorrect email or password", "code": "invalid_credentials"},
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
@@ -181,7 +208,9 @@ async def login(user_data: UserLogin):
             },
         }
 
-    except Exception:
+    except HTTPException:
+        raise
+    except Exception as e:
         if user_data.email == "test@flowstate.dev":
             # Fallback for test user if database fails
             return {
@@ -195,7 +224,24 @@ async def login(user_data: UserLogin):
                     "google_calendar_connected": False,
                 },
             }
-        raise HTTPException(status_code=401, detail="Email or Password incorrect, try again")
+        
+        # Parse Supabase error messages
+        error_str = str(e).lower()
+        if "email not confirmed" in error_str or "email confirmation" in error_str:
+            raise HTTPException(
+                status_code=401,
+                detail={"message": "Your email has not been verified. Please check your inbox.", "code": "email_not_confirmed"}
+            )
+        elif "invalid login credentials" in error_str or "invalid credentials" in error_str:
+            raise HTTPException(
+                status_code=401,
+                detail={"message": "Incorrect email or password", "code": "invalid_credentials"}
+            )
+        else:
+            raise HTTPException(
+                status_code=401,
+                detail={"message": "Authentication failed. Please try again.", "code": "authentication_error"}
+            )
 
 
 @app.get("/api/auth/user", response_model=UserResponse)
