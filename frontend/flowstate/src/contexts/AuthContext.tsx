@@ -157,7 +157,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (!response.ok) {
         const data = await response.json();
-        const error = new Error(data.error || 'Login failed') as Error & { code?: string };
+        const error = new Error(data.error || 'Login failed') as Error & {
+          code?: string;
+        };
         if (data.code) {
           error.code = data.code;
         }
@@ -204,7 +206,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (!response.ok) {
         const data = await response.json();
-        const error = new Error(data.error || 'Signup failed') as Error & { code?: string };
+        const error = new Error(data.error || 'Signup failed') as Error & {
+          code?: string;
+        };
         if (data.code) {
           error.code = data.code;
         }
