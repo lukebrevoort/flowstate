@@ -71,18 +71,22 @@ export default function Signup() {
       // Redirect to OAuth page on successful signup
       router.push('/OAuth');
     } catch (err) {
-      let message = 'An error occurred during login';
+      let message = 'An error occurred during signup';
       if (err instanceof Error) {
         const errorWithCode = err as Error & { code?: string };
         switch (errorWithCode.code) {
           case 'email_address_invalid':
             message = 'Please enter a valid email address.';
+            break;
           case 'email_exists':
             message =
               'An account with this email already exists, try Logging In!';
+            break;
           case 'invalid_credentials':
-            message = 'invalid credientials provided, try again';
-            defualt: message = err.message;
+            message = 'Invalid credentials provided, try again';
+            break;
+          default:
+            message = err.message;
         }
       }
       setError(message);
