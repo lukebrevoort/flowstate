@@ -164,7 +164,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const signup = async (name: string, email: string, password: string) => {
     setLoading(true);
     try {
-
       const response = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: {
@@ -185,7 +184,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.log('Error was: ' + data.message);
         throw error;
       }
-
 
       const data = await response.json();
       storeAuthToken(data.token);
