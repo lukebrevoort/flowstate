@@ -41,16 +41,34 @@ function LoginContent() {
       // Redirect to the page they came from, or to chat page
       router.push(redirectTo);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'An error occurred during login'
-      );
+      let message = 'An error occurred during login';
+      if (err instanceof Error) {
+        if ('code' in err) {
+          const errorWithCode = err as Error & { code?: string };
+          switch (errorWithCode.code) {
+            case 'invalid_credentials':
+              message = 'Incorrect email or password.';
+              break;
+            case 'email_not_confirmed':
+              message =
+                'Your email has not been verified. Please check your inbox.';
+              break;
+            default:
+              message = err.message;
+          }
+        } else {
+          message = err.message;
+        }
+      }
+      setError(message);
     }
   };
-
   return (
     <div className='relative min-h-screen flex justify-center items-center p-5 bg-flowstate-bg overflow-hidden'>
-      {/* Green blur circle - top */}
+      {' '}
+      {/* Green blur circle - top */}{' '}
       <div className='absolute top-[-89px] right-[224px] w-[425px] h-[425px]'>
+        {' '}
         <svg
           width='833'
           height='540'
@@ -58,10 +76,13 @@ function LoginContent() {
           fill='none'
           xmlns='http://www.w3.org/2000/svg'
         >
+          {' '}
           <g filter='url(#filter0_f_48_20)'>
-            <circle cx='416.5' cy='123.5' r='212.5' fill='#9EAB57' />
-          </g>
+            {' '}
+            <circle cx='416.5' cy='123.5' r='212.5' fill='#9EAB57' />{' '}
+          </g>{' '}
           <defs>
+            {' '}
             <filter
               id='filter0_f_48_20'
               x='0'
@@ -71,22 +92,22 @@ function LoginContent() {
               filterUnits='userSpaceOnUse'
               colorInterpolationFilters='sRGB'
             >
-              <feFlood floodOpacity='0' result='BackgroundImageFix' />
+              {' '}
+              <feFlood floodOpacity='0' result='BackgroundImageFix' />{' '}
               <feBlend
                 mode='normal'
                 in='SourceGraphic'
                 in2='BackgroundImageFix'
                 result='shape'
-              />
+              />{' '}
               <feGaussianBlur
                 stdDeviation='102'
                 result='effect1_foregroundBlur_48_20'
-              />
-            </filter>
-          </defs>
-        </svg>
-      </div>
-
+              />{' '}
+            </filter>{' '}
+          </defs>{' '}
+        </svg>{' '}
+      </div>{' '}
       {/* Orange blur circle - bottom */}
       <div className='absolute bottom-[-89px] left-[124px] w-[460px] h-[494px]'>
         <svg
@@ -124,7 +145,6 @@ function LoginContent() {
           </defs>
         </svg>
       </div>
-
       {/* Main container */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -249,18 +269,17 @@ function LoginContent() {
 
               {/* Error display */}
               {error && (
-                <div className='mt-4 text-red-500 text-center'>{error}</div>
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.4, ease: 'easeInOut' }}
+                  className='mt-5 bg-red-400 border-red-500 border-4 text-red-50 text-center rounded-full font-alegreya text-[20px]'
+                >
+                  {error}
+                </motion.div>
               )}
 
               {/* Development backdoor info */}
-              <div className='mt-6 p-4 bg-yellow-100 border-2 border-yellow-400 rounded-lg'>
-                <div className='text-center text-yellow-800'>
-                  <p className='font-bold text-sm mb-2'>🔓 DEVELOPMENT MODE</p>
-                  <p className='text-xs'>Test Credentials:</p>
-                  <p className='text-xs font-mono'>Email: test@flowstate.dev</p>
-                  <p className='text-xs font-mono'>Password: testpass123</p>
-                </div>
-              </div>
             </form>
           </div>
         </div>

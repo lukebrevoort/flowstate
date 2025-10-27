@@ -154,6 +154,7 @@ const AgentLoadingCard: React.FC<AgentLoadingCardProps> = ({
 
   // Safety check - if currentStepData is undefined, don't render
   if (!currentStepData) {
+    // My first comment via vim!
     console.log(
       'currentStepData is undefined, currentStep:',
       currentStep,

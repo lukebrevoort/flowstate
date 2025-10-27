@@ -34,12 +34,28 @@ export async function POST(request) {
 
     const data = await response.json();
 
+    // If error response, ensure it has proper structure
+    if (!response.ok) {
+      // Backend sends error as { detail: { message, code } }
+      const errorDetail = data.detail || {};
+      return NextResponse.json(
+        {
+          message:
+            typeof errorDetail === 'string'
+              ? errorDetail
+              : errorDetail.message || 'Authentication failed',
+          code: errorDetail.code || 'authentication_error',
+        },
+        { status: response.status }
+      );
+    }
+
     // Return the same status code as the backend
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
     console.error('Login error:', error);
     return NextResponse.json(
-      { error: 'An unexpected error occurred' },
+      { message: 'An unexpected error occurred', code: 'network_error' },
       { status: 500 }
     );
   }

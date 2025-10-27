@@ -71,9 +71,25 @@ export default function Signup() {
       // Redirect to OAuth page on successful signup
       router.push('/OAuth');
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'An error occurred during signup'
-      );
+      let message = 'An error occurred during signup';
+      if (err instanceof Error) {
+        const errorWithCode = err as Error & { code?: string };
+        switch (errorWithCode.code) {
+          case 'email_address_invalid':
+            message = 'Please enter a valid email address.';
+            break;
+          case 'email_exists':
+            message =
+              'An account with this email already exists, try Logging In!';
+            break;
+          case 'invalid_credentials':
+            message = 'Invalid credentials provided, try again';
+            break;
+          default:
+            message = err.message;
+        }
+      }
+      setError(message);
     }
   };
 
@@ -421,7 +437,14 @@ export default function Signup() {
 
           {/* Error display */}
           {error && (
-            <div className='mt-4 text-red-500 text-center'>{error}</div>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.4, ease: 'easeInOut' }}
+              className='mt-5 bg-red-400 border-red-500 border-4 text-red-50 text-center rounded-full font-alegreya text-[20px]'
+            >
+              {error}
+            </motion.div>
           )}
 
           {/* Development backdoor info */}

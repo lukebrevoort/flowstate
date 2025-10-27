@@ -129,24 +129,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const login = async (email: string, password: string) => {
     setLoading(true);
     try {
-      // BACKDOOR FOR TESTING - Remove this when database is available
-      if (email === 'test@flowstate.dev' && password === 'testpass123') {
-        // Mock user data for testing
-        const mockUser: User = {
-          id: 'test-user-123',
-          name: 'Test User',
-          email: 'test@flowstate.dev',
-          notion_connected: false,
-          google_calendar_connected: false,
-        };
-
-        // Set mock token in both localStorage and cookie
-        storeAuthToken('mock-test-token-123');
-        setUser(mockUser);
-        setLoading(false);
-        return;
-      }
-
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
@@ -157,7 +139,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || 'Login failed');
+        // API route now returns { message, code } for errors
+        const error = new Error(
+          data.message || 'Authentication failed'
+        ) as Error & {
+          code?: string;
+        };
+
+        if (data.code) {
+          error.code = data.code;
+        }
+        throw error;
       }
 
       const data = await response.json();
@@ -174,22 +166,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const signup = async (name: string, email: string, password: string) => {
     setLoading(true);
     try {
-      // BACKDOOR FOR TESTING - Allow test signup without database
-      if (email === 'test@flowstate.dev' || email.includes('test')) {
-        const mockUser: User = {
-          id: 'test-user-123',
-          name: name || 'Test User',
-          email: email,
-          notion_connected: false,
-          google_calendar_connected: false,
-        };
-
-        storeAuthToken('mock-test-token-123');
-        setUser(mockUser);
-        setLoading(false);
-        return;
-      }
-
       const response = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: {
@@ -200,7 +176,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || 'Signup failed');
+        // API route now returns { message, code } for errors
+        const error = new Error(data.message || 'Signup failed') as Error & {
+          code?: string;
+        };
+
+        if (data.code) {
+          error.code = data.code;
+        }
+        throw error;
       }
 
       const data = await response.json();
