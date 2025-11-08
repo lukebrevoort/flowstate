@@ -15,7 +15,6 @@ import os
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
-
 from langgraph.graph import StateGraph, END, START
 from langgraph.prebuilt import create_react_agent
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -123,9 +122,9 @@ def extract_tool_info(tool_calls, schema_name="Memory"):
                 f"Added content: {change['value']}"
             )
         elif change["type"] == "no_update":
-            result_parts.append(f"Document {change['doc_id']} unchanged:\n" f"{change['planned_edits']}")
+            result_parts.append(f"Document {change['doc_id']} unchanged:\n{change['planned_edits']}")
         else:
-            result_parts.append(f"New {schema_name} created:\n" f"Content: {change['value']}")
+            result_parts.append(f"New {schema_name} created:\nContent: {change['value']}")
 
     return "\n\n".join(result_parts)
 
@@ -228,7 +227,7 @@ class ValidatedChatAnthropic(ChatAnthropic):
 # Initialize the model - Using Sonnet for larger token limits
 # Create both streaming and non-streaming versions
 model = ValidatedChatAnthropic(
-    model="claude-3-5-sonnet-20241022",
+    model="claude-haiku-4-5-20251001",
     temperature=0,
     streaming=False,  # Disable streaming for general use to avoid ResponseNotRead errors
     max_tokens=4096,  # Increase token limit for longer responses
@@ -236,7 +235,7 @@ model = ValidatedChatAnthropic(
 
 # Streaming model for specific streaming operations
 streaming_model = ValidatedChatAnthropic(
-    model="claude-3-5-sonnet-20241022",
+    model="claude-haiku-4-5-20251001",
     temperature=0,
     streaming=True,
     max_tokens=4096,  # Enable streaming only when needed
@@ -254,7 +253,6 @@ profile_extractor = create_extractor(
 
 ## Tools for handing over the messages to the model
 def create_supervisor_handoff_tool(*, agent_name: str, name: str | None, description: str | None) -> BaseTool:
-
     @tool(name, description=description)
     def handoff_to_agent(
         task_description: Annotated[
