@@ -4,7 +4,6 @@ from typing import Any, Optional
 
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import Annotated
-from dataclasses import dataclass
 
 
 @dataclass(kw_only=True)

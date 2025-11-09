@@ -1,5 +1,5 @@
 # Import relevant functionality
-from langchain_core.tools import tool
+from langchain.tools import tool
 from langchain_core.prompts import PromptTemplate
 import os, sys
 

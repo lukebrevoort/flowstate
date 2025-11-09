@@ -16,8 +16,23 @@ import os
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langgraph.graph import StateGraph, END, START
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent, AgentState
 from langgraph.prebuilt import ToolNode, tools_condition
+
+# Monkey patch for LangGraph v1 compatibility with langgraph-supervisor
+# In LangGraph v1, several attributes became private (prefixed with _)
+# This patch makes them accessible as public attributes for backward compatibility
+original_toolnode_init = ToolNode.__init__
+
+def patched_toolnode_init(self, *args, **kwargs):
+    original_toolnode_init(self, *args, **kwargs)
+    # Expose private attributes as public for compatibility
+    if hasattr(self, '_handle_tool_errors') and not hasattr(self, 'handle_tool_errors'):
+        self.handle_tool_errors = self._handle_tool_errors
+    if hasattr(self, '_messages_key') and not hasattr(self, 'messages_key'):
+        self.messages_key = self._messages_key
+
+ToolNode.__init__ = patched_toolnode_init
 
 from agents.project_manager import (
     tools as project_management_tools,
@@ -39,7 +54,7 @@ from anthropic._exceptions import OverloadedError
 import json
 from langgraph_supervisor import create_supervisor
 
-from langchain_core.tools import tool, BaseTool, InjectedToolCallId
+from langchain.tools import tool, BaseTool, InjectedToolCallId
 from langchain_core.messages import ToolMessage
 from langgraph.types import Command
 from langgraph.prebuilt import InjectedState
@@ -356,25 +371,25 @@ Your current instructions are:
 ## Node definitions
 
 
-scheduler_agent = create_react_agent(
+scheduler_agent = create_agent(
     model=model,
     tools=scheduler_tools,
-    prompt=scheduler_prompt + "\nTask Description: {task_description}",
+    system_prompt=scheduler_prompt + "\nTask Description: {task_description}",
     name="Scheduler Agent",
 )
 
 
-project_management_agent = create_react_agent(
+project_management_agent = create_agent(
     model=model,
     tools=project_management_tools,
-    prompt=project_manager_prompt + "\nTask Description: {task_description}",
+    system_prompt=project_manager_prompt + "\nTask Description: {task_description}",
     name="PMAgent",
 )
 
-response_agent = create_react_agent(
+response_agent = create_agent(
     model=model,
     tools=[],
-    prompt=response_prompt + "\nTask Description: {task_description}\nUser Profile: {user_profile}",
+    system_prompt=response_prompt + "\nTask Description: {task_description}\nUser Profile: {user_profile}",
     name="ResponseAgent",
 )
 

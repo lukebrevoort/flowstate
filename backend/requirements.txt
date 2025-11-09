@@ -32,14 +32,13 @@ python-dateutil==2.8.2
 pytz==2023.3
 dateparser==1.1.8
 
-# LangChain and LLM components
-langchain>=0.1.0
-langchain-community>=0.0.29
-langchain-core>=0.2.38
-langchain-anthropic>=0.2.0
-langchain-openai>=0.1.0
-langgraph>=0.3.27
-langgraph-supervisor
+# LangChain 1.0+ and LLM components
+langchain>=1.0.0
+langchain-core>=1.0.0
+langchain-anthropic>=1.0.0
+langchain-openai>=1.0.0
+langgraph>=1.0.0
+langgraph-supervisor>=1.0.0
 
 
 # AI/ML
