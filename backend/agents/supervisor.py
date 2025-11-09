@@ -24,13 +24,15 @@ from langgraph.prebuilt import ToolNode, tools_condition
 # This patch makes them accessible as public attributes for backward compatibility
 original_toolnode_init = ToolNode.__init__
 
+
 def patched_toolnode_init(self, *args, **kwargs):
     original_toolnode_init(self, *args, **kwargs)
     # Expose private attributes as public for compatibility
-    if hasattr(self, '_handle_tool_errors') and not hasattr(self, 'handle_tool_errors'):
+    if hasattr(self, "_handle_tool_errors") and not hasattr(self, "handle_tool_errors"):
         self.handle_tool_errors = self._handle_tool_errors
-    if hasattr(self, '_messages_key') and not hasattr(self, 'messages_key'):
+    if hasattr(self, "_messages_key") and not hasattr(self, "messages_key"):
         self.messages_key = self._messages_key
+
 
 ToolNode.__init__ = patched_toolnode_init
 
