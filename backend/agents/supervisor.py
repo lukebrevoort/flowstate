@@ -677,26 +677,47 @@ async def stream_response(user_input: str, config: dict):
                 for i, msg in enumerate(messages):
                     print(f"   Message[{i}] type: {type(msg).__name__}, preview: {str(msg)[:100]}...")
 
-                # Find the last non-ToolMessage in the array
-                # messages[-1] is often the "Transferred back" ToolMessage
-                # messages[-2] should contain the actual agent response (JSX for ResponseAgent)
-                from langchain_core.messages import ToolMessage as ToolMessageType
+                # Find the appropriate message based on node type
+                from langchain_core.messages import ToolMessage as ToolMessageType, AIMessage as AIMessageType
 
                 last_message = None
-                for msg in reversed(messages):
-                    if not isinstance(msg, ToolMessageType):
-                        last_message = msg
-                        print(f"✅ Found non-ToolMessage: {type(last_message).__name__}")
-                        break
+
+                # Special handling for ResponseAgent - find the message with actual JSX content
+                if "ResponseAgent" in actual_node_name or "Response Agent" in actual_node_name:
+                    print("🎯 ResponseAgent detected - looking for JSX content message...")
+                    # Loop in reverse to find the last AIMessage that:
+                    # 1. Is not a ToolMessage
+                    # 2. Does NOT have tool_calls (transfer messages have tool_calls)
+                    # 3. Has substantial content (JSX will be long)
+                    for msg in reversed(messages):
+                        if isinstance(msg, AIMessageType) and not isinstance(msg, ToolMessageType):
+                            # Check if this is a transfer message (has tool_calls) or actual content
+                            has_tool_calls = hasattr(msg, "tool_calls") and msg.tool_calls
+                            content_length = len(str(msg.content)) if hasattr(msg, "content") else 0
+
+                            print(f"   Checking AIMessage: tool_calls={has_tool_calls}, content_length={content_length}")
+
+                            # We want the message WITHOUT tool_calls (actual JSX response)
+                            if not has_tool_calls and content_length > 50:
+                                last_message = msg
+                                print(f"✅ Found ResponseAgent JSX message: {content_length} chars")
+                                break
+                else:
+                    # For other agents, just find the last non-ToolMessage
+                    for msg in reversed(messages):
+                        if not isinstance(msg, ToolMessageType):
+                            last_message = msg
+                            print(f"✅ Found non-ToolMessage: {type(last_message).__name__}")
+                            break
 
                 if not last_message:
-                    print(f"⚠️ No non-ToolMessage found in node: {actual_node_name}")
+                    print(f"⚠️ No appropriate message found in node: {actual_node_name}")
                     continue
 
                 print(f"💬 Selected Message Type: {type(last_message).__name__}")
-                print(f"💬 Selected Message Preview: {str(last_message)[:200]}...")  # First 200 chars
-
-                # Handle supervisor routing decisions
+                print(
+                    f"💬 Selected Message Preview: {str(last_message)[:200]}..."
+                )  # First 200 chars                # Handle supervisor routing decisions
                 if "Orchestrator Supervisor" in actual_node_name or "supervisor" in actual_node_name.lower():
                     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
                         for tool_call in last_message.tool_calls:
