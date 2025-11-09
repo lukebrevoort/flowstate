@@ -605,15 +605,21 @@ async def stream_response(user_input: str, config: dict):
             subgraphs=True,  # Include subgraph updates
         ):
             try:
-                print(f"Received chunk: {chunk}")  # Debug log
+                print(f"\n{'='*80}")
+                print(f"🔍 RAW CHUNK: {chunk}")
+                print(f"🔍 CHUNK TYPE: {type(chunk)}")
+                print(f"🔍 CHUNK LENGTH: {len(chunk) if hasattr(chunk, '__len__') else 'N/A'}")
+                print(f"{'='*80}\n")
 
                 # Handle LangGraph v1 streaming format
                 # Chunk is a tuple: (node_identifier, node_update)
                 if not isinstance(chunk, (tuple, list)) or len(chunk) < 2:
-                    print(f"Skipping malformed chunk: {chunk}")
+                    print(f"❌ Skipping malformed chunk: {chunk}")
                     continue
 
                 node_identifier, node_update = chunk[0], chunk[1]
+                print(f"🎯 Node Identifier: {node_identifier}")
+                print(f"📦 Node Update Keys: {node_update.keys() if isinstance(node_update, dict) else type(node_update)}")
 
                 # Extract actual node name from various formats
                 actual_node_name = None
@@ -666,9 +672,29 @@ async def stream_response(user_input: str, config: dict):
                 if not messages:
                     continue
 
-                last_message = messages[-1] if messages else None
+                # Debug: Print all messages to understand the sequence
+                print(f"📨 Total messages in node '{actual_node_name}': {len(messages)}")
+                for i, msg in enumerate(messages):
+                    print(f"   Message[{i}] type: {type(msg).__name__}, preview: {str(msg)[:100]}...")
+
+                # Find the last non-ToolMessage in the array
+                # messages[-1] is often the "Transferred back" ToolMessage
+                # messages[-2] should contain the actual agent response (JSX for ResponseAgent)
+                from langchain_core.messages import ToolMessage as ToolMessageType
+
+                last_message = None
+                for msg in reversed(messages):
+                    if not isinstance(msg, ToolMessageType):
+                        last_message = msg
+                        print(f"✅ Found non-ToolMessage: {type(last_message).__name__}")
+                        break
+
                 if not last_message:
+                    print(f"⚠️ No non-ToolMessage found in node: {actual_node_name}")
                     continue
+
+                print(f"💬 Selected Message Type: {type(last_message).__name__}")
+                print(f"💬 Selected Message Preview: {str(last_message)[:200]}...")  # First 200 chars
 
                 # Handle supervisor routing decisions
                 if "Orchestrator Supervisor" in actual_node_name or "supervisor" in actual_node_name.lower():
@@ -788,8 +814,10 @@ async def stream_response(user_input: str, config: dict):
                         }
 
                 # Handle Response Agent
-                elif "ResponseAgent" in actual_node_name:
+                elif "ResponseAgent" in actual_node_name or "Response Agent" in actual_node_name:
+                    print(f"📝 Response Agent detected! Message type: {type(last_message)}")
                     if hasattr(last_message, "content") and last_message.content:
+                        print(f"📝 Response Agent has content: {len(str(last_message.content))} characters")
                         # Show completion step
                         yield {
                             "type": "completion",
