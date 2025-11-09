@@ -334,25 +334,23 @@ response_agent = create_agent(
     system_prompt=response_prompt,
 )
 
+
 # Wrap sub-agents as tools for the supervisor
 @tool
 async def schedule_task(request: str, runtime: ToolRuntime) -> str:
     """Handle calendar and scheduling related tasks.
-    
+
     Use this when the user wants to:
     - Check their calendar
     - Get upcoming events
     - Schedule new events
     - Manage calendar-related tasks
-    
+
     Input: Natural language request about calendar/scheduling
     """
     # Get original user message for context
-    original_message = next(
-        (msg for msg in runtime.state["messages"] if msg.type == "human"),
-        None
-    )
-    
+    original_message = next((msg for msg in runtime.state["messages"] if msg.type == "human"), None)
+
     # Create context-aware prompt for sub-agent
     if original_message:
         prompt = (
@@ -363,34 +361,29 @@ async def schedule_task(request: str, runtime: ToolRuntime) -> str:
         )
     else:
         prompt = request
-    
-    result = await scheduler_agent.ainvoke({
-        "messages": [{"role": "user", "content": prompt}]
-    })
-    
+
+    result = await scheduler_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]})
+
     # Return the final response from the agent
     final_message = result["messages"][-1]
-    return final_message.content if hasattr(final_message, 'content') else str(final_message)
+    return final_message.content if hasattr(final_message, "content") else str(final_message)
 
 
 @tool
 async def manage_assignments(request: str, runtime: ToolRuntime) -> str:
     """Handle assignment and task management via Notion.
-    
+
     Use this when the user wants to:
     - Check their assignments
     - Retrieve Notion tasks
     - Get assignment details
     - Manage project-related tasks
-    
+
     Input: Natural language request about assignments/tasks
     """
     # Get original user message for context
-    original_message = next(
-        (msg for msg in runtime.state["messages"] if msg.type == "human"),
-        None
-    )
-    
+    original_message = next((msg for msg in runtime.state["messages"] if msg.type == "human"), None)
+
     # Create context-aware prompt for sub-agent
     if original_message:
         prompt = (
@@ -401,36 +394,31 @@ async def manage_assignments(request: str, runtime: ToolRuntime) -> str:
         )
     else:
         prompt = request
-    
-    result = await project_management_agent.ainvoke({
-        "messages": [{"role": "user", "content": prompt}]
-    })
-    
+
+    result = await project_management_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]})
+
     # Return the final response from the agent
     final_message = result["messages"][-1]
-    return final_message.content if hasattr(final_message, 'content') else str(final_message)
+    return final_message.content if hasattr(final_message, "content") else str(final_message)
 
 
 @tool
 async def format_response(request: str, runtime: ToolRuntime) -> str:
     """Format the final response for the user in JSX format.
-    
+
     Use this when you have gathered all necessary information and need to:
     - Present results to the user
     - Format data in JSX for the frontend
     - Provide the final user-facing response
-    
+
     Input: All gathered information and context for formatting
     """
     # Get original user message and all context
-    original_message = next(
-        (msg for msg in runtime.state["messages"] if msg.type == "human"),
-        None
-    )
-    
+    original_message = next((msg for msg in runtime.state["messages"] if msg.type == "human"), None)
+
     # Get user profile if available
     user_profile = runtime.state.get("user_profile", "")
-    
+
     # Create comprehensive prompt with all context
     if original_message:
         prompt = (
@@ -442,14 +430,12 @@ async def format_response(request: str, runtime: ToolRuntime) -> str:
         )
     else:
         prompt = f"{request}\n\nUser Profile:\n{user_profile}\n\nFormat in JSX for the frontend."
-    
-    result = await response_agent.ainvoke({
-        "messages": [{"role": "user", "content": prompt}]
-    })
-    
+
+    result = await response_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]})
+
     # Return the final JSX response
     final_message = result["messages"][-1]
-    return final_message.content if hasattr(final_message, 'content') else str(final_message)
+    return final_message.content if hasattr(final_message, "content") else str(final_message)
 
 
 # Create supervisor agent (orchestrator)
@@ -881,15 +867,27 @@ async def stream_response(user_input: str, config: dict):
                             "timestamp": datetime.now().isoformat(),
                         }
 
-                # Handle Response Agent
-                elif "ResponseAgent" in actual_node_name or "Response Agent" in actual_node_name:
-                    print(f"📝 Response Agent detected! Message type: {type(last_message)}")
+                # Handle Response Agent OR any node with JSX content
+                # Check if this is a response agent OR if the message contains JSX
+                is_response_agent = "ResponseAgent" in actual_node_name or "Response Agent" in actual_node_name
+                has_jsx_content = False
+
+                if hasattr(last_message, "content") and last_message.content:
+                    content_str = str(last_message.content)
+                    # Check for JSX markers
+                    has_jsx_content = ("<>" in content_str or "<Typography" in content_str or "<div" in content_str) and len(
+                        content_str
+                    ) > 200
+
+                if is_response_agent or has_jsx_content:
+                    print(f"📝 JSX Response detected! Node: {actual_node_name}, Message type: {type(last_message)}")
                     if hasattr(last_message, "content") and last_message.content:
-                        print(f"📝 Response Agent has content: {len(str(last_message.content))} characters")
+                        print(f"📝 Response has content: {len(str(last_message.content))} characters")
+
                         # Show completion step
                         yield {
                             "type": "completion",
-                            "agent": "Response Agent",
+                            "agent": "Response Agent" if is_response_agent else actual_node_name,
                             "message": "Formatting response for display...",
                             "timestamp": datetime.now().isoformat(),
                         }
@@ -897,8 +895,20 @@ async def stream_response(user_input: str, config: dict):
                         # Yield the final response for the chat
                         final_response_content = str(last_message.content)
 
+                        # Strip markdown code fences if present (```jsx ... ```)
+                        if final_response_content.startswith("```"):
+                            # Remove opening fence
+                            lines = final_response_content.split("\n")
+                            if lines[0].strip().startswith("```"):
+                                lines = lines[1:]
+                            # Remove closing fence
+                            if lines and lines[-1].strip() == "```":
+                                lines = lines[:-1]
+                            final_response_content = "\n".join(lines)
+                            print("🔧 Stripped markdown code fences from JSX")
+
                         # Log response length for debugging
-                        print(f"Final response length: {len(final_response_content)} characters")
+                        print(f"📊 Final response length: {len(final_response_content)} characters")
 
                         # Check if JSX response appears complete
                         if "<>" in final_response_content or "<Typography" in final_response_content:
@@ -916,10 +926,13 @@ async def stream_response(user_input: str, config: dict):
                                 )
                                 # Add completion warning
                                 final_response_content += "\n<!-- JSX Response may be incomplete -->"
+                            else:
+                                print(f"✅ JSX validation passed")
 
+                        print(f"🎉 Yielding final_response with {len(final_response_content)} characters of JSX")
                         yield {
                             "type": "final_response",
-                            "agent": "Response Agent",
+                            "agent": "Response Agent" if is_response_agent else actual_node_name,
                             "message": "Response ready",
                             "content": final_response_content,
                             "timestamp": datetime.now().isoformat(),
