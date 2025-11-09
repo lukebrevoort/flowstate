@@ -607,29 +607,59 @@ async def stream_response(user_input: str, config: dict):
             try:
                 print(f"Received chunk: {chunk}")  # Debug log
 
-                # Safely handle chunk structure
+                # Handle LangGraph v1 streaming format
+                # Chunk is a tuple: (node_identifier, node_update)
                 if not isinstance(chunk, (tuple, list)) or len(chunk) < 2:
                     print(f"Skipping malformed chunk: {chunk}")
                     continue
 
-                node_name, node_update = chunk[0], chunk[1]
+                node_identifier, node_update = chunk[0], chunk[1]
 
-                if node_name == "__start__" or node_name == "__end__":
+                # Extract actual node name from various formats
+                actual_node_name = None
+                
+                # LangGraph v1 format: node_identifier can be:
+                # 1. Empty tuple () - skip these
+                # 2. Tuple with node path like ('Orchestrator Supervisor:uuid',)
+                # 3. Plain string (legacy)
+                if isinstance(node_identifier, tuple):
+                    if len(node_identifier) == 0:
+                        # Empty tuple - check node_update keys for node name
+                        if isinstance(node_update, dict):
+                            # Skip __start__ and __end__ nodes
+                            for key in node_update.keys():
+                                if key not in ["__start__", "__end__"]:
+                                    actual_node_name = key
+                                    break
+                    else:
+                        # Extract node name from tuple, removing UUID suffix
+                        node_str = str(node_identifier[0])
+                        # Remove UUID suffix if present (format: "NodeName:uuid")
+                        actual_node_name = node_str.split(':')[0] if ':' in node_str else node_str
+                elif isinstance(node_identifier, str):
+                    actual_node_name = node_identifier
+                
+                if not actual_node_name or actual_node_name in ["__start__", "__end__"]:
                     continue
-
-                # Safely extract node name
-                if isinstance(node_name, tuple):
-                    actual_node_name = str(node_name[0]) if len(node_name) > 0 else "Unknown"
-                else:
-                    actual_node_name = str(node_name)
 
                 print(f"Processing node: {actual_node_name}")  # Debug log
 
-                # Safely extract messages from node_update
+                # Extract messages from node_update (handle both v1 formats)
                 messages = []
                 if isinstance(node_update, dict):
+                    # Format 1: {"agent": {"messages": [...]}} - used by supervisor
                     if "agent" in node_update and isinstance(node_update["agent"], dict):
                         messages = node_update["agent"].get("messages", [])
+                    # Format 2: {"model": {"messages": [...]}} - LangGraph v1 for create_agent nodes
+                    elif "model" in node_update and isinstance(node_update["model"], dict):
+                        messages = node_update["model"].get("messages", [])
+                    # Format 3: {"tools": {"messages": [...]}} - tool node responses
+                    elif "tools" in node_update and isinstance(node_update["tools"], dict):
+                        messages = node_update["tools"].get("messages", [])
+                    # Format 4: {"NodeName": {"messages": [...]}} - named node updates
+                    elif actual_node_name in node_update and isinstance(node_update[actual_node_name], dict):
+                        messages = node_update[actual_node_name].get("messages", [])
+                    # Format 5: Direct messages key
                     else:
                         messages = node_update.get("messages", [])
 
@@ -662,6 +692,14 @@ async def stream_response(user_input: str, config: dict):
                                     "message": f"Routing request to {target_agent}...",
                                     "timestamp": datetime.now().isoformat(),
                                 }
+                    # If supervisor responds directly without routing, yield that too
+                    elif hasattr(last_message, "content") and last_message.content:
+                        yield {
+                            "type": "response",
+                            "agent": "Main Agent",
+                            "message": "Processing your request...",
+                            "timestamp": datetime.now().isoformat(),
+                        }
 
                 # Handle Scheduler Agent actions
                 elif "Scheduler Agent" in actual_node_name:
