@@ -16,25 +16,8 @@ import os
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langgraph.graph import StateGraph, END, START
-from langchain.agents import create_agent, AgentState
+from langchain.agents import create_agent
 from langgraph.prebuilt import ToolNode, tools_condition
-
-# Monkey patch for LangGraph v1 compatibility with langgraph-supervisor
-# In LangGraph v1, several attributes became private (prefixed with _)
-# This patch makes them accessible as public attributes for backward compatibility
-original_toolnode_init = ToolNode.__init__
-
-
-def patched_toolnode_init(self, *args, **kwargs):
-    original_toolnode_init(self, *args, **kwargs)
-    # Expose private attributes as public for compatibility
-    if hasattr(self, "_handle_tool_errors") and not hasattr(self, "handle_tool_errors"):
-        self.handle_tool_errors = self._handle_tool_errors
-    if hasattr(self, "_messages_key") and not hasattr(self, "messages_key"):
-        self.messages_key = self._messages_key
-
-
-ToolNode.__init__ = patched_toolnode_init
 
 from agents.project_manager import (
     tools as project_management_tools,
@@ -54,9 +37,8 @@ from tenacity import (
 )
 from anthropic._exceptions import OverloadedError
 import json
-from langgraph_supervisor import create_supervisor
 
-from langchain.tools import tool, BaseTool, InjectedToolCallId
+from langchain.tools import tool, BaseTool, InjectedToolCallId, ToolRuntime
 from langchain_core.messages import ToolMessage
 from langgraph.types import Command
 from langgraph.prebuilt import InjectedState
@@ -70,7 +52,6 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
-from langgraph_supervisor.handoff import create_forward_message_tool
 from langgraph.graph.message import add_messages
 
 import agents.configuration as configuration
@@ -268,44 +249,6 @@ profile_extractor = create_extractor(
 ## Prompts
 
 
-## Tools for handing over the messages to the model
-def create_supervisor_handoff_tool(*, agent_name: str, name: str | None, description: str | None) -> BaseTool:
-    @tool(name, description=description)
-    def handoff_to_agent(
-        task_description: Annotated[
-            str,
-            "Provide a detailed task description for the next agent, including any relevant context or information needed for this specific agent to complete their tasks.",
-        ],
-        state: Annotated[MessagesState, InjectedState],
-        tool_call_id: Annotated[str, InjectedToolCallId],
-    ):
-        # Ensure the content is never empty
-        content = f"Successfully transferred to {agent_name}" if agent_name else "Handoff completed"
-
-        tool_message = ToolMessage(
-            content=content,  # Non-empty content
-            name=name,
-            tool_call_id=tool_call_id,
-        )
-        messages = state["messages"]
-
-        # Ensure the message has valid content before adding it
-        if not tool_message.content:
-            tool_message.content = f"Handoff to {agent_name}"
-
-        return Command(
-            goto=agent_name,
-            graph=Command.PARENT,
-            update={
-                "messages": messages + [tool_message],
-                "active_agent": agent_name,
-                "task_description": task_description,
-            },
-        )
-
-    return handoff_to_agent
-
-
 # Chatbot instruction for choosing what to update and what tools to call
 MODEL_SYSTEM_MESSAGE = """
 You are a supervisor agent responsible for orchestrating user interactions through specialized sub-agents. Your role is to coordinate between agents and ensure every user interaction concludes with a properly formatted response.
@@ -372,28 +315,141 @@ Your current instructions are:
 
 ## Node definitions
 
-
+# Create sub-agents using langchain.agents.create_agent
 scheduler_agent = create_agent(
     model=model,
     tools=scheduler_tools,
-    system_prompt=scheduler_prompt + "\nTask Description: {task_description}",
-    name="Scheduler Agent",
+    system_prompt=scheduler_prompt,
 )
-
 
 project_management_agent = create_agent(
     model=model,
     tools=project_management_tools,
-    system_prompt=project_manager_prompt + "\nTask Description: {task_description}",
-    name="PMAgent",
+    system_prompt=project_manager_prompt,
 )
 
 response_agent = create_agent(
     model=model,
     tools=[],
-    system_prompt=response_prompt + "\nTask Description: {task_description}\nUser Profile: {user_profile}",
-    name="ResponseAgent",
+    system_prompt=response_prompt,
 )
+
+# Wrap sub-agents as tools for the supervisor
+@tool
+async def schedule_task(request: str, runtime: ToolRuntime) -> str:
+    """Handle calendar and scheduling related tasks.
+    
+    Use this when the user wants to:
+    - Check their calendar
+    - Get upcoming events
+    - Schedule new events
+    - Manage calendar-related tasks
+    
+    Input: Natural language request about calendar/scheduling
+    """
+    # Get original user message for context
+    original_message = next(
+        (msg for msg in runtime.state["messages"] if msg.type == "human"),
+        None
+    )
+    
+    # Create context-aware prompt for sub-agent
+    if original_message:
+        prompt = (
+            f"You are assisting with the following user inquiry:\n\n"
+            f"{original_message.content}\n\n"
+            f"You are tasked with the following sub-request:\n\n"
+            f"{request}"
+        )
+    else:
+        prompt = request
+    
+    result = await scheduler_agent.ainvoke({
+        "messages": [{"role": "user", "content": prompt}]
+    })
+    
+    # Return the final response from the agent
+    final_message = result["messages"][-1]
+    return final_message.content if hasattr(final_message, 'content') else str(final_message)
+
+
+@tool
+async def manage_assignments(request: str, runtime: ToolRuntime) -> str:
+    """Handle assignment and task management via Notion.
+    
+    Use this when the user wants to:
+    - Check their assignments
+    - Retrieve Notion tasks
+    - Get assignment details
+    - Manage project-related tasks
+    
+    Input: Natural language request about assignments/tasks
+    """
+    # Get original user message for context
+    original_message = next(
+        (msg for msg in runtime.state["messages"] if msg.type == "human"),
+        None
+    )
+    
+    # Create context-aware prompt for sub-agent
+    if original_message:
+        prompt = (
+            f"You are assisting with the following user inquiry:\n\n"
+            f"{original_message.content}\n\n"
+            f"You are tasked with the following sub-request:\n\n"
+            f"{request}"
+        )
+    else:
+        prompt = request
+    
+    result = await project_management_agent.ainvoke({
+        "messages": [{"role": "user", "content": prompt}]
+    })
+    
+    # Return the final response from the agent
+    final_message = result["messages"][-1]
+    return final_message.content if hasattr(final_message, 'content') else str(final_message)
+
+
+@tool
+async def format_response(request: str, runtime: ToolRuntime) -> str:
+    """Format the final response for the user in JSX format.
+    
+    Use this when you have gathered all necessary information and need to:
+    - Present results to the user
+    - Format data in JSX for the frontend
+    - Provide the final user-facing response
+    
+    Input: All gathered information and context for formatting
+    """
+    # Get original user message and all context
+    original_message = next(
+        (msg for msg in runtime.state["messages"] if msg.type == "human"),
+        None
+    )
+    
+    # Get user profile if available
+    user_profile = runtime.state.get("user_profile", "")
+    
+    # Create comprehensive prompt with all context
+    if original_message:
+        prompt = (
+            f"You are assisting with the following user inquiry:\n\n"
+            f"{original_message.content}\n\n"
+            f"User Profile:\n{user_profile}\n\n"
+            f"Information gathered:\n\n{request}\n\n"
+            f"Format this information in JSX for the frontend."
+        )
+    else:
+        prompt = f"{request}\n\nUser Profile:\n{user_profile}\n\nFormat in JSX for the frontend."
+    
+    result = await response_agent.ainvoke({
+        "messages": [{"role": "user", "content": prompt}]
+    })
+    
+    # Return the final JSX response
+    final_message = result["messages"][-1]
+    return final_message.content if hasattr(final_message, 'content') else str(final_message)
 
 
 # Create supervisor agent (orchestrator)
@@ -496,38 +552,29 @@ def update_instructions(state: MessagesState, config: RunnableConfig, store: Bas
     }
 
 
-# Define proper handoff tools for each agent
-scheduler_handoff = create_supervisor_handoff_tool(
-    agent_name="Scheduler Agent",
-    name="Scheduler-Handoff-Tool",
-    description="Handoff to the Scheduler Agent for calendar and scheduling related tasks",
-)
+# Create the supervisor agent using native LangChain v1
+SUPERVISOR_SYSTEM_PROMPT = """You are a helpful personal assistant orchestrator.
 
-project_manager_handoff = create_supervisor_handoff_tool(
-    agent_name="PMAgent",
-    name="Project-Management-Handoff-Tool",
-    description="Handoff to the Project Management Agent for assignment and task related actions",
-)
+You coordinate specialized agents to handle user requests:
+- schedule_task: For calendar and scheduling operations
+- manage_assignments: For Notion assignment and task management  
+- format_response: For formatting final responses in JSX
 
-response_agent_handoff = create_supervisor_handoff_tool(
-    agent_name="ResponseAgent",
-    name="Response-Agent-Handoff-Tool",
-    description="Handoff to the Response Agent for final responses and user interaction once all information has been gathered",
-)
+Break down user requests into appropriate tool calls. When a request involves multiple actions, use tools in sequence.
 
+CRITICAL WORKFLOW:
+1. If the user asks about calendar/events, use schedule_task
+2. If the user asks about assignments/tasks, use manage_assignments
+3. Once you have all necessary information, use format_response to present results
 
-# Modify the orchestrator_agent definition
-orchestrator_agent = create_supervisor(
-    [scheduler_agent, project_management_agent, response_agent],
+Remember: Always gather all required data BEFORE calling format_response.
+"""
+
+# Create the supervisor agent with the sub-agent tools
+supervisor_agent = create_agent(
     model=model,
-    tools=[
-        scheduler_handoff,
-        project_manager_handoff,
-        response_agent_handoff,
-    ],
-    output_mode="full_history",
-    supervisor_name="Orchestrator Supervisor",
-    prompt=MODEL_SYSTEM_MESSAGE,
+    tools=[schedule_task, manage_assignments, format_response],
+    system_prompt=SUPERVISOR_SYSTEM_PROMPT + "\n\n" + MODEL_SYSTEM_MESSAGE,
 )
 
 
@@ -584,8 +631,8 @@ def update_user_instructions(
     return {"messages": [ToolMessage(content="Instructions update initiated", tool_call_id=tool_call_id)]}
 
 
-# Compile the graph
-app = orchestrator_agent.compile(name="Orchestrator Supervisor")
+# Compile the graph - use the supervisor_agent directly
+app = supervisor_agent
 
 
 async def stream_response(user_input: str, config: dict):
