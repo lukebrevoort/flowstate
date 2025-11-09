@@ -617,7 +617,7 @@ async def stream_response(user_input: str, config: dict):
 
                 # Extract actual node name from various formats
                 actual_node_name = None
-                
+
                 # LangGraph v1 format: node_identifier can be:
                 # 1. Empty tuple () - skip these
                 # 2. Tuple with node path like ('Orchestrator Supervisor:uuid',)
@@ -635,10 +635,10 @@ async def stream_response(user_input: str, config: dict):
                         # Extract node name from tuple, removing UUID suffix
                         node_str = str(node_identifier[0])
                         # Remove UUID suffix if present (format: "NodeName:uuid")
-                        actual_node_name = node_str.split(':')[0] if ':' in node_str else node_str
+                        actual_node_name = node_str.split(":")[0] if ":" in node_str else node_str
                 elif isinstance(node_identifier, str):
                     actual_node_name = node_identifier
-                
+
                 if not actual_node_name or actual_node_name in ["__start__", "__end__"]:
                     continue
 
