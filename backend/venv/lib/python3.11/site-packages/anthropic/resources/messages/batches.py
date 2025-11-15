@@ -7,7 +7,7 @@ from typing import Iterable
 import httpx
 
 from ... import _legacy_response
-from ..._types import NOT_GIVEN, Body, Query, Headers, NotGiven
+from ..._types import Body, Omit, Query, Headers, NotGiven, omit, not_given
 from ..._utils import maybe_transform, async_maybe_transform
 from ..._compat import cached_property
 from ..._resource import SyncAPIResource, AsyncAPIResource
@@ -53,7 +53,7 @@ class Batches(SyncAPIResource):
         extra_headers: Headers | None = None,
         extra_query: Query | None = None,
         extra_body: Body | None = None,
-        timeout: float | httpx.Timeout | None | NotGiven = NOT_GIVEN,
+        timeout: float | httpx.Timeout | None | NotGiven = not_given,
     ) -> MessageBatch:
         """
         Send a batch of Message creation requests.
@@ -63,7 +63,7 @@ class Batches(SyncAPIResource):
         can take up to 24 hours to complete.
 
         Learn more about the Message Batches API in our
-        [user guide](/en/docs/build-with-claude/batch-processing)
+        [user guide](https://docs.claude.com/en/docs/build-with-claude/batch-processing)
 
         Args:
           requests: List of requests for prompt completion. Each is an individual request to create
@@ -95,7 +95,7 @@ class Batches(SyncAPIResource):
         extra_headers: Headers | None = None,
         extra_query: Query | None = None,
         extra_body: Body | None = None,
-        timeout: float | httpx.Timeout | None | NotGiven = NOT_GIVEN,
+        timeout: float | httpx.Timeout | None | NotGiven = not_given,
     ) -> MessageBatch:
         """This endpoint is idempotent and can be used to poll for Message Batch
         completion.
@@ -104,7 +104,7 @@ class Batches(SyncAPIResource):
         `results_url` field in the response.
 
         Learn more about the Message Batches API in our
-        [user guide](/en/docs/build-with-claude/batch-processing)
+        [user guide](https://docs.claude.com/en/docs/build-with-claude/batch-processing)
 
         Args:
           message_batch_id: ID of the Message Batch.
@@ -130,15 +130,15 @@ class Batches(SyncAPIResource):
     def list(
         self,
         *,
-        after_id: str | NotGiven = NOT_GIVEN,
-        before_id: str | NotGiven = NOT_GIVEN,
-        limit: int | NotGiven = NOT_GIVEN,
+        after_id: str | Omit = omit,
+        before_id: str | Omit = omit,
+        limit: int | Omit = omit,
         # Use the following arguments if you need to pass additional parameters to the API that aren't available via kwargs.
         # The extra values given here take precedence over values defined on the client or passed to this method.
         extra_headers: Headers | None = None,
         extra_query: Query | None = None,
         extra_body: Body | None = None,
-        timeout: float | httpx.Timeout | None | NotGiven = NOT_GIVEN,
+        timeout: float | httpx.Timeout | None | NotGiven = not_given,
     ) -> SyncPage[MessageBatch]:
         """List all Message Batches within a Workspace.
 
@@ -146,7 +146,7 @@ class Batches(SyncAPIResource):
         returned first.
 
         Learn more about the Message Batches API in our
-        [user guide](/en/docs/build-with-claude/batch-processing)
+        [user guide](https://docs.claude.com/en/docs/build-with-claude/batch-processing)
 
         Args:
           after_id: ID of the object to use as a cursor for pagination. When provided, returns the
@@ -196,7 +196,7 @@ class Batches(SyncAPIResource):
         extra_headers: Headers | None = None,
         extra_query: Query | None = None,
         extra_body: Body | None = None,
-        timeout: float | httpx.Timeout | None | NotGiven = NOT_GIVEN,
+        timeout: float | httpx.Timeout | None | NotGiven = not_given,
     ) -> DeletedMessageBatch:
         """
         Delete a Message Batch.
@@ -205,7 +205,7 @@ class Batches(SyncAPIResource):
         like to delete an in-progress batch, you must first cancel it.
 
         Learn more about the Message Batches API in our
-        [user guide](/en/docs/build-with-claude/batch-processing)
+        [user guide](https://docs.claude.com/en/docs/build-with-claude/batch-processing)
 
         Args:
           message_batch_id: ID of the Message Batch.
@@ -237,7 +237,7 @@ class Batches(SyncAPIResource):
         extra_headers: Headers | None = None,
         extra_query: Query | None = None,
         extra_body: Body | None = None,
-        timeout: float | httpx.Timeout | None | NotGiven = NOT_GIVEN,
+        timeout: float | httpx.Timeout | None | NotGiven = not_given,
     ) -> MessageBatch:
         """Batches may be canceled any time before processing ends.
 
@@ -252,7 +252,7 @@ class Batches(SyncAPIResource):
         non-interruptible.
 
         Learn more about the Message Batches API in our
-        [user guide](/en/docs/build-with-claude/batch-processing)
+        [user guide](https://docs.claude.com/en/docs/build-with-claude/batch-processing)
 
         Args:
           message_batch_id: ID of the Message Batch.
@@ -284,7 +284,7 @@ class Batches(SyncAPIResource):
         extra_headers: Headers | None = None,
         extra_query: Query | None = None,
         extra_body: Body | None = None,
-        timeout: float | httpx.Timeout | None | NotGiven = NOT_GIVEN,
+        timeout: float | httpx.Timeout | None | NotGiven = not_given,
     ) -> JSONLDecoder[MessageBatchIndividualResponse]:
         """
         Streams the results of a Message Batch as a `.jsonl` file.
@@ -294,7 +294,7 @@ class Batches(SyncAPIResource):
         requests. Use the `custom_id` field to match results to requests.
 
         Learn more about the Message Batches API in our
-        [user guide](/en/docs/build-with-claude/batch-processing)
+        [user guide](https://docs.claude.com/en/docs/build-with-claude/batch-processing)
 
         Args:
           message_batch_id: ID of the Message Batch.
@@ -356,7 +356,7 @@ class AsyncBatches(AsyncAPIResource):
         extra_headers: Headers | None = None,
         extra_query: Query | None = None,
         extra_body: Body | None = None,
-        timeout: float | httpx.Timeout | None | NotGiven = NOT_GIVEN,
+        timeout: float | httpx.Timeout | None | NotGiven = not_given,
     ) -> MessageBatch:
         """
         Send a batch of Message creation requests.
@@ -366,7 +366,7 @@ class AsyncBatches(AsyncAPIResource):
         can take up to 24 hours to complete.
 
         Learn more about the Message Batches API in our
-        [user guide](/en/docs/build-with-claude/batch-processing)
+        [user guide](https://docs.claude.com/en/docs/build-with-claude/batch-processing)
 
         Args:
           requests: List of requests for prompt completion. Each is an individual request to create
@@ -398,7 +398,7 @@ class AsyncBatches(AsyncAPIResource):
         extra_headers: Headers | None = None,
         extra_query: Query | None = None,
         extra_body: Body | None = None,
-        timeout: float | httpx.Timeout | None | NotGiven = NOT_GIVEN,
+        timeout: float | httpx.Timeout | None | NotGiven = not_given,
     ) -> MessageBatch:
         """This endpoint is idempotent and can be used to poll for Message Batch
         completion.
@@ -407,7 +407,7 @@ class AsyncBatches(AsyncAPIResource):
         `results_url` field in the response.
 
         Learn more about the Message Batches API in our
-        [user guide](/en/docs/build-with-claude/batch-processing)
+        [user guide](https://docs.claude.com/en/docs/build-with-claude/batch-processing)
 
         Args:
           message_batch_id: ID of the Message Batch.
@@ -433,15 +433,15 @@ class AsyncBatches(AsyncAPIResource):
     def list(
         self,
         *,
-        after_id: str | NotGiven = NOT_GIVEN,
-        before_id: str | NotGiven = NOT_GIVEN,
-        limit: int | NotGiven = NOT_GIVEN,
+        after_id: str | Omit = omit,
+        before_id: str | Omit = omit,
+        limit: int | Omit = omit,
         # Use the following arguments if you need to pass additional parameters to the API that aren't available via kwargs.
         # The extra values given here take precedence over values defined on the client or passed to this method.
         extra_headers: Headers | None = None,
         extra_query: Query | None = None,
         extra_body: Body | None = None,
-        timeout: float | httpx.Timeout | None | NotGiven = NOT_GIVEN,
+        timeout: float | httpx.Timeout | None | NotGiven = not_given,
     ) -> AsyncPaginator[MessageBatch, AsyncPage[MessageBatch]]:
         """List all Message Batches within a Workspace.
 
@@ -449,7 +449,7 @@ class AsyncBatches(AsyncAPIResource):
         returned first.
 
         Learn more about the Message Batches API in our
-        [user guide](/en/docs/build-with-claude/batch-processing)
+        [user guide](https://docs.claude.com/en/docs/build-with-claude/batch-processing)
 
         Args:
           after_id: ID of the object to use as a cursor for pagination. When provided, returns the
@@ -499,7 +499,7 @@ class AsyncBatches(AsyncAPIResource):
         extra_headers: Headers | None = None,
         extra_query: Query | None = None,
         extra_body: Body | None = None,
-        timeout: float | httpx.Timeout | None | NotGiven = NOT_GIVEN,
+        timeout: float | httpx.Timeout | None | NotGiven = not_given,
     ) -> DeletedMessageBatch:
         """
         Delete a Message Batch.
@@ -508,7 +508,7 @@ class AsyncBatches(AsyncAPIResource):
         like to delete an in-progress batch, you must first cancel it.
 
         Learn more about the Message Batches API in our
-        [user guide](/en/docs/build-with-claude/batch-processing)
+        [user guide](https://docs.claude.com/en/docs/build-with-claude/batch-processing)
 
         Args:
           message_batch_id: ID of the Message Batch.
@@ -540,7 +540,7 @@ class AsyncBatches(AsyncAPIResource):
         extra_headers: Headers | None = None,
         extra_query: Query | None = None,
         extra_body: Body | None = None,
-        timeout: float | httpx.Timeout | None | NotGiven = NOT_GIVEN,
+        timeout: float | httpx.Timeout | None | NotGiven = not_given,
     ) -> MessageBatch:
         """Batches may be canceled any time before processing ends.
 
@@ -555,7 +555,7 @@ class AsyncBatches(AsyncAPIResource):
         non-interruptible.
 
         Learn more about the Message Batches API in our
-        [user guide](/en/docs/build-with-claude/batch-processing)
+        [user guide](https://docs.claude.com/en/docs/build-with-claude/batch-processing)
 
         Args:
           message_batch_id: ID of the Message Batch.
@@ -587,7 +587,7 @@ class AsyncBatches(AsyncAPIResource):
         extra_headers: Headers | None = None,
         extra_query: Query | None = None,
         extra_body: Body | None = None,
-        timeout: float | httpx.Timeout | None | NotGiven = NOT_GIVEN,
+        timeout: float | httpx.Timeout | None | NotGiven = not_given,
     ) -> AsyncJSONLDecoder[MessageBatchIndividualResponse]:
         """
         Streams the results of a Message Batch as a `.jsonl` file.
@@ -597,7 +597,7 @@ class AsyncBatches(AsyncAPIResource):
         requests. Use the `custom_id` field to match results to requests.
 
         Learn more about the Message Batches API in our
-        [user guide](/en/docs/build-with-claude/batch-processing)
+        [user guide](https://docs.claude.com/en/docs/build-with-claude/batch-processing)
 
         Args:
           message_batch_id: ID of the Message Batch.

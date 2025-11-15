@@ -92,3 +92,11 @@ backend/bandit-report.json
 backend/safety-report.json
 backend/coverage.xml
 backend/htmlcov/
+backend/server.pid
+backend/server.log
+backend/.langgraph_api/
+
+# Test files
+backend/test_local.py
+backend/test_scheduler_loop.py
+backend/validate_types.py

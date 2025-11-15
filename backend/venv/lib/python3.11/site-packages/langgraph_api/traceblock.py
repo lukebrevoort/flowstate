@@ -19,4 +19,4 @@ def patch_requests():
                 raise RuntimeError(f"POST to {url} blocked by policy")
         return _orig(self, method, url, *a, **kw)
 
-    Session.request = _guard
+    Session.request = _guard  # type: ignore[invalid-assignment]

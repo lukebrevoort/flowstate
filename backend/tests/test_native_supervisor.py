@@ -1,141 +1,165 @@
-"""Test the native LangChain v1 supervisor implementation"""
+"""Test the StateGraph-based supervisor implementation"""
 
 import pytest
-from agents.supervisor import supervisor_agent, schedule_task, manage_assignments, format_response
+from agents.supervisor import app, AgentState
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
 
 @pytest.mark.asyncio
 async def test_supervisor_calls_schedule_task():
-    """Test that supervisor correctly routes calendar requests to schedule_task tool"""
+    """Test that supervisor correctly routes calendar requests to scheduler agent"""
 
-    result = await supervisor_agent.ainvoke({"messages": [HumanMessage(content="What's on my calendar today?")]})
+    state: AgentState = {
+        "messages": [HumanMessage(content="What's on my calendar today?")],
+        "current_agent": None,
+        "needs_response_formatting": True,
+        "user_profile": None,
+        "agent_results": {},
+    }
+
+    config = {"configurable": {"user_id": "test-user-123", "todo_category": "general", "thread_id": "test-thread-123"}}
+
+    result = await app.ainvoke(state, config=config)
 
     messages = result["messages"]
 
-    # Should have at least: HumanMessage, AIMessage with tool_call, ToolMessage, AIMessage with result
-    assert len(messages) >= 4, f"Expected at least 4 messages, got {len(messages)}"
+    # Should have routed to scheduler agent
+    assert result.get("current_agent") == "scheduler", f"Expected scheduler agent, got {result.get('current_agent')}"
 
-    # Find the AI message that calls tools
-    tool_call_message = None
-    for msg in messages:
-        if isinstance(msg, AIMessage) and hasattr(msg, "tool_calls") and msg.tool_calls:
-            tool_call_message = msg
-            break
+    # Should have completed and formatted response
+    assert result.get("needs_response_formatting") == False, "Response should be formatted"
 
-    assert tool_call_message is not None, "No AIMessage with tool_calls found"
+    # Should have multiple messages including tool calls
+    assert len(messages) >= 3, f"Expected at least 3 messages, got {len(messages)}"
 
-    # Verify schedule_task was called
-    tool_names = [tc["name"] for tc in tool_call_message.tool_calls]
-    assert "schedule_task" in tool_names, f"schedule_task not in {tool_names}"
-
-    print(f"✅ Supervisor correctly called schedule_task tool")
+    print(f"✅ Supervisor correctly routed to scheduler agent")
 
 
 @pytest.mark.asyncio
 async def test_supervisor_calls_manage_assignments():
-    """Test that supervisor correctly routes assignment requests to manage_assignments tool"""
+    """Test that supervisor correctly routes assignment requests to project manager agent"""
 
-    result = await supervisor_agent.ainvoke({"messages": [HumanMessage(content="What assignments do I have?")]})
+    state: AgentState = {
+        "messages": [HumanMessage(content="What assignments do I have?")],
+        "current_agent": None,
+        "needs_response_formatting": True,
+        "user_profile": None,
+        "agent_results": {},
+    }
 
-    messages = result["messages"]
+    config = {"configurable": {"user_id": "test-user-123", "todo_category": "general", "thread_id": "test-thread-456"}}
 
-    # Find the AI message that calls tools
-    tool_call_message = None
-    for msg in messages:
-        if isinstance(msg, AIMessage) and hasattr(msg, "tool_calls") and msg.tool_calls:
-            tool_call_message = msg
-            break
+    result = await app.ainvoke(state, config=config)
 
-    assert tool_call_message is not None, "No AIMessage with tool_calls found"
+    # Should have routed to project_manager agent
+    assert (
+        result.get("current_agent") == "project_manager"
+    ), f"Expected project_manager agent, got {result.get('current_agent')}"
 
-    # Verify manage_assignments was called
-    tool_names = [tc["name"] for tc in tool_call_message.tool_calls]
-    assert "manage_assignments" in tool_names, f"manage_assignments not in {tool_names}"
+    # Should have completed and formatted response
+    assert result.get("needs_response_formatting") == False, "Response should be formatted"
 
-    print(f"✅ Supervisor correctly called manage_assignments tool")
+    print(f"✅ Supervisor correctly routed to project manager agent")
 
 
 @pytest.mark.asyncio
 async def test_supervisor_multi_agent_workflow():
-    """Test that supervisor coordinates multiple agents in sequence"""
+    """Test that supervisor coordinates agents and response formatting"""
 
-    result = await supervisor_agent.ainvoke(
-        {"messages": [HumanMessage(content="Show me my calendar and assignments for today")]}
-    )
+    state: AgentState = {
+        "messages": [HumanMessage(content="Show me my calendar and assignments for today")],
+        "current_agent": None,
+        "needs_response_formatting": True,
+        "user_profile": "Student studying Computer Science",
+        "agent_results": {},
+    }
+
+    config = {"configurable": {"user_id": "test-user-123", "todo_category": "general", "thread_id": "test-thread-789"}}
+
+    result = await app.ainvoke(state, config=config)
 
     messages = result["messages"]
 
-    # Collect all tool calls
-    all_tool_calls = []
-    for msg in messages:
-        if isinstance(msg, AIMessage) and hasattr(msg, "tool_calls") and msg.tool_calls:
-            all_tool_calls.extend([tc["name"] for tc in msg.tool_calls])
+    # Should route to one of the agents
+    assert result.get("current_agent") in [
+        "scheduler",
+        "project_manager",
+        "general",
+    ], f"Expected valid agent, got {result.get('current_agent')}"
 
-    print(f"Tool calls made: {all_tool_calls}")
+    # Should always format the response
+    assert result.get("needs_response_formatting") == False, "Response should be formatted by Response Agent"
 
-    # Should call both schedule_task and manage_assignments
-    assert (
-        "schedule_task" in all_tool_calls or "manage_assignments" in all_tool_calls
-    ), f"Expected at least one agent tool call, got {all_tool_calls}"
-
-    # Should eventually call format_response to format the final JSX
-    # (might be in same message or separate)
-    assert "format_response" in all_tool_calls or any(
-        isinstance(msg, AIMessage) and msg.content and "<" in str(msg.content) for msg in messages
-    ), "Expected format_response call or JSX content in final response"
+    # Should have agent results
+    assert result.get("agent_results"), "Should have agent results"
 
     print(f"✅ Supervisor correctly coordinated multi-agent workflow")
 
 
 @pytest.mark.asyncio
 async def test_supervisor_formats_final_response():
-    """Test that supervisor formats responses in JSX"""
+    """Test that supervisor formats responses in JSX via Response Agent"""
 
-    result = await supervisor_agent.ainvoke({"messages": [HumanMessage(content="What's on my schedule?")]})
+    state: AgentState = {
+        "messages": [HumanMessage(content="What's on my schedule?")],
+        "current_agent": None,
+        "needs_response_formatting": True,
+        "user_profile": None,
+        "agent_results": {},
+    }
+
+    config = {"configurable": {"user_id": "test-user-123", "todo_category": "general", "thread_id": "test-thread-101"}}
+
+    result = await app.ainvoke(state, config=config)
 
     messages = result["messages"]
 
-    # Check if format_response was called OR JSX content exists
-    has_format_call = False
-    has_jsx_content = False
+    # Response should be formatted
+    assert result.get("needs_response_formatting") == False, "Response must be formatted by Response Agent"
 
-    for msg in messages:
-        if isinstance(msg, AIMessage) and hasattr(msg, "tool_calls") and msg.tool_calls:
-            if any(tc["name"] == "format_response" for tc in msg.tool_calls):
-                has_format_call = True
+    # Check for JSX content in final message
+    final_message = messages[-1] if messages else None
+    assert final_message is not None, "Should have a final message"
 
-        if isinstance(msg, (AIMessage, ToolMessage)):
-            content = getattr(msg, "content", "")
-            if content and "<" in str(content) and ("Typography" in str(content) or "div" in str(content)):
-                has_jsx_content = True
+    content = getattr(final_message, "content", "")
+    has_jsx = "<>" in str(content) or "Typography" in str(content)
 
-    assert has_format_call or has_jsx_content, "Expected format_response call or JSX content in response"
+    assert has_jsx, f"Expected JSX content in final response, got: {str(content)[:200]}"
 
-    print(f"✅ Supervisor correctly formats responses")
+    print(f"✅ Supervisor correctly formats responses via Response Agent")
 
 
 @pytest.mark.asyncio
 async def test_sub_agents_call_their_tools():
-    """Test that sub-agents actually call their tools (not just respond conversationally)"""
+    """Test that sub-agents loop and call multiple tools before completing"""
 
-    result = await supervisor_agent.ainvoke({"messages": [HumanMessage(content="Check my calendar for today")]})
+    state: AgentState = {
+        "messages": [HumanMessage(content="Check my calendar for today")],
+        "current_agent": None,
+        "needs_response_formatting": True,
+        "user_profile": None,
+        "agent_results": {},
+    }
+
+    config = {"configurable": {"user_id": "test-user-123", "todo_category": "general", "thread_id": "test-thread-202"}}
+
+    result = await app.ainvoke(state, config=config)
 
     messages = result["messages"]
 
-    # Look for evidence that sub-agent tools were called
-    # We should see ToolMessages that come from the scheduler's tools
+    # Look for tool messages - should have multiple from looping
     tool_messages = [msg for msg in messages if isinstance(msg, ToolMessage)]
 
-    # Should have tool messages from both supervisor tools AND sub-agent tools
-    assert len(tool_messages) > 0, "Expected tool messages from sub-agents"
+    # Scheduler agent should loop and call multiple tools
+    # Expect at least: get_current_time, get_events (even if they fail)
+    assert len(tool_messages) >= 1, f"Expected at least 1 tool message from looping, got {len(tool_messages)}"
 
-    # The supervisor should have invoked schedule_task
+    # Should have AI messages with tool calls
     ai_messages_with_tools = [
         msg for msg in messages if isinstance(msg, AIMessage) and hasattr(msg, "tool_calls") and msg.tool_calls
     ]
 
-    assert len(ai_messages_with_tools) > 0, "Expected AI messages with tool calls"
+    assert len(ai_messages_with_tools) >= 1, "Expected AI messages with tool calls from looping"
 
-    print(f"✅ Sub-agents are calling their tools (found {len(tool_messages)} tool messages)")
-    print(f"Tool call chain: {len(ai_messages_with_tools)} AI messages made tool calls")
+    print(f"✅ Sub-agents are looping and calling tools (found {len(tool_messages)} tool messages)")
+    print(f"Tool call iterations: {len(ai_messages_with_tools)} AI messages made tool calls")

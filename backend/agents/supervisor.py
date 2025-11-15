@@ -1,955 +1,512 @@
+"""
+StateGraph-based Multi-Agent Supervisor for FlowState
+Implements explicit routing with mandatory Response Agent enforcement
+"""
+
 import uuid
 import re
+import json
 from datetime import datetime
-import httpx
+from typing import Annotated, Dict, List, Literal, Optional, Any, TypedDict
 
 from pydantic import BaseModel, Field
 
-from trustcall import create_extractor
-
-from langgraph_supervisor.handoff import create_forward_message_tool
-from typing import Literal, Optional, TypedDict
-
-from typing import Annotated, Dict, List, Literal, TypedDict, Optional, Any
-import os
-
 from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
-from langgraph.graph import StateGraph, END, START
-from langchain.agents import create_agent
-from langgraph.prebuilt import ToolNode, tools_condition
-
-from agents.project_manager import (
-    tools as project_management_tools,
-    project_manager_prompt,
-)
-from agents.scheduler import (
-    tools as scheduler_tools,
-    scheduler_prompt,
-)
-from agents.response import response_prompt
-
-from tenacity import (
-    retry,
-    wait_exponential,
-    stop_after_attempt,
-    retry_if_exception_type,
-)
-from anthropic._exceptions import OverloadedError
-import json
-
-from langchain.tools import tool, BaseTool, InjectedToolCallId, ToolRuntime
-from langchain_core.messages import ToolMessage
-from langgraph.types import Command
-from langgraph.prebuilt import InjectedState
-
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
-from langchain_core.messages import merge_message_runs
-from langchain_core.messages import SystemMessage, HumanMessage
-
-
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import StateGraph, MessagesState, START, END
-from langgraph.store.base import BaseStore
-from langgraph.store.memory import InMemoryStore
+from langgraph.graph import StateGraph, END, START
 from langgraph.graph.message import add_messages
+from langgraph.prebuilt import ToolNode
 
 import agents.configuration as configuration
+from agents.project_manager import tools as project_management_tools, project_manager_prompt
+from agents.scheduler import tools as scheduler_tools, scheduler_prompt
+from agents.response import response_prompt
 
-## Utilities
+# ============================================================================
+# ENHANCED STATE SCHEMA
+# ============================================================================
 
 
-# Inspect the tool calls for Trustcall
-class Spy:
-    def __init__(self):
-        self.called_tools = []
+class AgentState(TypedDict):
+    """Enhanced state that tracks agent routing and context"""
 
-    def __call__(self, run):
-        q = [run]
-        while q:
-            r = q.pop()
-            if r.child_runs:
-                q.extend(r.child_runs)
-            if r.run_type == "chat_model":
-                self.called_tools.append(r.outputs["generations"][0][0]["message"]["kwargs"]["tool_calls"])
-
-
-# Extract information from tool calls for both patches and new memories in Trustcall
-def extract_tool_info(tool_calls, schema_name="Memory"):
-    """Extract information from tool calls for both patches and new memories.
-
-    Args:
-        tool_calls: List of tool calls from the model
-        schema_name: Name of the schema tool (e.g., "Memory", "ToDo", "Profile")
-    """
-    # Initialize list of changes
-    changes = []
-
-    for call_group in tool_calls:
-        for call in call_group:
-            if call["name"] == "PatchDoc":
-                # Check if there are any patches
-                if call["args"]["patches"]:
-                    changes.append(
-                        {
-                            "type": "update",
-                            "doc_id": call["args"]["json_doc_id"],
-                            "planned_edits": call["args"]["planned_edits"],
-                            "value": call["args"]["patches"][0]["value"],
-                        }
-                    )
-                else:
-                    # Handle case where no changes were needed
-                    changes.append(
-                        {
-                            "type": "no_update",
-                            "doc_id": call["args"]["json_doc_id"],
-                            "planned_edits": call["args"]["planned_edits"],
-                        }
-                    )
-            elif call["name"] == schema_name:
-                changes.append({"type": "new", "value": call["args"]})
-
-    # Format results as a single string
-    result_parts = []
-    for change in changes:
-        if change["type"] == "update":
-            result_parts.append(
-                f"Document {change['doc_id']} updated:\n"
-                f"Plan: {change['planned_edits']}\n"
-                f"Added content: {change['value']}"
-            )
-        elif change["type"] == "no_update":
-            result_parts.append(f"Document {change['doc_id']} unchanged:\n{change['planned_edits']}")
-        else:
-            result_parts.append(f"New {schema_name} created:\nContent: {change['value']}")
-
-    return "\n\n".join(result_parts)
-
-
-## Schema definitions
-
-
-# User profile schema
-class Profile(BaseModel):
-    """This is the profile of the user you are chatting with"""
-
-    name: Optional[str] = Field(description="The user's name", default=None)
-    location: Optional[str] = Field(description="The user's location", default=None)
-    job: Optional[str] = Field(description="The user's job", default=None)
-    connections: list[str] = Field(
-        description="Personal connection of the user, such as family members, friends, or coworkers",
-        default_factory=list,
-    )
-    interests: list[str] = Field(description="Interests that the user has", default_factory=list)
-
-
-## Initialize the model and tools
-
-
-# Update memory tool
-class UpdateMemory(TypedDict):
-    """Decision on what memory type to update"""
-
-    update_type: Literal["user", "todo", "instructions"]
-
-
-def validate_messages(messages):
-    """Ensure all messages have non-empty content except final assistant message"""
-    if not messages:
-        return messages
-
-    cleaned = []
-    for i, msg in enumerate(messages):
-        if isinstance(msg, AIMessage) and not msg.content:
-            if i != len(messages) - 1:  # Not final message
-                msg.content = "[System: Empty message sanitized]"
-        cleaned.append(msg)
-    return cleaned
-
-
-class ValidatedChatAnthropic(ChatAnthropic):
-    def invoke(self, input, config=None, **kwargs):
-        # Handle both direct messages and input dict
-        if isinstance(input, list):
-            validated_input = validate_messages(input)
-        elif isinstance(input, dict) and "messages" in input:
-            validated_input = {
-                **input,
-                "messages": validate_messages(input["messages"]),
-            }
-        else:
-            validated_input = input
-
-        return super().invoke(validated_input, config=config, **kwargs)
-
-    async def ainvoke(self, input, config=None, **kwargs):
-        # Handle both direct messages and input dict
-        if isinstance(input, list):
-            validated_input = validate_messages(input)
-        elif isinstance(input, dict) and "messages" in input:
-            validated_input = {
-                **input,
-                "messages": validate_messages(input["messages"]),
-            }
-        else:
-            validated_input = input
-
-        try:
-            return await super().ainvoke(validated_input, config=config, **kwargs)
-        except Exception as e:
-            # Handle streaming response errors gracefully
-            error_str = str(e)
-            if isinstance(e, httpx.ResponseNotRead) or "ResponseNotRead" in error_str:
-                print(f"Streaming response error handled: {e}")
-                # Re-raise as a more informative error
-                raise RuntimeError(
-                    "Streaming response error: The response content was not properly read. "
-                    "This typically occurs when streaming is enabled but the response isn't consumed correctly."
-                ) from e
-            # For other response-related exceptions
-            if any(
-                keyword in error_str.lower()
-                for keyword in [
-                    "response content",
-                    "streaming",
-                    "content",
-                    "without having called",
-                ]
-            ):
-                print(f"Response content error handled: {e}")
-                raise RuntimeError(f"Response processing error: {error_str}") from e
-            raise
-
-
-# Initialize the model - Using Sonnet for larger token limits
-# Create both streaming and non-streaming versions
-model = ValidatedChatAnthropic(
-    model="claude-haiku-4-5-20251001",
-    temperature=0,
-    streaming=False,  # Disable streaming for general use to avoid ResponseNotRead errors
-    max_tokens=4096,  # Increase token limit for longer responses
-)
-
-# Streaming model for specific streaming operations
-streaming_model = ValidatedChatAnthropic(
-    model="claude-haiku-4-5-20251001",
-    temperature=0,
-    streaming=True,
-    max_tokens=4096,  # Enable streaming only when needed
-)
-
-## Create the Trustcall extractors for updating the user profile and ToDo list
-profile_extractor = create_extractor(
-    model,
-    tools=[Profile],
-    tool_choice="Profile",
-)
-
-## Prompts
-
-
-# Chatbot instruction for choosing what to update and what tools to call
-MODEL_SYSTEM_MESSAGE = """
-You are a supervisor agent responsible for orchestrating user interactions through specialized sub-agents. Your role is to coordinate between agents and ensure every user interaction concludes with a properly formatted response.
-
-AVAILABLE AGENTS:
-- Scheduler Agent (Scheduler Agent): Handles Google Calendar operations including viewing events, creating/updating/deleting calendar events, finding available time slots, and managing schedules
-- Project Manager Agent (PMAgent): Handles assignments, tasks, exams, projects, Notion database operations, subtask creation, progress tracking, and time estimation
-- Response Agent (ResponseAgent): Generates final JSX-formatted responses for the frontend UI (REQUIRED for all interactions)
-
-AGENT ROUTING RULES:
-- For calendar viewing, event creation/modification, availability checks, or scheduling → use Scheduler-Handoff-Tool
-- For assignments, tasks, exams, projects, Notion operations, subtasks, progress updates, or time estimates → use Project-Management-Handoff-Tool
-- After gathering ALL necessary information from sub-agents → ALWAYS use Response-Agent-Handoff-Tool (MANDATORY FINAL STEP)
-
-You have access to long-term memory tracking the user's profile:
-
-<user_profile>
-{user_profile}
-</user_profile>
-
-MANDATORY WORKFLOW:
-1. Analyze the user's request and profile context
-2. Route to appropriate specialized agent(s) with detailed task descriptions
-3. Collect and process information from sub-agents
-4. ALWAYS hand off to Response Agent as the final step - NO EXCEPTIONS
-5. The Response Agent will generate the properly formatted JSX response for the frontend
-
-CRITICAL REQUIREMENTS:
-- NEVER provide direct responses to users - you are an orchestrator only
-- ALWAYS conclude every interaction by routing to the Response Agent
-- The Response Agent is the ONLY agent that communicates directly with users
-- Pass comprehensive context to the Response Agent including all sub-agent results
-- Ensure task descriptions to sub-agents are detailed and include relevant user profile information
-- If no specialized processing is needed, still route to Response Agent for proper formatting
-
-HANDOFF PROTOCOL:
-- When routing to Scheduler Agent: Include specific details about calendar operations, date/time requirements, event details, and scheduling preferences
-- When routing to PMAgent: Include specific details about assignments, deadlines, Notion requirements
-- When routing to ResponseAgent: Include all gathered information, user context, and specify the JSX formatting requirements
-- Task descriptions should be comprehensive and include relevant user profile details
-
-Remember: You are the conductor of the orchestra - coordinate the agents but let the Response Agent handle all user-facing communication in the proper JSX format for the frontend.
-"""
-
-# Trustcall instruction
-TRUSTCALL_INSTRUCTION = """Reflect on following interaction.
-
-Use the provided tools to retain any necessary memories about the user.
-
-Use parallel tool calling to handle updates and insertions simultaneously.
-
-System Time: {time}"""
-
-# Instructions for updating the ToDo list
-CREATE_INSTRUCTIONS = """Reflect on the following interaction.
-
-Based on this interaction, update your instructions for how to update ToDo list items. Use any feedback from the user to update how they like to have items added, etc.
-
-Your current instructions are:
-
-<current_instructions>
-{current_instructions}
-</current_instructions>"""
-
-## Node definitions
-
-# Create sub-agents using langchain.agents.create_agent
-scheduler_agent = create_agent(
-    model=model,
-    tools=scheduler_tools,
-    system_prompt=scheduler_prompt,
-)
-
-project_management_agent = create_agent(
-    model=model,
-    tools=project_management_tools,
-    system_prompt=project_manager_prompt,
-)
-
-response_agent = create_agent(
-    model=model,
-    tools=[],
-    system_prompt=response_prompt,
-)
-
-
-# Wrap sub-agents as tools for the supervisor
-@tool
-async def schedule_task(request: str, runtime: ToolRuntime) -> str:
-    """Handle calendar and scheduling related tasks.
-
-    Use this when the user wants to:
-    - Check their calendar
-    - Get upcoming events
-    - Schedule new events
-    - Manage calendar-related tasks
-
-    Input: Natural language request about calendar/scheduling
-    """
-    # Get original user message for context
-    original_message = next((msg for msg in runtime.state["messages"] if msg.type == "human"), None)
-
-    # Create context-aware prompt for sub-agent
-    if original_message:
-        prompt = (
-            f"You are assisting with the following user inquiry:\n\n"
-            f"{original_message.content}\n\n"
-            f"You are tasked with the following sub-request:\n\n"
-            f"{request}"
-        )
-    else:
-        prompt = request
-
-    result = await scheduler_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]})
-
-    # Return the final response from the agent
-    final_message = result["messages"][-1]
-    return final_message.content if hasattr(final_message, "content") else str(final_message)
-
-
-@tool
-async def manage_assignments(request: str, runtime: ToolRuntime) -> str:
-    """Handle assignment and task management via Notion.
-
-    Use this when the user wants to:
-    - Check their assignments
-    - Retrieve Notion tasks
-    - Get assignment details
-    - Manage project-related tasks
-
-    Input: Natural language request about assignments/tasks
-    """
-    # Get original user message for context
-    original_message = next((msg for msg in runtime.state["messages"] if msg.type == "human"), None)
-
-    # Create context-aware prompt for sub-agent
-    if original_message:
-        prompt = (
-            f"You are assisting with the following user inquiry:\n\n"
-            f"{original_message.content}\n\n"
-            f"You are tasked with the following sub-request:\n\n"
-            f"{request}"
-        )
-    else:
-        prompt = request
-
-    result = await project_management_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]})
-
-    # Return the final response from the agent
-    final_message = result["messages"][-1]
-    return final_message.content if hasattr(final_message, "content") else str(final_message)
-
-
-@tool
-async def format_response(request: str, runtime: ToolRuntime) -> str:
-    """Format the final response for the user in JSX format.
-
-    Use this when you have gathered all necessary information and need to:
-    - Present results to the user
-    - Format data in JSX for the frontend
-    - Provide the final user-facing response
-
-    Input: All gathered information and context for formatting
-    """
-    # Get original user message and all context
-    original_message = next((msg for msg in runtime.state["messages"] if msg.type == "human"), None)
-
-    # Get user profile if available
-    user_profile = runtime.state.get("user_profile", "")
-
-    # Create comprehensive prompt with all context
-    if original_message:
-        prompt = (
-            f"You are assisting with the following user inquiry:\n\n"
-            f"{original_message.content}\n\n"
-            f"User Profile:\n{user_profile}\n\n"
-            f"Information gathered:\n\n{request}\n\n"
-            f"Format this information in JSX for the frontend."
-        )
-    else:
-        prompt = f"{request}\n\nUser Profile:\n{user_profile}\n\nFormat in JSX for the frontend."
-
-    result = await response_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]})
-
-    # Return the final JSX response
-    final_message = result["messages"][-1]
-    return final_message.content if hasattr(final_message, "content") else str(final_message)
-
-
-# Create supervisor agent (orchestrator)
-def get_user_profile(store, config):
-    configurable = configuration.Configuration.from_runnable_config(config)
-    user_id = configurable.user_id
-    todo_category = configurable.todo_category
-    namespace = ("profile", todo_category, user_id)
-
-    existing_items = store.search(namespace)
-    profile_data = {}
-    for item in existing_items:
-        profile_data.update(item.value)
-
-    return Profile(**profile_data).model_dump_json(indent=2)
-
-
-def update_profile(state: MessagesState, config: RunnableConfig, store: BaseStore):
-    """Reflect on the chat history and update the memory collection."""
-
-    # Get the user ID from the config
-    configurable = configuration.Configuration.from_runnable_config(config)
-    user_id = configurable.user_id
-    todo_category = configurable.todo_category
-
-    # Define the namespace for the memories
-    namespace = ("profile", todo_category, user_id)
-
-    # Retrieve the most recent memories for context
-    existing_items = store.search(namespace)
-
-    # Format the existing memories for the Trustcall extractor
-    tool_name = "Profile"
-    existing_memories = (
-        [(existing_item.key, tool_name, existing_item.value) for existing_item in existing_items] if existing_items else None
-    )
-
-    # Merge the chat history and the instruction
-    TRUSTCALL_INSTRUCTION_FORMATTED = TRUSTCALL_INSTRUCTION.format(time=datetime.now().isoformat())
-    updated_messages = list(
-        merge_message_runs(messages=[SystemMessage(content=TRUSTCALL_INSTRUCTION_FORMATTED)] + state["messages"][:-1])
-    )
-
-    # Invoke the extractor
-    result = profile_extractor.invoke({"messages": updated_messages, "existing": existing_memories})
-
-    # Save save the memories from Trustcall to the store
-    for r, rmeta in zip(result["responses"], result["response_metadata"]):
-        store.put(
-            namespace,
-            rmeta.get("json_doc_id", str(uuid.uuid4())),
-            r.model_dump(mode="json"),
-        )
-    tool_calls = state["messages"][-1].tool_calls
-    # Return tool message with update verification
-    return {
-        "messages": [
-            {
-                "role": "tool",
-                "content": "updated profile",
-                "tool_call_id": tool_calls[0]["id"],
-            }
-        ]
-    }
-
-
-def update_instructions(state: MessagesState, config: RunnableConfig, store: BaseStore):
-    """Reflect on the chat history and update the memory collection."""
-
-    # Get the user ID from the config
-    configurable = configuration.Configuration.from_runnable_config(config)
-    user_id = configurable.user_id
-    todo_category = configurable.todo_category
-
-    namespace = ("instructions", todo_category, user_id)
-
-    existing_memory = store.get(namespace, "user_instructions")
-
-    # Format the memory in the system prompt
-    system_msg = CREATE_INSTRUCTIONS.format(current_instructions=existing_memory.value if existing_memory else None)
-    new_memory = model.invoke(
-        [SystemMessage(content=system_msg)]
-        + state["messages"][:-1]
-        + [HumanMessage(content="Please update the instructions based on the conversation")]
-    )
-
-    # Overwrite the existing memory in the store
-    key = "user_instructions"
-    store.put(namespace, key, {"memory": new_memory.content})
-    tool_calls = state["messages"][-1].tool_calls
-    # Return tool message with update verification
-    return {
-        "messages": [
-            {
-                "role": "tool",
-                "content": "updated instructions",
-                "tool_call_id": tool_calls[0]["id"],
-            }
-        ]
-    }
-
-
-# Create the supervisor agent using native LangChain v1
-SUPERVISOR_SYSTEM_PROMPT = """You are a helpful personal assistant orchestrator.
-
-You coordinate specialized agents to handle user requests:
-- schedule_task: For calendar and scheduling operations
-- manage_assignments: For Notion assignment and task management  
-- format_response: For formatting final responses in JSX
-
-Break down user requests into appropriate tool calls. When a request involves multiple actions, use tools in sequence.
-
-CRITICAL WORKFLOW:
-1. If the user asks about calendar/events, use schedule_task
-2. If the user asks about assignments/tasks, use manage_assignments
-3. Once you have all necessary information, use format_response to present results
-
-Remember: Always gather all required data BEFORE calling format_response.
-"""
-
-# Create the supervisor agent with the sub-agent tools
-supervisor_agent = create_agent(
-    model=model,
-    tools=[schedule_task, manage_assignments, format_response],
-    system_prompt=SUPERVISOR_SYSTEM_PROMPT + "\n\n" + MODEL_SYSTEM_MESSAGE,
-)
-
-
-# Define the function that determines whether to continue or not
-def should_continue(state: MessagesState):
-    """Determine the next step in the conversation flow"""
-    messages = state["messages"]
-    last_message = messages[-1]
-
-    # Check if last message is an AI message without content (but not the final message)
-    if isinstance(last_message, AIMessage) and not last_message.content:
-        if len(messages) > 1:
-            return "respond"
-
-    # If there are tool calls, go to tools
-    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-        return "tools"
-
-    # If it's an AI message with content, we can respond
-    if isinstance(last_message, AIMessage) and last_message.content:
-        return "respond"
-
-    # Default to respond
-    return "respond"
-
-
-class ValidationState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
+    current_agent: Optional[str]  # Track which agent is processing
+    needs_response_formatting: bool  # Flag to ensure Response Agent runs
+    user_profile: Optional[str]  # User context for personalization
+    agent_results: Dict[str, Any]  # Store results from each agent
 
 
-def final_validation(state: ValidationState):
-    """Last-chance message validation"""
-    return {"messages": validate_messages(state["messages"])}
+# ============================================================================
+# MODEL CONFIGURATION
+# ============================================================================
+
+# Using Haiku 4.5 across the board for cost optimization
+# Can be upgraded per-agent if needed in the future
+base_model = ChatAnthropic(
+    model_name="claude-haiku-4-5-20251001",
+    temperature=0,
+    max_tokens_to_sample=4096,
+)
+
+# ============================================================================
+# AGENT NODES
+# ============================================================================
 
 
-# Create tools for updating profile and instructions
-@tool
-def update_user_profile(
-    profile_update: Annotated[str, "Instructions for updating the user's profile"],
-    state: Annotated[MessagesState, InjectedState],
-    tool_call_id: Annotated[str, InjectedToolCallId],
-):
-    """Update the user's profile based on conversation context"""
-    return {"messages": [ToolMessage(content="Profile update initiated", tool_call_id=tool_call_id)]}
+async def supervisor_node(state: AgentState) -> Dict[str, Any]:
+    """
+    Supervisor node - analyzes user request and routes to appropriate agent
+    """
+    messages = state["messages"]
+
+    # Get user profile for context
+    user_profile = state.get("user_profile", "No profile information available")
+
+    # Build routing decision prompt
+    supervisor_prompt = f"""You are the FlowState supervisor agent. Your job is to analyze the user's request and decide which specialized agent should handle it.
+
+Available agents:
+- "scheduler": Handles Google Calendar operations (viewing events, creating/updating/deleting events, finding availability)
+- "project_manager": Handles Notion operations (assignments, tasks, exams, projects, subtasks, progress tracking)
+- "general": For general conversation, questions, or when no specialized agent is needed
+
+User Profile:
+{user_profile}
+
+Analyze the user's request and respond with ONLY ONE of these exact words: scheduler, project_manager, or general
+
+Do not provide explanation, just the agent name."""
+
+    # Add system message and invoke
+    routing_messages = [SystemMessage(content=supervisor_prompt)] + messages
+
+    response = await base_model.ainvoke(routing_messages)
+
+    # Extract routing decision
+    content = response.content if hasattr(response, "content") else str(response)
+    agent_choice = str(content).strip().lower() if content else "general"
+
+    # Validate choice
+    if agent_choice not in ["scheduler", "project_manager", "general"]:
+        agent_choice = "general"
+
+    return {"current_agent": agent_choice, "needs_response_formatting": True, "messages": [response]}  # Always need formatting
 
 
-@tool
-def update_user_instructions(
-    instruction_update: Annotated[str, "Instructions for updating user preferences"],
-    state: Annotated[MessagesState, InjectedState],
-    tool_call_id: Annotated[str, InjectedToolCallId],
-):
-    """Update user instructions based on feedback"""
-    return {"messages": [ToolMessage(content="Instructions update initiated", tool_call_id=tool_call_id)]}
+async def project_manager_node(state: AgentState) -> Dict[str, Any]:
+    """
+    Project Manager Agent - handles Notion assignment operations
+    Loops internally until all tool calls are complete
+    """
+    messages = state["messages"]
+    user_profile = state.get("user_profile", "")
+
+    # Build context-aware prompt
+    context_prompt = f"""User Profile:
+{user_profile}
+
+{project_manager_prompt}"""
+
+    # Create agent with tools
+    pm_agent_messages = [SystemMessage(content=context_prompt)] + messages
+
+    # Bind tools to model
+    model_with_tools = base_model.bind_tools(project_management_tools)
+
+    # LOOP until agent is done with all tool calls
+    max_iterations = 10  # Safety limit
+    iteration = 0
+    current_messages = pm_agent_messages
+    all_new_messages = []
+    response = None
+
+    print(f"\n🔄 Project Manager Agent - Starting tool execution loop")
+
+    while iteration < max_iterations:
+        iteration += 1
+        print(f"  📍 Iteration {iteration}/{max_iterations}")
+
+        # Invoke agent
+        response = await model_with_tools.ainvoke(current_messages)
+        all_new_messages.append(response)
+
+        # Check if there are tool calls
+        if hasattr(response, "tool_calls") and response.tool_calls:
+            tool_names = [tc.get("name", "unknown") for tc in response.tool_calls]
+            print(f"  🔧 Tools requested: {', '.join(tool_names)}")
+
+            # Execute tools
+            tool_node = ToolNode(project_management_tools)
+            tool_results = await tool_node.ainvoke({"messages": [response]})
+
+            # Add tool results to messages
+            all_new_messages.extend(tool_results["messages"])
+
+            # Update current messages for next iteration
+            current_messages = pm_agent_messages + all_new_messages
+        else:
+            # No more tool calls, agent is done
+            print(f"  ✅ Agent completed task (no more tool calls)")
+            break
+
+    print(f"🏁 Project Manager Agent - Completed after {iteration} iterations\n")
+
+    # Get final response content
+    final_content = response.content if (response and hasattr(response, "content")) else "Task completed"
+
+    return {"messages": all_new_messages, "agent_results": {"project_manager": final_content}}
 
 
-# Compile the graph - use the supervisor_agent directly
-app = supervisor_agent
+async def scheduler_node(state: AgentState) -> Dict[str, Any]:
+    """
+    Scheduler Agent - handles Google Calendar operations
+    Loops internally until all tool calls are complete
+    """
+    messages = state["messages"]
+    user_profile = state.get("user_profile", "")
+
+    # Build context-aware prompt
+    context_prompt = f"""User Profile:
+{user_profile}
+
+{scheduler_prompt}"""
+
+    # Create agent with tools
+    scheduler_messages = [SystemMessage(content=context_prompt)] + messages
+
+    # Bind tools to model
+    model_with_tools = base_model.bind_tools(scheduler_tools)
+
+    # LOOP until agent is done with all tool calls
+    max_iterations = 10  # Safety limit
+    iteration = 0
+    current_messages = scheduler_messages
+    all_new_messages = []
+    response = None
+
+    print(f"\n🔄 Scheduler Agent - Starting tool execution loop")
+
+    while iteration < max_iterations:
+        iteration += 1
+        print(f"  📍 Iteration {iteration}/{max_iterations}")
+
+        # Invoke agent
+        response = await model_with_tools.ainvoke(current_messages)
+        all_new_messages.append(response)
+
+        # Check if there are tool calls
+        if hasattr(response, "tool_calls") and response.tool_calls:
+            tool_names = [tc.get("name", "unknown") for tc in response.tool_calls]
+            print(f"  🔧 Tools requested: {', '.join(tool_names)}")
+
+            # Execute tools
+            tool_node = ToolNode(scheduler_tools)
+            tool_results = await tool_node.ainvoke({"messages": [response]})
+
+            # Add tool results to messages
+            all_new_messages.extend(tool_results["messages"])
+
+            # Update current messages for next iteration
+            current_messages = scheduler_messages + all_new_messages
+        else:
+            # No more tool calls, agent is done
+            print(f"  ✅ Agent completed task (no more tool calls)")
+            break
+
+    print(f"🏁 Scheduler Agent - Completed after {iteration} iterations\n")
+
+    # Get final response content
+    final_content = response.content if (response and hasattr(response, "content")) else "Task completed"
+
+    return {"messages": all_new_messages, "agent_results": {"scheduler": final_content}}
+
+
+async def general_response_node(state: AgentState) -> Dict[str, Any]:
+    """
+    Handles general queries that don't need specialized agents
+    """
+    messages = state["messages"]
+    user_profile = state.get("user_profile", "")
+
+    general_prompt = f"""You are a helpful AI assistant for FlowState, an academic task and schedule management system.
+
+User Profile:
+{user_profile}
+
+Provide helpful responses to general questions. Keep responses concise and relevant."""
+
+    response_messages = [SystemMessage(content=general_prompt)] + messages
+    response = await base_model.ainvoke(response_messages)
+
+    return {"messages": [response], "agent_results": {"general": response.content}}
+
+
+async def response_agent_node(state: AgentState) -> Dict[str, Any]:
+    """
+    MANDATORY Response Agent - formats all responses as JSX for frontend
+    This node is ALWAYS executed as the final step
+    """
+    messages = state["messages"]
+    user_profile = state.get("user_profile", "")
+    agent_results = state.get("agent_results", {})
+
+    # Get the original user query
+    original_query = next((msg.content for msg in messages if isinstance(msg, HumanMessage)), "User query")
+
+    # Get the agent's response
+    agent_response = ""
+    if agent_results:
+        # Get the last agent's result
+        agent_response = list(agent_results.values())[-1]
+    else:
+        # Fallback to last AI message
+        agent_response = next(
+            (msg.content for msg in reversed(messages) if isinstance(msg, AIMessage)), "No response generated"
+        )
+
+    # Build comprehensive prompt for Response Agent
+    formatting_prompt = f"""{response_prompt}
+
+User Query: {original_query}
+
+User Profile:
+{user_profile}
+
+Agent Response to Format:
+{agent_response}
+
+Format the above response as valid JSX using Typography, Button, and other available components."""
+
+    # Include user message and system message
+    response_messages = [
+        SystemMessage(content=formatting_prompt),
+        HumanMessage(content="Please format the above response as JSX."),
+    ]
+    jsx_response = await base_model.ainvoke(response_messages)
+
+    # Validate JSX
+    jsx_content = jsx_response.content if hasattr(jsx_response, "content") else str(jsx_response)
+    jsx_content_str = str(jsx_content) if jsx_content else ""
+    if not _validate_jsx(jsx_content_str):
+        # Retry with explicit validation instruction
+        retry_prompt = f"""The previous JSX was invalid. Please fix it.
+
+Requirements:
+- Must start with <> and end with </>
+- All tags must be properly closed
+- Use Typography components for text
+- Ensure className attributes are complete
+
+Previous attempt:
+{jsx_content_str}
+
+Generate corrected JSX:"""
+
+        retry_messages = [SystemMessage(content=response_prompt), HumanMessage(content=retry_prompt)]
+        jsx_response = await base_model.ainvoke(retry_messages)
+
+    return {"messages": [jsx_response], "needs_response_formatting": False}  # Mark as complete
+
+
+# ============================================================================
+# ROUTING FUNCTIONS
+# ============================================================================
+
+
+def route_after_supervisor(state: AgentState) -> str:
+    """Route to the appropriate agent based on supervisor decision"""
+    current_agent = state.get("current_agent", "general")
+
+    if current_agent == "scheduler":
+        return "scheduler"
+    elif current_agent == "project_manager":
+        return "project_manager"
+    else:
+        return "general"
+
+
+def should_format_response(state: AgentState) -> str:
+    """Always route to response agent for formatting"""
+    # This enforces that Response Agent is ALWAYS called
+    return "response_agent"
+
+
+# ============================================================================
+# JSX VALIDATION
+# ============================================================================
+
+
+def _validate_jsx(content: str) -> bool:
+    """Validate JSX format"""
+    if not content:
+        return False
+
+    # Check for React Fragment
+    if not ("<>" in content and "</>" in content):
+        return False
+
+    # Check for basic JSX structure
+    if "Typography" not in content:
+        return False
+
+    # Check for balanced tags
+    open_count = content.count("<")
+    close_count = content.count(">")
+    if open_count != close_count:
+        return False
+
+    # Check for obvious unclosed tags - simple heuristic
+    # Count opening and closing Typography tags
+    typography_opens = len(re.findall(r"<Typography[^>]*>", content))
+    typography_closes = content.count("</Typography>")
+    if typography_opens != typography_closes:
+        return False
+
+    return True
+
+
+# ============================================================================
+# BUILD THE STATEGRAPH
+# ============================================================================
+
+
+def create_flowstate_graph():
+    """
+    Create the FlowState multi-agent graph with explicit routing
+    """
+    # Initialize the graph
+    workflow = StateGraph(AgentState)
+
+    # Add all nodes
+    workflow.add_node("supervisor", supervisor_node)
+    workflow.add_node("scheduler", scheduler_node)
+    workflow.add_node("project_manager", project_manager_node)
+    workflow.add_node("general", general_response_node)
+    workflow.add_node("response_agent", response_agent_node)
+
+    # Set entry point
+    workflow.set_entry_point("supervisor")
+
+    # Add conditional routing from supervisor to specialized agents
+    workflow.add_conditional_edges(
+        "supervisor",
+        route_after_supervisor,
+        {"scheduler": "scheduler", "project_manager": "project_manager", "general": "general"},
+    )
+
+    # CRITICAL: All agents MUST route to response_agent
+    # This enforces consistent JSX formatting
+    workflow.add_edge("scheduler", "response_agent")
+    workflow.add_edge("project_manager", "response_agent")
+    workflow.add_edge("general", "response_agent")
+
+    # Response agent is the final step
+    workflow.add_edge("response_agent", END)
+
+    return workflow.compile()
+
+
+# Create the compiled graph
+app = create_flowstate_graph()
+
+
+# ============================================================================
+# STREAMING FUNCTIONS (Updated for new graph structure)
+# ============================================================================
 
 
 async def stream_response(user_input: str, config: dict):
-    """Stream agent steps and tool calls for AgentLoadingCard"""
-
-    print(f"stream_response called with input: {user_input}")  # Debug log
+    """
+    Stream agent steps for the new StateGraph architecture
+    """
+    print(f"stream_response called with input: {user_input}")
 
     try:
-        # Create the initial state
-        initial_state = {"messages": [HumanMessage(content=user_input)]}
+        # Create initial state
+        initial_state = {
+            "messages": [HumanMessage(content=user_input)],
+            "current_agent": None,
+            "needs_response_formatting": True,
+            "user_profile": None,  # TODO: Load from store
+            "agent_results": {},
+        }
 
-        # Stream with updates mode and include subgraphs
-        async for chunk in app.astream(
-            initial_state,
-            config=config,
-            stream_mode="updates",  # Stream updates instead of messages
-            subgraphs=True,  # Include subgraph updates
-        ):
+        # Stream the graph execution
+        # Type ignore for config - RunnableConfig compatibility
+        async for chunk in app.astream(initial_state, config=config, stream_mode="updates"):  # type: ignore
             try:
                 print(f"\n{'='*80}")
-                print(f"🔍 RAW CHUNK: {chunk}")
-                print(f"🔍 CHUNK TYPE: {type(chunk)}")
-                print(f"🔍 CHUNK LENGTH: {len(chunk) if hasattr(chunk, '__len__') else 'N/A'}")
+                print(f"🔍 CHUNK: {chunk}")
                 print(f"{'='*80}\n")
 
-                # Handle LangGraph v1 streaming format
-                # Chunk is a tuple: (node_identifier, node_update)
-                if not isinstance(chunk, (tuple, list)) or len(chunk) < 2:
-                    print(f"❌ Skipping malformed chunk: {chunk}")
-                    continue
+                # Chunk format: {node_name: node_output}
+                for node_name, node_output in chunk.items():
+                    if node_name == "__start__" or node_name == "__end__":
+                        continue
 
-                node_identifier, node_update = chunk[0], chunk[1]
-                print(f"🎯 Node Identifier: {node_identifier}")
-                print(f"📦 Node Update Keys: {node_update.keys() if isinstance(node_update, dict) else type(node_update)}")
+                    print(f"📍 Node: {node_name}")
 
-                # Extract actual node name from various formats
-                actual_node_name = None
-
-                # LangGraph v1 format: node_identifier can be:
-                # 1. Empty tuple () - skip these
-                # 2. Tuple with node path like ('Orchestrator Supervisor:uuid',)
-                # 3. Plain string (legacy)
-                if isinstance(node_identifier, tuple):
-                    if len(node_identifier) == 0:
-                        # Empty tuple - check node_update keys for node name
-                        if isinstance(node_update, dict):
-                            # Skip __start__ and __end__ nodes
-                            for key in node_update.keys():
-                                if key not in ["__start__", "__end__"]:
-                                    actual_node_name = key
-                                    break
-                    else:
-                        # Extract node name from tuple, removing UUID suffix
-                        node_str = str(node_identifier[0])
-                        # Remove UUID suffix if present (format: "NodeName:uuid")
-                        actual_node_name = node_str.split(":")[0] if ":" in node_str else node_str
-                elif isinstance(node_identifier, str):
-                    actual_node_name = node_identifier
-
-                if not actual_node_name or actual_node_name in ["__start__", "__end__"]:
-                    continue
-
-                print(f"Processing node: {actual_node_name}")  # Debug log
-
-                # Extract messages from node_update (handle both v1 formats)
-                messages = []
-                if isinstance(node_update, dict):
-                    # Format 1: {"agent": {"messages": [...]}} - used by supervisor
-                    if "agent" in node_update and isinstance(node_update["agent"], dict):
-                        messages = node_update["agent"].get("messages", [])
-                    # Format 2: {"model": {"messages": [...]}} - LangGraph v1 for create_agent nodes
-                    elif "model" in node_update and isinstance(node_update["model"], dict):
-                        messages = node_update["model"].get("messages", [])
-                    # Format 3: {"tools": {"messages": [...]}} - tool node responses
-                    elif "tools" in node_update and isinstance(node_update["tools"], dict):
-                        messages = node_update["tools"].get("messages", [])
-                    # Format 4: {"NodeName": {"messages": [...]}} - named node updates
-                    elif actual_node_name in node_update and isinstance(node_update[actual_node_name], dict):
-                        messages = node_update[actual_node_name].get("messages", [])
-                    # Format 5: Direct messages key
-                    else:
-                        messages = node_update.get("messages", [])
-
-                if not messages:
-                    continue
-
-                # Debug: Print all messages to understand the sequence
-                print(f"📨 Total messages in node '{actual_node_name}': {len(messages)}")
-                for i, msg in enumerate(messages):
-                    print(f"   Message[{i}] type: {type(msg).__name__}, preview: {str(msg)[:100]}...")
-
-                # Find the appropriate message based on node type
-                from langchain_core.messages import ToolMessage as ToolMessageType, AIMessage as AIMessageType
-
-                last_message = None
-
-                # Special handling for ResponseAgent - find the message with actual JSX content
-                if "ResponseAgent" in actual_node_name or "Response Agent" in actual_node_name:
-                    print("🎯 ResponseAgent detected - looking for JSX content message...")
-                    # Loop in reverse to find the last AIMessage that:
-                    # 1. Is not a ToolMessage
-                    # 2. Does NOT have tool_calls (transfer messages have tool_calls)
-                    # 3. Has substantial content (JSX will be long)
-                    for msg in reversed(messages):
-                        if isinstance(msg, AIMessageType) and not isinstance(msg, ToolMessageType):
-                            # Check if this is a transfer message (has tool_calls) or actual content
-                            has_tool_calls = hasattr(msg, "tool_calls") and msg.tool_calls
-                            content_length = len(str(msg.content)) if hasattr(msg, "content") else 0
-
-                            print(f"   Checking AIMessage: tool_calls={has_tool_calls}, content_length={content_length}")
-
-                            # We want the message WITHOUT tool_calls (actual JSX response)
-                            if not has_tool_calls and content_length > 50:
-                                last_message = msg
-                                print(f"✅ Found ResponseAgent JSX message: {content_length} chars")
-                                break
-                else:
-                    # For other agents, just find the last non-ToolMessage
-                    for msg in reversed(messages):
-                        if not isinstance(msg, ToolMessageType):
-                            last_message = msg
-                            print(f"✅ Found non-ToolMessage: {type(last_message).__name__}")
-                            break
-
-                if not last_message:
-                    print(f"⚠️ No appropriate message found in node: {actual_node_name}")
-                    continue
-
-                print(f"💬 Selected Message Type: {type(last_message).__name__}")
-                print(
-                    f"💬 Selected Message Preview: {str(last_message)[:200]}..."
-                )  # First 200 chars                # Handle supervisor routing decisions
-                if "Orchestrator Supervisor" in actual_node_name or "supervisor" in actual_node_name.lower():
-                    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-                        for tool_call in last_message.tool_calls:
-                            tool_name = tool_call.get("name", "")
-                            if "Handoff" in tool_name:
-                                # Extract target agent from tool name
-                                if "Project-Management" in tool_name:
-                                    target_agent = "Project Management Agent"
-                                elif "Response-Agent" in tool_name:
-                                    target_agent = "Response Agent"
-                                elif "Scheduler-Handoff" in tool_name:
-                                    target_agent = "Scheduler Agent"
-                                else:
-                                    target_agent = "Agent"
-
-                                yield {
-                                    "type": "routing",
-                                    "agent": "Main Agent",
-                                    "message": f"Routing request to {target_agent}...",
-                                    "timestamp": datetime.now().isoformat(),
-                                }
-                    # If supervisor responds directly without routing, yield that too
-                    elif hasattr(last_message, "content") and last_message.content:
+                    # Yield routing information
+                    if node_name == "supervisor":
+                        agent_choice = node_output.get("current_agent", "unknown")
                         yield {
-                            "type": "response",
-                            "agent": "Main Agent",
-                            "message": "Processing your request...",
+                            "type": "routing",
+                            "agent": "Supervisor",
+                            "message": f"Routing to {agent_choice} agent...",
                             "timestamp": datetime.now().isoformat(),
                         }
 
-                # Handle Scheduler Agent actions
-                elif "Scheduler Agent" in actual_node_name:
-                    # Check for tool calls
-                    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-                        for tool_call in last_message.tool_calls:
-                            tool_name = tool_call.get("name", "Unknown Tool")
+                    # Yield agent activity
+                    elif node_name in ["scheduler", "project_manager", "general"]:
+                        yield {
+                            "type": "action",
+                            "agent": node_name.replace("_", " ").title(),
+                            "message": f"Processing request...",
+                            "timestamp": datetime.now().isoformat(),
+                        }
+
+                    # Yield final response
+                    elif node_name == "response_agent":
+                        messages = node_output.get("messages", [])
+                        if messages:
+                            final_message = messages[-1]
+                            jsx_content = final_message.content if hasattr(final_message, "content") else str(final_message)
+
+                            # Strip markdown code fences if present
+                            if jsx_content.startswith("```"):
+                                lines = jsx_content.split("\n")
+                                if lines[0].strip().startswith("```"):
+                                    lines = lines[1:]
+                                if lines and lines[-1].strip() == "```":
+                                    lines = lines[:-1]
+                                jsx_content = "\n".join(lines)
+
                             yield {
-                                "type": "tool",
-                                "agent": "Scheduler Agent",
-                                "message": tool_name,
-                                "tool": tool_name,
+                                "type": "completion",
+                                "agent": "Response Agent",
+                                "message": "Formatting response...",
                                 "timestamp": datetime.now().isoformat(),
                             }
 
-                    # Check for AI message content
-                    elif hasattr(last_message, "content") and last_message.content:
-                        content = str(last_message.content).lower()
-                        if any(
-                            word in content
-                            for word in [
-                                "getting",
-                                "retrieving",
-                                "checking",
-                                "analyzing",
-                                "processing",
-                                "creating",
-                                "updating",
-                                "deleting",
-                                "finding",
-                            ]
-                        ):
-                            step_type = "action"
-                        else:
-                            step_type = "completion"
-
-                        message_content = str(last_message.content)
-                        truncated_content = message_content[:100] + "..." if len(message_content) > 100 else message_content
-
-                        yield {
-                            "type": step_type,
-                            "agent": "Scheduler Agent",
-                            "message": truncated_content,
-                            "timestamp": datetime.now().isoformat(),
-                        }
-
-                # Handle Project Management Agent actions
-                elif "PMAgent" in actual_node_name:
-                    # Check for tool calls
-                    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-                        for tool_call in last_message.tool_calls:
-                            tool_name = tool_call.get("name", "Unknown Tool")
                             yield {
-                                "type": "tool",
-                                "agent": "Project Management Agent",
-                                "message": tool_name,
-                                "tool": tool_name,
+                                "type": "final_response",
+                                "agent": "Response Agent",
+                                "message": "Response ready",
+                                "content": jsx_content,
                                 "timestamp": datetime.now().isoformat(),
                             }
-
-                    # Check for AI message content
-                    elif hasattr(last_message, "content") and last_message.content:
-                        content = str(last_message.content).lower()
-                        if any(
-                            word in content
-                            for word in [
-                                "getting",
-                                "retrieving",
-                                "checking",
-                                "analyzing",
-                                "processing",
-                            ]
-                        ):
-                            step_type = "action"
-                        else:
-                            step_type = "completion"
-
-                        message_content = str(last_message.content)
-                        truncated_content = message_content[:100] + "..." if len(message_content) > 100 else message_content
-
-                        yield {
-                            "type": step_type,
-                            "agent": "Project Management Agent",
-                            "message": truncated_content,
-                            "timestamp": datetime.now().isoformat(),
-                        }
-
-                # Handle Response Agent OR any node with JSX content
-                # Check if this is a response agent OR if the message contains JSX
-                is_response_agent = "ResponseAgent" in actual_node_name or "Response Agent" in actual_node_name
-                has_jsx_content = False
-
-                if hasattr(last_message, "content") and last_message.content:
-                    content_str = str(last_message.content)
-                    # Check for JSX markers
-                    has_jsx_content = ("<>" in content_str or "<Typography" in content_str or "<div" in content_str) and len(
-                        content_str
-                    ) > 200
-
-                if is_response_agent or has_jsx_content:
-                    print(f"📝 JSX Response detected! Node: {actual_node_name}, Message type: {type(last_message)}")
-                    if hasattr(last_message, "content") and last_message.content:
-                        print(f"📝 Response has content: {len(str(last_message.content))} characters")
-
-                        # Show completion step
-                        yield {
-                            "type": "completion",
-                            "agent": "Response Agent" if is_response_agent else actual_node_name,
-                            "message": "Formatting response for display...",
-                            "timestamp": datetime.now().isoformat(),
-                        }
-
-                        # Yield the final response for the chat
-                        final_response_content = str(last_message.content)
-
-                        # Strip markdown code fences if present (```jsx ... ```)
-                        if final_response_content.startswith("```"):
-                            # Remove opening fence
-                            lines = final_response_content.split("\n")
-                            if lines[0].strip().startswith("```"):
-                                lines = lines[1:]
-                            # Remove closing fence
-                            if lines and lines[-1].strip() == "```":
-                                lines = lines[:-1]
-                            final_response_content = "\n".join(lines)
-                            print("🔧 Stripped markdown code fences from JSX")
-
-                        # Log response length for debugging
-                        print(f"📊 Final response length: {len(final_response_content)} characters")
-
-                        # Check if JSX response appears complete
-                        if "<>" in final_response_content or "<Typography" in final_response_content:
-                            # Basic JSX validation
-                            open_fragments = final_response_content.count("<>")
-                            close_fragments = final_response_content.count("</>")
-                            has_unclosed_quotes = bool(re.search(r'className="[^"]*$', final_response_content))
-                            has_unclosed_tags = final_response_content.endswith("<") or bool(
-                                re.search(r"<[^>]*$", final_response_content)
-                            )
-
-                            if open_fragments != close_fragments or has_unclosed_quotes or has_unclosed_tags:
-                                print(
-                                    f"⚠️ JSX appears incomplete - fragments: {open_fragments}/{close_fragments}, unclosed quotes: {has_unclosed_quotes}, unclosed tags: {has_unclosed_tags}"
-                                )
-                                # Add completion warning
-                                final_response_content += "\n<!-- JSX Response may be incomplete -->"
-                            else:
-                                print(f"✅ JSX validation passed")
-
-                        print(f"🎉 Yielding final_response with {len(final_response_content)} characters of JSX")
-                        yield {
-                            "type": "final_response",
-                            "agent": "Response Agent" if is_response_agent else actual_node_name,
-                            "message": "Response ready",
-                            "content": final_response_content,
-                            "timestamp": datetime.now().isoformat(),
-                        }
 
             except Exception as chunk_error:
-                print(f"Error processing chunk {chunk}: {chunk_error}")
-                # Continue processing other chunks instead of failing completely
+                print(f"Error processing chunk: {chunk_error}")
                 continue
 
-    except GeneratorExit:
-        print("Stream generator was closed early")
-        # Don't return, let the generator close naturally
-        raise
     except Exception as e:
         print(f"Error in stream_response: {e}")
-        # Yield an error message instead of crashing
+        import traceback
+
+        traceback.print_exc()
         yield {
             "type": "error",
             "agent": "System",
@@ -958,65 +515,11 @@ async def stream_response(user_input: str, config: dict):
         }
 
 
+# Placeholder for stream_events - can be implemented similarly if needed
 async def stream_events(user_input: str, config: dict):
-    """Stream detailed events from the supervisor agent for debugging"""
+    """Stream detailed events (placeholder for now)"""
+    async for event in stream_response(user_input, config):
+        yield event
 
-    try:
-        initial_state = {"messages": [HumanMessage(content=user_input)]}
 
-        async for event in app.astream_events(initial_state, config=config, version="v2"):
-            try:
-                # Handle different event types for more granular control
-                if event.get("event") == "on_chain_start":
-                    # Agent starting
-                    agent_name = event.get("name", "Unknown Agent")
-                    if agent_name != "RunnableSequence":  # Filter out generic sequences
-                        yield {
-                            "type": "routing",
-                            "agent": "Main Agent",
-                            "message": f"Starting {agent_name}...",
-                            "timestamp": datetime.now().isoformat(),
-                        }
-
-                elif event.get("event") == "on_tool_start":
-                    # Tool execution starting
-                    tool_name = event.get("name", "Unknown Tool")
-                    agent_name = "Agent"
-                    if "tags" in event and isinstance(event["tags"], dict):
-                        agent_name = event["tags"].get("agent", "Agent")
-
-                    yield {
-                        "type": "tool",
-                        "agent": agent_name,
-                        "message": tool_name,
-                        "tool": tool_name,
-                        "timestamp": datetime.now().isoformat(),
-                    }
-
-                elif event.get("event") == "on_chain_end":
-                    # Agent completing
-                    agent_name = event.get("name", "Unknown Agent")
-                    if agent_name != "RunnableSequence" and "Agent" in agent_name:
-                        yield {
-                            "type": "completion",
-                            "agent": agent_name,
-                            "message": f"Completed processing with {agent_name}",
-                            "timestamp": datetime.now().isoformat(),
-                        }
-
-            except Exception as event_error:
-                print(f"Error processing event {event}: {event_error}")
-                continue
-
-    except GeneratorExit:
-        print("Event stream generator was closed early")
-        # Don't return, let the generator close naturally
-        raise
-    except Exception as e:
-        print(f"Error in stream_events: {e}")
-        yield {
-            "type": "error",
-            "agent": "System",
-            "message": f"Event streaming error: {str(e)}",
-            "timestamp": datetime.now().isoformat(),
-        }
+print("✅ StateGraph-based supervisor loaded successfully")

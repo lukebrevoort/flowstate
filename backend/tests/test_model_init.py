@@ -1,30 +1,26 @@
 #!/usr/bin/env python3
 """
-Simple test to verify the model initialization works correctly
+Test to verify the StateGraph supervisor and agent initialization works correctly
 """
 
 import sys
 import os
-from typing import List, Any
 
 # Add the backend directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from agents.supervisor import ValidatedChatAnthropic, model, streaming_model
+    from agents.supervisor import app, base_model, create_flowstate_graph
 
-    print("✅ Successfully imported ValidatedChatAnthropic and models")
-    print(f"✅ Non-streaming model: {model}")
-    print(f"✅ Streaming model: {streaming_model}")
-    print(f"✅ Non-streaming model streaming setting: {model.streaming}")
-    print(f"✅ Streaming model streaming setting: {streaming_model.streaming}")
+    print("✅ Successfully imported StateGraph app and base_model")
+    print(f"✅ Base model: {base_model}")
+    print(f"✅ StateGraph app compiled: {app is not None}")
 
-    # Test basic validation
-    messages: List[Any] = []
-    validated = model.validate_messages(messages) if hasattr(model, "validate_messages") else messages
-    print(f"✅ Message validation works: {type(validated)}")
+    # Test graph creation
+    graph = create_flowstate_graph()
+    print(f"✅ Graph creation works: {graph is not None}")
 
-    print("\n🎉 All basic tests passed! The ResponseNotRead fix should be working.")
+    print("\n🎉 All basic tests passed! StateGraph supervisor is working correctly.")
 
 except ImportError as e:
     print(f"❌ Import error: {e}")

@@ -468,24 +468,30 @@ async def chat(request: ChatRequest, current_user=Depends(get_current_user_depen
             )
 
         try:
-            # Prepare the state with the user message
-            state = {"messages": [HumanMessage(content=request.message)]}
+            # Prepare the NEW AgentState structure
+            state = {
+                "messages": [HumanMessage(content=request.message)],
+                "current_agent": None,
+                "needs_response_formatting": True,
+                "user_profile": None,  # TODO: Load from store
+                "agent_results": {},
+            }
 
-            # Create configuration for LangGraph - FIXED: Include thread_id
+            # Create configuration for LangGraph
             config = {
                 "configurable": {
                     "user_id": user_id,
                     "todo_category": request.todo_category,
-                    "thread_id": session_id,  # ✅ Add the missing thread_id
+                    "thread_id": session_id,
                 },
                 "store": memory_store,
             }
 
-            print(f"Invoking agent with state: {state}")
+            print(f"Invoking agent with NEW state structure: {state}")
             print(f"Config: {config}")
 
-            # Invoke the agent
-            result = agent_app.invoke(state, config=config)
+            # Invoke the agent (using async since all nodes are async)
+            result = await agent_app.ainvoke(state, config=config)
 
             print(f"Agent result: {result}")
             print(f"Result type: {type(result)}")
@@ -496,26 +502,19 @@ async def chat(request: ChatRequest, current_user=Depends(get_current_user_depen
                 messages = result.get("messages", [])
                 print(f"Found {len(messages)} messages in result")
 
-                # Look for the last AI message with content
+                # The last message should be the JSX-formatted response from Response Agent
                 ai_response = None
-                ai_messages = []
-                for msg in messages:
+                for msg in reversed(messages):
                     if hasattr(msg, "content") and msg.content:
                         # Check if it's an AI message
                         if hasattr(msg, "type") and msg.type == "ai":
-                            ai_messages.append(str(msg.content))
-                            print(f"Found AI message: {msg.content}")
+                            ai_response = str(msg.content)
+                            print(f"Found final AI response: {ai_response[:100]}...")
+                            break
                         elif hasattr(msg, "__class__") and "AI" in msg.__class__.__name__:
-                            ai_messages.append(str(msg.content))
-                            print(f"Found AI message by class name: {msg.content}")
-
-                # Get the second to last AI message if available, through response agent
-                if len(ai_messages) >= 2:
-                    ai_response = ai_messages[-2]
-                    print(f"Using second to last AI response: {ai_response}")
-                elif len(ai_messages) >= 1:
-                    ai_response = ai_messages[-1]
-                    print(f"Only one AI message found, using it: {ai_response}")
+                            ai_response = str(msg.content)
+                            print(f"Found final AI response by class name: {ai_response[:100]}...")
+                            break
 
                 if ai_response:
                     response = ai_response

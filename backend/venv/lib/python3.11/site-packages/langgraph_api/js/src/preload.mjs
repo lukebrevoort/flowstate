@@ -11,7 +11,15 @@ const cwd = process.cwd();
 // be working fine as well.
 const firstGraphFile =
   Object.values(graphs)
-    .flatMap((i) => i.split(":").at(0))
+    .map((i) => {
+      if (typeof i === "string") {
+        return i.split(":").at(0);
+      } else if (i && typeof i === "object" && i.path) {
+        return i.path.split(":").at(0);
+      }
+      return null;
+    })
+    .filter(Boolean)
     .at(0) || "index.mts";
 
 // enforce API @langchain/langgraph resolution
