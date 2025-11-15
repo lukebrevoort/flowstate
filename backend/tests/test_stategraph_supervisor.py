@@ -52,6 +52,7 @@ def test_jsx_validation():
 
 
 @pytest.mark.asyncio
+@skip_if_no_api_key
 async def test_supervisor_routing_scheduler():
     """Test that supervisor correctly routes to scheduler"""
     state: AgentState = {
@@ -71,6 +72,7 @@ async def test_supervisor_routing_scheduler():
 
 
 @pytest.mark.asyncio
+@skip_if_no_api_key
 async def test_supervisor_routing_project_manager():
     """Test that supervisor correctly routes to project manager"""
     state: AgentState = {
@@ -90,6 +92,7 @@ async def test_supervisor_routing_project_manager():
 
 
 @pytest.mark.asyncio
+@skip_if_no_api_key
 async def test_supervisor_routing_general():
     """Test that supervisor correctly routes general queries"""
     state: AgentState = {
