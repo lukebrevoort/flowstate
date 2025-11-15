@@ -2,10 +2,17 @@
 Test the new StateGraph-based supervisor implementation
 """
 
+import os
 import pytest
 import asyncio
 from langchain_core.messages import HumanMessage, AIMessage
 from agents.supervisor import app, create_flowstate_graph, AgentState, supervisor_node, _validate_jsx
+
+# Skip these tests if ANTHROPIC_API_KEY is not set or is a test key
+skip_if_no_api_key = pytest.mark.skipif(
+    not os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_API_KEY").startswith("test-"),
+    reason="Requires valid ANTHROPIC_API_KEY"
+)
 
 
 def test_graph_structure():
@@ -102,6 +109,7 @@ async def test_supervisor_routing_general():
 
 
 @pytest.mark.asyncio
+@skip_if_no_api_key
 async def test_full_graph_execution():
     """Test the complete graph execution flow"""
     # Initial state
@@ -138,6 +146,7 @@ async def test_full_graph_execution():
 
 
 @pytest.mark.asyncio
+@skip_if_no_api_key
 async def test_response_agent_always_runs():
     """Test that Response Agent always runs at the end"""
     initial_state: AgentState = {

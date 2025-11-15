@@ -254,12 +254,10 @@ async def test_supervisor_integration():
     print("=" * 80)
     print()
 
-    from agents.supervisor import orchestrator_agent, scheduler_handoff
+    from agents.supervisor import app
 
-    print("✓ Orchestrator agent compiled successfully")
-    print("✓ Scheduler handoff tool loaded")
-    print(f"  Tool name: {scheduler_handoff.name}")
-    print(f"  Tool description: {scheduler_handoff.description}")
+    print("✓ StateGraph app compiled successfully")
+    print("✓ Scheduler agent integrated into graph")
     print()
 
     print("=" * 80)

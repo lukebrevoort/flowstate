@@ -1,11 +1,19 @@
 """Test the StateGraph-based supervisor implementation"""
 
+import os
 import pytest
 from agents.supervisor import app, AgentState
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
+# Skip these tests if ANTHROPIC_API_KEY is not set or is a test key
+skip_if_no_api_key = pytest.mark.skipif(
+    not os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_API_KEY").startswith("test-"),
+    reason="Requires valid ANTHROPIC_API_KEY"
+)
+
 
 @pytest.mark.asyncio
+@skip_if_no_api_key
 async def test_supervisor_calls_schedule_task():
     """Test that supervisor correctly routes calendar requests to scheduler agent"""
 
@@ -36,6 +44,7 @@ async def test_supervisor_calls_schedule_task():
 
 
 @pytest.mark.asyncio
+@skip_if_no_api_key
 async def test_supervisor_calls_manage_assignments():
     """Test that supervisor correctly routes assignment requests to project manager agent"""
 
@@ -63,6 +72,7 @@ async def test_supervisor_calls_manage_assignments():
 
 
 @pytest.mark.asyncio
+@skip_if_no_api_key
 async def test_supervisor_multi_agent_workflow():
     """Test that supervisor coordinates agents and response formatting"""
 
@@ -97,6 +107,7 @@ async def test_supervisor_multi_agent_workflow():
 
 
 @pytest.mark.asyncio
+@skip_if_no_api_key
 async def test_supervisor_formats_final_response():
     """Test that supervisor formats responses in JSX via Response Agent"""
 
@@ -130,6 +141,7 @@ async def test_supervisor_formats_final_response():
 
 
 @pytest.mark.asyncio
+@skip_if_no_api_key
 async def test_sub_agents_call_their_tools():
     """Test that sub-agents loop and call multiple tools before completing"""
 
