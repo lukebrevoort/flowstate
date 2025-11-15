@@ -11,7 +11,7 @@ from agents.supervisor import app, create_flowstate_graph, AgentState, superviso
 # Skip these tests if ANTHROPIC_API_KEY is not set or is a test key
 skip_if_no_api_key = pytest.mark.skipif(
     not os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_API_KEY").startswith("test-"),
-    reason="Requires valid ANTHROPIC_API_KEY"
+    reason="Requires valid ANTHROPIC_API_KEY",
 )
 
 
