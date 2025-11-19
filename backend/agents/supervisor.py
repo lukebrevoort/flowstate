@@ -89,12 +89,8 @@ def sanitize_messages(messages: List[BaseMessage]) -> List[BaseMessage]:
                     AIMessage(
                         content=cleaned_content,
                         id=msg.id if hasattr(msg, "id") else None,
-                        additional_kwargs=msg.additional_kwargs
-                        if hasattr(msg, "additional_kwargs")
-                        else {},
-                        response_metadata=msg.response_metadata
-                        if hasattr(msg, "response_metadata")
-                        else {},
+                        additional_kwargs=msg.additional_kwargs if hasattr(msg, "additional_kwargs") else {},
+                        response_metadata=msg.response_metadata if hasattr(msg, "response_metadata") else {},
                     )
                 )
             elif isinstance(msg, SystemMessage):
@@ -158,9 +154,7 @@ async def supervisor_node(state: AgentState, config: RunnableConfig) -> Dict[str
         tomorrow = current_time + timedelta(days=1)
         tomorrow_str = tomorrow.strftime("%A, %B %d, %Y")
     except Exception as tz_error:
-        print(
-            f"⚠️  Error processing timezone {user_timezone_str}: {tz_error}, using UTC"
-        )
+        print(f"⚠️  Error processing timezone {user_timezone_str}: {tz_error}, using UTC")
         current_datetime_str = datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")
         tomorrow_str = "tomorrow"
 
@@ -211,9 +205,7 @@ Do not provide explanation, just the agent name."""
     }  # Always need formatting
 
 
-async def project_manager_node(
-    state: AgentState, config: RunnableConfig
-) -> Dict[str, Any]:
+async def project_manager_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any]:
     """
     Project Manager Agent - handles Notion assignment operations
     Loops internally until all tool calls are complete
@@ -316,11 +308,7 @@ User Profile:
     print(f"🏁 Project Manager Agent - Completed after {iteration} iterations\n")
 
     # Get final response content
-    final_content = (
-        response.content
-        if (response and hasattr(response, "content"))
-        else "Task completed"
-    )
+    final_content = response.content if (response and hasattr(response, "content")) else "Task completed"
 
     return {
         "messages": all_new_messages,
@@ -352,9 +340,7 @@ async def scheduler_node(state: AgentState, config: RunnableConfig) -> Dict[str,
             if user_data and user_data.get("timezone"):
                 user_timezone_str = user_data["timezone"]
     except Exception as e:
-        print(
-            f"⚠️  Error fetching user timezone in scheduler node: {e}, defaulting to UTC"
-        )
+        print(f"⚠️  Error fetching user timezone in scheduler node: {e}, defaulting to UTC")
 
     # Get current date/time with user's timezone
     from datetime import datetime
@@ -433,11 +419,7 @@ User Profile:
     print(f"🏁 Scheduler Agent - Completed after {iteration} iterations\n")
 
     # Get final response content
-    final_content = (
-        response.content
-        if (response and hasattr(response, "content"))
-        else "Task completed"
-    )
+    final_content = response.content if (response and hasattr(response, "content")) else "Task completed"
 
     return {"messages": all_new_messages, "agent_results": {"scheduler": final_content}}
 
@@ -525,9 +507,7 @@ Format the above response as valid JSX using Typography, Button, and other avail
     jsx_response = await base_model.ainvoke(response_messages)
 
     # Validate JSX
-    jsx_content = (
-        jsx_response.content if hasattr(jsx_response, "content") else str(jsx_response)
-    )
+    jsx_content = jsx_response.content if hasattr(jsx_response, "content") else str(jsx_response)
     jsx_content_str = str(jsx_content) if jsx_content else ""
     if not _validate_jsx(jsx_content_str):
         # Retry with explicit validation instruction
@@ -691,9 +671,7 @@ async def stream_response(user_input: str, config: dict):
 
         # Stream the graph execution
         # Type ignore for config - RunnableConfig compatibility
-        async for chunk in app.astream(
-            initial_state, config=config, stream_mode="updates"
-        ):  # type: ignore
+        async for chunk in app.astream(initial_state, config=config, stream_mode="updates"):  # type: ignore
             try:
                 print(f"\n{'=' * 80}")
                 print(f"🔍 CHUNK: {chunk}")
@@ -730,11 +708,7 @@ async def stream_response(user_input: str, config: dict):
                         messages = node_output.get("messages", [])
                         if messages:
                             final_message = messages[-1]
-                            jsx_content = (
-                                final_message.content
-                                if hasattr(final_message, "content")
-                                else str(final_message)
-                            )
+                            jsx_content = final_message.content if hasattr(final_message, "content") else str(final_message)
 
                             # Strip markdown code fences if present
                             if jsx_content.startswith("```"):
