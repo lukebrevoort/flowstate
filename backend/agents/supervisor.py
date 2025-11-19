@@ -6,7 +6,7 @@ Implements explicit routing with mandatory Response Agent enforcement
 import uuid
 import re
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Annotated, Dict, List, Literal, Optional, Any, TypedDict
 
 from pydantic import BaseModel, Field
@@ -94,7 +94,7 @@ def sanitize_messages(messages: List[BaseMessage]) -> List[BaseMessage]:
 # ============================================================================
 
 
-async def supervisor_node(state: AgentState) -> Dict[str, Any]:
+async def supervisor_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any]:
     """
     Supervisor node - analyzes user request and routes to appropriate agent
     """
@@ -106,8 +106,45 @@ async def supervisor_node(state: AgentState) -> Dict[str, Any]:
     # Get user profile for context
     user_profile = state.get("user_profile", "No profile information available")
 
+    # ✅ Get user's timezone from config or default to UTC
+    user_timezone_str = "UTC"  # Default
+    try:
+        from services.database import get_database_service
+
+        configurable = config.get("configurable", {}) if config else {}
+        user_id = configurable.get("user_id")
+        if user_id:
+            db_service = get_database_service()
+            user_data = await db_service.get_user_by_id(user_id)
+            if user_data and user_data.get("timezone"):
+                user_timezone_str = user_data["timezone"]
+                print(f"✅ Using user timezone: {user_timezone_str}")
+            else:
+                print(f"⚠️  No timezone found for user {user_id}, defaulting to UTC")
+    except Exception as e:
+        print(f"⚠️  Error fetching user timezone: {e}, defaulting to UTC")
+
+    # Get current date/time with user's timezone
+    from datetime import datetime
+    import pytz
+
+    try:
+        user_timezone = pytz.timezone(user_timezone_str)
+        current_time = datetime.now(user_timezone)
+        current_datetime_str = current_time.strftime("%A, %B %d, %Y at %I:%M %p %Z")
+        tomorrow = current_time + timedelta(days=1)
+        tomorrow_str = tomorrow.strftime("%A, %B %d, %Y")
+    except Exception as tz_error:
+        print(f"⚠️  Error processing timezone {user_timezone_str}: {tz_error}, using UTC")
+        current_datetime_str = datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")
+        tomorrow_str = "tomorrow"
+
     # Build routing decision prompt
     supervisor_prompt = f"""You are the FlowState supervisor agent. Your job is to analyze the user's request and decide which specialized agent should handle it.
+
+CURRENT DATE/TIME CONTEXT:
+- Current time: {current_datetime_str}
+- Tomorrow is: {tomorrow_str}
 
 Available agents:
 - "scheduler": Handles Google Calendar operations (viewing events, creating/updating/deleting events, finding availability)
@@ -145,7 +182,7 @@ Do not provide explanation, just the agent name."""
     return {"current_agent": agent_choice, "needs_response_formatting": True, "messages": [response]}  # Always need formatting
 
 
-async def project_manager_node(state: AgentState) -> Dict[str, Any]:
+async def project_manager_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any]:
     """
     Project Manager Agent - handles Notion assignment operations
     Loops internally until all tool calls are complete
@@ -156,8 +193,49 @@ async def project_manager_node(state: AgentState) -> Dict[str, Any]:
     # Sanitize messages to prevent trailing whitespace errors
     messages = sanitize_messages(messages)
 
-    # Build context-aware prompt
-    context_prompt = f"""User Profile:
+    # ✅ Get user's timezone from config or default to UTC
+    user_timezone_str = "UTC"  # Default
+    try:
+        from services.database import get_database_service
+
+        configurable = config.get("configurable", {}) if config else {}
+        user_id = configurable.get("user_id")
+        if user_id:
+            db_service = get_database_service()
+            user_data = await db_service.get_user_by_id(user_id)
+            if user_data and user_data.get("timezone"):
+                user_timezone_str = user_data["timezone"]
+    except Exception as e:
+        print(f"⚠️  Error fetching user timezone in PM node: {e}, defaulting to UTC")
+
+    # Get current date/time with user's timezone
+    from datetime import datetime
+    import pytz
+
+    try:
+        user_timezone = pytz.timezone(user_timezone_str)
+        current_time = datetime.now(user_timezone)
+        current_datetime_str = current_time.strftime("%A, %B %d, %Y at %I:%M %p %Z")
+        today_date = current_time.strftime("%Y-%m-%d")
+        tomorrow = current_time + timedelta(days=1)
+        tomorrow_date = tomorrow.strftime("%Y-%m-%d")
+        tomorrow_day = tomorrow.strftime("%A")
+    except:
+        current_datetime_str = datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")
+        today_date = datetime.now().strftime("%Y-%m-%d")
+        tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+        tomorrow_day = "tomorrow"
+
+    # Build context-aware prompt with explicit date/time information
+    context_prompt = f"""CRITICAL DATE/TIME CONTEXT:
+- Current time: {current_datetime_str}
+- Today's date: {today_date}
+- Tomorrow is {tomorrow_day}, {tomorrow_date}
+
+When user says "tomorrow", they mean {tomorrow_day}, {tomorrow_date}.
+When user says "today", they mean {today_date}.
+
+User Profile:
 {user_profile}
 
 {project_manager_prompt}"""
@@ -212,7 +290,7 @@ async def project_manager_node(state: AgentState) -> Dict[str, Any]:
     return {"messages": all_new_messages, "agent_results": {"project_manager": final_content}}
 
 
-async def scheduler_node(state: AgentState) -> Dict[str, Any]:
+async def scheduler_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any]:
     """
     Scheduler Agent - handles Google Calendar operations
     Loops internally until all tool calls are complete
@@ -223,8 +301,49 @@ async def scheduler_node(state: AgentState) -> Dict[str, Any]:
     # Sanitize messages to prevent trailing whitespace errors
     messages = sanitize_messages(messages)
 
-    # Build context-aware prompt
-    context_prompt = f"""User Profile:
+    # ✅ Get user's timezone from config or default to UTC
+    user_timezone_str = "UTC"  # Default
+    try:
+        from services.database import get_database_service
+
+        configurable = config.get("configurable", {}) if config else {}
+        user_id = configurable.get("user_id")
+        if user_id:
+            db_service = get_database_service()
+            user_data = await db_service.get_user_by_id(user_id)
+            if user_data and user_data.get("timezone"):
+                user_timezone_str = user_data["timezone"]
+    except Exception as e:
+        print(f"⚠️  Error fetching user timezone in scheduler node: {e}, defaulting to UTC")
+
+    # Get current date/time with user's timezone
+    from datetime import datetime
+    import pytz
+
+    try:
+        user_timezone = pytz.timezone(user_timezone_str)
+        current_time = datetime.now(user_timezone)
+        current_datetime_str = current_time.strftime("%A, %B %d, %Y at %I:%M %p %Z")
+        today_date = current_time.strftime("%Y-%m-%d")
+        tomorrow = current_time + timedelta(days=1)
+        tomorrow_date = tomorrow.strftime("%Y-%m-%d")
+        tomorrow_day = tomorrow.strftime("%A")
+    except:
+        current_datetime_str = datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")
+        today_date = datetime.now().strftime("%Y-%m-%d")
+        tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+        tomorrow_day = "tomorrow"
+
+    # Build context-aware prompt with explicit date/time information
+    context_prompt = f"""CRITICAL DATE/TIME CONTEXT:
+- Current time: {current_datetime_str}
+- Today's date: {today_date}
+- Tomorrow is {tomorrow_day}, {tomorrow_date}
+
+When user says "tomorrow", they mean {tomorrow_day}, {tomorrow_date}.
+When user says "today", they mean {today_date}.
+
+User Profile:
 {user_profile}
 
 {scheduler_prompt}"""

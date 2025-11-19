@@ -23,6 +23,7 @@ class UserResponse(BaseModel):
     email: str
     notion_connected: bool = False
     google_calendar_connected: bool = False
+    timezone: str = "UTC"  # User's timezone from Google Calendar
 
     class Config:
         from_attributes = True
