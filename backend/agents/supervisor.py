@@ -376,7 +376,7 @@ def _validate_jsx(content: str) -> bool:
 def create_flowstate_graph(checkpointer=None):
     """
     Create the FlowState multi-agent graph with explicit routing
-    
+
     Args:
         checkpointer: Optional checkpointer for persistent conversation history
     """
