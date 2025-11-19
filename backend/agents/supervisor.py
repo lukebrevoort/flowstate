@@ -127,8 +127,16 @@ Do not provide explanation, just the agent name."""
     response = await base_model.ainvoke(routing_messages)
 
     # Extract routing decision
+    # The AI may respond with just "scheduler" or "scheduler\n\nExplanation text"
+    # We need to extract just the first word/line
     content = response.content if hasattr(response, "content") else str(response)
-    agent_choice = str(content).strip().lower() if content else "general"
+
+    if content:
+        # Get the first line and first word, then clean it
+        first_line = str(content).split("\n")[0].strip().lower()
+        agent_choice = first_line
+    else:
+        agent_choice = "general"
 
     # Validate choice
     if agent_choice not in ["scheduler", "project_manager", "general"]:
