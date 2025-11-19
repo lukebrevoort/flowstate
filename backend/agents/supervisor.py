@@ -12,7 +12,13 @@ from typing import Annotated, Dict, List, Literal, Optional, Any, TypedDict
 from pydantic import BaseModel, Field
 
 from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage, ToolMessage
+from langchain_core.messages import (
+    BaseMessage,
+    HumanMessage,
+    AIMessage,
+    SystemMessage,
+    ToolMessage,
+)
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, END, START
 from langgraph.graph.message import add_messages
@@ -20,7 +26,10 @@ from langgraph.prebuilt import ToolNode
 from langgraph.checkpoint.memory import MemorySaver
 
 import agents.configuration as configuration
-from agents.project_manager import tools as project_management_tools, project_manager_prompt
+from agents.project_manager import (
+    tools as project_management_tools,
+    project_manager_prompt,
+)
 from agents.scheduler import tools as scheduler_tools, scheduler_prompt
 from agents.response import response_prompt
 
@@ -69,18 +78,32 @@ def sanitize_messages(messages: List[BaseMessage]) -> List[BaseMessage]:
 
             # Create new message with cleaned content
             if isinstance(msg, HumanMessage):
-                sanitized.append(HumanMessage(content=cleaned_content, id=msg.id if hasattr(msg, "id") else None))
+                sanitized.append(
+                    HumanMessage(
+                        content=cleaned_content,
+                        id=msg.id if hasattr(msg, "id") else None,
+                    )
+                )
             elif isinstance(msg, AIMessage):
                 sanitized.append(
                     AIMessage(
                         content=cleaned_content,
                         id=msg.id if hasattr(msg, "id") else None,
-                        additional_kwargs=msg.additional_kwargs if hasattr(msg, "additional_kwargs") else {},
-                        response_metadata=msg.response_metadata if hasattr(msg, "response_metadata") else {},
+                        additional_kwargs=msg.additional_kwargs
+                        if hasattr(msg, "additional_kwargs")
+                        else {},
+                        response_metadata=msg.response_metadata
+                        if hasattr(msg, "response_metadata")
+                        else {},
                     )
                 )
             elif isinstance(msg, SystemMessage):
-                sanitized.append(SystemMessage(content=cleaned_content, id=msg.id if hasattr(msg, "id") else None))
+                sanitized.append(
+                    SystemMessage(
+                        content=cleaned_content,
+                        id=msg.id if hasattr(msg, "id") else None,
+                    )
+                )
             else:
                 sanitized.append(msg)
         else:
@@ -135,7 +158,9 @@ async def supervisor_node(state: AgentState, config: RunnableConfig) -> Dict[str
         tomorrow = current_time + timedelta(days=1)
         tomorrow_str = tomorrow.strftime("%A, %B %d, %Y")
     except Exception as tz_error:
-        print(f"⚠️  Error processing timezone {user_timezone_str}: {tz_error}, using UTC")
+        print(
+            f"⚠️  Error processing timezone {user_timezone_str}: {tz_error}, using UTC"
+        )
         current_datetime_str = datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")
         tomorrow_str = "tomorrow"
 
@@ -179,10 +204,16 @@ Do not provide explanation, just the agent name."""
     if agent_choice not in ["scheduler", "project_manager", "general"]:
         agent_choice = "general"
 
-    return {"current_agent": agent_choice, "needs_response_formatting": True, "messages": [response]}  # Always need formatting
+    return {
+        "current_agent": agent_choice,
+        "needs_response_formatting": True,
+        "messages": [response],
+    }  # Always need formatting
 
 
-async def project_manager_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any]:
+async def project_manager_node(
+    state: AgentState, config: RunnableConfig
+) -> Dict[str, Any]:
     """
     Project Manager Agent - handles Notion assignment operations
     Loops internally until all tool calls are complete
@@ -285,9 +316,16 @@ User Profile:
     print(f"🏁 Project Manager Agent - Completed after {iteration} iterations\n")
 
     # Get final response content
-    final_content = response.content if (response and hasattr(response, "content")) else "Task completed"
+    final_content = (
+        response.content
+        if (response and hasattr(response, "content"))
+        else "Task completed"
+    )
 
-    return {"messages": all_new_messages, "agent_results": {"project_manager": final_content}}
+    return {
+        "messages": all_new_messages,
+        "agent_results": {"project_manager": final_content},
+    }
 
 
 async def scheduler_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any]:
@@ -314,7 +352,9 @@ async def scheduler_node(state: AgentState, config: RunnableConfig) -> Dict[str,
             if user_data and user_data.get("timezone"):
                 user_timezone_str = user_data["timezone"]
     except Exception as e:
-        print(f"⚠️  Error fetching user timezone in scheduler node: {e}, defaulting to UTC")
+        print(
+            f"⚠️  Error fetching user timezone in scheduler node: {e}, defaulting to UTC"
+        )
 
     # Get current date/time with user's timezone
     from datetime import datetime
@@ -393,7 +433,11 @@ User Profile:
     print(f"🏁 Scheduler Agent - Completed after {iteration} iterations\n")
 
     # Get final response content
-    final_content = response.content if (response and hasattr(response, "content")) else "Task completed"
+    final_content = (
+        response.content
+        if (response and hasattr(response, "content"))
+        else "Task completed"
+    )
 
     return {"messages": all_new_messages, "agent_results": {"scheduler": final_content}}
 
@@ -405,6 +449,10 @@ async def general_response_node(state: AgentState) -> Dict[str, Any]:
     messages = state["messages"]
     user_profile = state.get("user_profile", "")
 
+    current_datetime_str = datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")
+    today_date = datetime.now().strftime("%Y-%m-%d")
+    tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+    tomorrow_day = "tomorrow"
     # Sanitize messages to prevent trailing whitespace errors
     messages = sanitize_messages(messages)
 
@@ -413,7 +461,11 @@ async def general_response_node(state: AgentState) -> Dict[str, Any]:
 User Profile:
 {user_profile}
 
-Provide helpful responses to general questions. Keep responses concise and relevant."""
+Provide helpful responses to general questions. Keep responses concise and relevant.
+- Current time: {current_datetime_str}
+- Today's date: {today_date}
+- Tomorrow is {tomorrow_day}, {tomorrow_date}
+"""
 
     response_messages = [SystemMessage(content=general_prompt)] + messages
     response = await base_model.ainvoke(response_messages)
@@ -435,7 +487,10 @@ async def response_agent_node(state: AgentState) -> Dict[str, Any]:
 
     # Get the MOST RECENT user query (last HumanMessage in conversation)
     # Use reversed() to get the latest message, not the first one from history
-    original_query = next((msg.content for msg in reversed(messages) if isinstance(msg, HumanMessage)), "User query")
+    original_query = next(
+        (msg.content for msg in reversed(messages) if isinstance(msg, HumanMessage)),
+        "User query",
+    )
 
     # Get the agent's response
     agent_response = ""
@@ -445,7 +500,8 @@ async def response_agent_node(state: AgentState) -> Dict[str, Any]:
     else:
         # Fallback to last AI message
         agent_response = next(
-            (msg.content for msg in reversed(messages) if isinstance(msg, AIMessage)), "No response generated"
+            (msg.content for msg in reversed(messages) if isinstance(msg, AIMessage)),
+            "No response generated",
         )
 
     # Build comprehensive prompt for Response Agent
@@ -469,7 +525,9 @@ Format the above response as valid JSX using Typography, Button, and other avail
     jsx_response = await base_model.ainvoke(response_messages)
 
     # Validate JSX
-    jsx_content = jsx_response.content if hasattr(jsx_response, "content") else str(jsx_response)
+    jsx_content = (
+        jsx_response.content if hasattr(jsx_response, "content") else str(jsx_response)
+    )
     jsx_content_str = str(jsx_content) if jsx_content else ""
     if not _validate_jsx(jsx_content_str):
         # Retry with explicit validation instruction
@@ -486,10 +544,16 @@ Previous attempt:
 
 Generate corrected JSX:"""
 
-        retry_messages = [SystemMessage(content=response_prompt), HumanMessage(content=retry_prompt)]
+        retry_messages = [
+            SystemMessage(content=response_prompt),
+            HumanMessage(content=retry_prompt),
+        ]
         jsx_response = await base_model.ainvoke(retry_messages)
 
-    return {"messages": [jsx_response], "needs_response_formatting": False}  # Mark as complete
+    return {
+        "messages": [jsx_response],
+        "needs_response_formatting": False,
+    }  # Mark as complete
 
 
 # ============================================================================
@@ -578,7 +642,11 @@ def create_flowstate_graph(checkpointer=None):
     workflow.add_conditional_edges(
         "supervisor",
         route_after_supervisor,
-        {"scheduler": "scheduler", "project_manager": "project_manager", "general": "general"},
+        {
+            "scheduler": "scheduler",
+            "project_manager": "project_manager",
+            "general": "general",
+        },
     )
 
     # CRITICAL: All agents MUST route to response_agent
@@ -623,11 +691,13 @@ async def stream_response(user_input: str, config: dict):
 
         # Stream the graph execution
         # Type ignore for config - RunnableConfig compatibility
-        async for chunk in app.astream(initial_state, config=config, stream_mode="updates"):  # type: ignore
+        async for chunk in app.astream(
+            initial_state, config=config, stream_mode="updates"
+        ):  # type: ignore
             try:
-                print(f"\n{'='*80}")
+                print(f"\n{'=' * 80}")
                 print(f"🔍 CHUNK: {chunk}")
-                print(f"{'='*80}\n")
+                print(f"{'=' * 80}\n")
 
                 # Chunk format: {node_name: node_output}
                 for node_name, node_output in chunk.items():
@@ -660,7 +730,11 @@ async def stream_response(user_input: str, config: dict):
                         messages = node_output.get("messages", [])
                         if messages:
                             final_message = messages[-1]
-                            jsx_content = final_message.content if hasattr(final_message, "content") else str(final_message)
+                            jsx_content = (
+                                final_message.content
+                                if hasattr(final_message, "content")
+                                else str(final_message)
+                            )
 
                             # Strip markdown code fences if present
                             if jsx_content.startswith("```"):
