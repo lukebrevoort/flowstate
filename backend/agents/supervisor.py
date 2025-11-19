@@ -52,6 +52,42 @@ base_model = ChatAnthropic(
 )
 
 # ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+
+def sanitize_messages(messages: List[BaseMessage]) -> List[BaseMessage]:
+    """
+    Sanitize messages to prevent Anthropic API errors.
+    Strips trailing whitespace from message content.
+    """
+    sanitized = []
+    for msg in messages:
+        if hasattr(msg, 'content') and isinstance(msg.content, str):
+            # Strip trailing whitespace from content
+            cleaned_content = msg.content.rstrip()
+            
+            # Create new message with cleaned content
+            if isinstance(msg, HumanMessage):
+                sanitized.append(HumanMessage(content=cleaned_content, id=msg.id if hasattr(msg, 'id') else None))
+            elif isinstance(msg, AIMessage):
+                sanitized.append(AIMessage(
+                    content=cleaned_content,
+                    id=msg.id if hasattr(msg, 'id') else None,
+                    additional_kwargs=msg.additional_kwargs if hasattr(msg, 'additional_kwargs') else {},
+                    response_metadata=msg.response_metadata if hasattr(msg, 'response_metadata') else {}
+                ))
+            elif isinstance(msg, SystemMessage):
+                sanitized.append(SystemMessage(content=cleaned_content, id=msg.id if hasattr(msg, 'id') else None))
+            else:
+                sanitized.append(msg)
+        else:
+            sanitized.append(msg)
+    
+    return sanitized
+
+
+# ============================================================================
 # AGENT NODES
 # ============================================================================
 
@@ -61,6 +97,9 @@ async def supervisor_node(state: AgentState) -> Dict[str, Any]:
     Supervisor node - analyzes user request and routes to appropriate agent
     """
     messages = state["messages"]
+    
+    # Sanitize messages to prevent trailing whitespace errors
+    messages = sanitize_messages(messages)
 
     # Get user profile for context
     user_profile = state.get("user_profile", "No profile information available")
@@ -103,6 +142,9 @@ async def project_manager_node(state: AgentState) -> Dict[str, Any]:
     """
     messages = state["messages"]
     user_profile = state.get("user_profile", "")
+    
+    # Sanitize messages to prevent trailing whitespace errors
+    messages = sanitize_messages(messages)
 
     # Build context-aware prompt
     context_prompt = f"""User Profile:
@@ -167,6 +209,9 @@ async def scheduler_node(state: AgentState) -> Dict[str, Any]:
     """
     messages = state["messages"]
     user_profile = state.get("user_profile", "")
+    
+    # Sanitize messages to prevent trailing whitespace errors
+    messages = sanitize_messages(messages)
 
     # Build context-aware prompt
     context_prompt = f"""User Profile:
@@ -230,6 +275,9 @@ async def general_response_node(state: AgentState) -> Dict[str, Any]:
     """
     messages = state["messages"]
     user_profile = state.get("user_profile", "")
+    
+    # Sanitize messages to prevent trailing whitespace errors
+    messages = sanitize_messages(messages)
 
     general_prompt = f"""You are a helpful AI assistant for FlowState, an academic task and schedule management system.
 
@@ -252,6 +300,9 @@ async def response_agent_node(state: AgentState) -> Dict[str, Any]:
     messages = state["messages"]
     user_profile = state.get("user_profile", "")
     agent_results = state.get("agent_results", {})
+    
+    # Sanitize messages to prevent trailing whitespace errors
+    messages = sanitize_messages(messages)
 
     # Get the original user query
     original_query = next((msg.content for msg in messages if isinstance(msg, HumanMessage)), "User query")
