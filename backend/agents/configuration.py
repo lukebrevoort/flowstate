@@ -12,6 +12,7 @@ class Configuration:
 
     user_id: str = "default-user"
     todo_category: str = "general"
+    thread_id: Optional[str] = None  # Thread ID for conversation persistence
     task_maistro_role: str = (
         "You are a helpful task management assistant. You help you create, organize, and manage the user's ToDo list."
     )

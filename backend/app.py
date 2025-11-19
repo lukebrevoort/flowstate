@@ -7,6 +7,7 @@ from pydantic import BaseModel, EmailStr
 from typing import Dict, List, Any, Optional
 from langchain_core.messages import HumanMessage
 from langgraph.store.memory import InMemoryStore
+from langgraph.checkpoint.memory import MemorySaver
 from fastapi.responses import StreamingResponse
 from agents.supervisor import stream_response, stream_events
 
@@ -51,6 +52,10 @@ app.add_middleware(
 # Create an in-memory store for chat sessions
 memory_store = InMemoryStore()
 sessions: Dict[str, Any] = {}
+
+# Create checkpointer for persistent conversation context
+# This allows the agent to remember conversation history within each thread
+checkpointer = MemorySaver()
 
 
 class ChatRequest(BaseModel):

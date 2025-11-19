@@ -17,6 +17,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, END, START
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
+from langgraph.checkpoint.memory import MemorySaver
 
 import agents.configuration as configuration
 from agents.project_manager import tools as project_management_tools, project_manager_prompt
@@ -372,9 +373,12 @@ def _validate_jsx(content: str) -> bool:
 # ============================================================================
 
 
-def create_flowstate_graph():
+def create_flowstate_graph(checkpointer=None):
     """
     Create the FlowState multi-agent graph with explicit routing
+    
+    Args:
+        checkpointer: Optional checkpointer for persistent conversation history
     """
     # Initialize the graph
     workflow = StateGraph(AgentState)
@@ -405,11 +409,14 @@ def create_flowstate_graph():
     # Response agent is the final step
     workflow.add_edge("response_agent", END)
 
-    return workflow.compile()
+    # Compile with checkpointer for conversation persistence
+    return workflow.compile(checkpointer=checkpointer)
 
 
-# Create the compiled graph
-app = create_flowstate_graph()
+# Create the compiled graph with checkpointer for conversation persistence
+# This enables the agent to remember conversation history within each thread
+checkpointer = MemorySaver()
+app = create_flowstate_graph(checkpointer=checkpointer)
 
 
 # ============================================================================
