@@ -32,19 +32,21 @@ python-dateutil==2.8.2
 pytz==2023.3
 dateparser==1.1.8
 
-# LangChain and LLM components
-langchain>=0.1.0
-langchain-community>=0.0.29
-langchain-core>=0.2.38
-langchain-anthropic>=0.2.0
-langchain-openai>=0.1.0
-langgraph>=0.3.27
-langgraph-supervisor
+# LangChain 1.0+ and LLM components
+# Important: langchain 1.0.0 is pinned for compatibility with langgraph 1.0.x
+# langchain 1.0.7+ has breaking import changes that conflict with langgraph 1.0.2
+langchain==1.0.0
+langchain-core>=1.0.0
+langchain-anthropic>=0.3.0  # Note: Not at 1.0 yet, 0.3.17 is latest stable
+langchain-openai>=1.0.0
+langgraph>=0.6.0  # Note: Not at 1.0 yet, 0.6.0 is latest stable
+langgraph-checkpoint>=2.0.0
+# langgraph-supervisor - REMOVED: Now using native StateGraph implementation
 
 
 # AI/ML
-anthropic>=0.23.0,<1.0
-openai>=1.10.0,<2.0.0
+anthropic>=0.69.0  # Updated for langchain-anthropic 1.0+
+openai>=1.109.0  # Updated for langchain-openai 1.0+
 
 # Rate limiting and retry logic
 ratelimit==2.2.1
@@ -62,9 +64,9 @@ tqdm==4.66.1
 numpy==1.26.2
 httpx>=0.25.2
 
-# Performance and optimization - FIXED VERSION CONFLICT
-python-multipart==0.0.6
-orjson>=3.10.1  # ✅ Updated to satisfy langgraph-sdk requirement
+# Performance and optimization
+python-multipart>=0.0.20  # Updated for MCP compatibility
+orjson>=3.10.1
 
 # Testing dependencies
 pytest>=7.4.0

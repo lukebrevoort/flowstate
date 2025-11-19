@@ -237,7 +237,7 @@ class GoogleCalendarOAuthService:
 
     async def store_user_tokens(self, user_id: str, token_data: Dict[str, Any]) -> bool:
         """
-        Store user's Google Calendar tokens in Supabase
+        Store user's Google Calendar tokens in Supabase and update timezone
 
         Args:
             user_id: User ID
@@ -291,6 +291,18 @@ class GoogleCalendarOAuthService:
             scope = token_data.get("scope", "")
             user_info = token_data.get("user_info", {})
 
+            # ✅ NEW: Fetch user's timezone from Google Calendar
+            user_timezone = "UTC"  # Default fallback
+            if access_token:
+                fetched_timezone = await self.get_user_timezone(access_token)
+                if fetched_timezone:
+                    user_timezone = fetched_timezone
+                    logger.info(f"Retrieved timezone for user {user_id}: {user_timezone}")
+                else:
+                    logger.warning(f"Could not retrieve timezone for user {user_id}, defaulting to UTC")
+            else:
+                logger.warning(f"No access token available for user {user_id}, defaulting to UTC timezone")
+
             # Calculate token expiration time
             from datetime import datetime, timedelta, timezone
 
@@ -340,15 +352,18 @@ class GoogleCalendarOAuthService:
                     },
                 )
 
-            # Update user profile to mark Google Calendar as connected
+            # ✅ NEW: Update user profile with timezone and mark Google Calendar as connected
             await supabase.query(
                 "profiles",
                 "PATCH",
-                data={"google_calendar_connected": True},
+                data={
+                    "google_calendar_connected": True,
+                    "timezone": user_timezone,  # Store the timezone
+                },
                 filters={"id": user_id},
             )
 
-            logger.info(f"Successfully stored Google Calendar tokens for user {user_id}")
+            logger.info(f"Successfully stored Google Calendar tokens and timezone for user {user_id}")
             return True
 
         except Exception as e:
@@ -438,6 +453,43 @@ class GoogleCalendarOAuthService:
             logger.error(f"Error retrieving Google Calendar token for user {user_id}: {str(e)}")
             return None
 
+    async def get_user_timezone(self, access_token: str) -> Optional[str]:
+        """
+        Get user's timezone from their primary Google Calendar
+
+        Args:
+            access_token: Google access token
+
+        Returns:
+            Timezone string (e.g., "America/New_York") or None if failed
+        """
+        try:
+            # Handle mock/test tokens
+            if access_token.startswith("mock_"):
+                return "America/New_York"
+
+            # Fetch primary calendar settings to get timezone
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    "https://www.googleapis.com/calendar/v3/users/me/settings/timezone",
+                    headers={
+                        "Authorization": f"Bearer {access_token}",
+                    },
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    timezone = data.get("value")
+                    logger.info(f"Retrieved user timezone: {timezone}")
+                    return timezone
+                else:
+                    logger.warning(f"Failed to get timezone, status: {response.status_code}")
+                    return None
+
+        except Exception as e:
+            logger.error(f"Error getting user timezone: {str(e)}")
+            return None
+
     async def test_google_calendar_connection(self, access_token: str) -> Dict[str, Any]:
         """
         Test the Google Calendar connection with the access token
@@ -460,6 +512,7 @@ class GoogleCalendarOAuthService:
                                 "id": "primary",
                                 "summary": "Test Calendar",
                                 "primary": True,
+                                "timeZone": "America/New_York",
                             }
                         ],
                     },

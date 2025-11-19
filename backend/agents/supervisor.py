@@ -1,793 +1,748 @@
+"""
+StateGraph-based Multi-Agent Supervisor for FlowState
+Implements explicit routing with mandatory Response Agent enforcement
+"""
+
 import uuid
 import re
-from datetime import datetime
-import httpx
+import json
+from datetime import datetime, timedelta
+from typing import Annotated, Dict, List, Literal, Optional, Any, TypedDict
 
 from pydantic import BaseModel, Field
 
-from trustcall import create_extractor
-
-from langgraph_supervisor.handoff import create_forward_message_tool
-from typing import Literal, Optional, TypedDict
-
-from typing import Annotated, Dict, List, Literal, TypedDict, Optional, Any
-import os
-
 from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
-
+from langchain_core.messages import (
+    BaseMessage,
+    HumanMessage,
+    AIMessage,
+    SystemMessage,
+    ToolMessage,
+)
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, END, START
-from langgraph.prebuilt import create_react_agent
-from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.graph.message import add_messages
+from langgraph.prebuilt import ToolNode
+from langgraph.checkpoint.memory import MemorySaver
 
+import agents.configuration as configuration
 from agents.project_manager import (
     tools as project_management_tools,
     project_manager_prompt,
 )
-from agents.scheduler import (
-    tools as scheduler_tools,
-    scheduler_prompt,
-)
+from agents.scheduler import tools as scheduler_tools, scheduler_prompt
 from agents.response import response_prompt
 
-from tenacity import (
-    retry,
-    wait_exponential,
-    stop_after_attempt,
-    retry_if_exception_type,
+# ============================================================================
+# ENHANCED STATE SCHEMA
+# ============================================================================
+
+
+class AgentState(TypedDict):
+    """Enhanced state that tracks agent routing and context"""
+
+    messages: Annotated[list[BaseMessage], add_messages]
+    current_agent: Optional[str]  # Track which agent is processing
+    needs_response_formatting: bool  # Flag to ensure Response Agent runs
+    user_profile: Optional[str]  # User context for personalization
+    agent_results: Dict[str, Any]  # Store results from each agent
+
+
+# ============================================================================
+# MODEL CONFIGURATION
+# ============================================================================
+
+# Using Haiku 4.5 across the board for cost optimization
+# Can be upgraded per-agent if needed in the future
+base_model = ChatAnthropic(
+    model_name="claude-haiku-4-5-20251001",
+    temperature=0,
+    max_tokens_to_sample=4096,
 )
-from anthropic._exceptions import OverloadedError
-import json
-from langgraph_supervisor import create_supervisor
 
-from langchain_core.tools import tool, BaseTool, InjectedToolCallId
-from langchain_core.messages import ToolMessage
-from langgraph.types import Command
-from langgraph.prebuilt import InjectedState
-
-from langchain_core.runnables import RunnableConfig
-from langchain_core.messages import merge_message_runs
-from langchain_core.messages import SystemMessage, HumanMessage
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
 
 
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import StateGraph, MessagesState, START, END
-from langgraph.store.base import BaseStore
-from langgraph.store.memory import InMemoryStore
-from langgraph_supervisor.handoff import create_forward_message_tool
-from langgraph.graph.message import add_messages
-
-import agents.configuration as configuration
-
-## Utilities
-
-
-# Inspect the tool calls for Trustcall
-class Spy:
-    def __init__(self):
-        self.called_tools = []
-
-    def __call__(self, run):
-        q = [run]
-        while q:
-            r = q.pop()
-            if r.child_runs:
-                q.extend(r.child_runs)
-            if r.run_type == "chat_model":
-                self.called_tools.append(r.outputs["generations"][0][0]["message"]["kwargs"]["tool_calls"])
-
-
-# Extract information from tool calls for both patches and new memories in Trustcall
-def extract_tool_info(tool_calls, schema_name="Memory"):
-    """Extract information from tool calls for both patches and new memories.
-
-    Args:
-        tool_calls: List of tool calls from the model
-        schema_name: Name of the schema tool (e.g., "Memory", "ToDo", "Profile")
+def sanitize_messages(messages: List[BaseMessage]) -> List[BaseMessage]:
     """
-    # Initialize list of changes
-    changes = []
+    Sanitize messages to prevent Anthropic API errors.
+    Strips trailing whitespace from message content.
+    """
+    sanitized = []
+    for msg in messages:
+        if hasattr(msg, "content") and isinstance(msg.content, str):
+            # Strip trailing whitespace from content
+            cleaned_content = msg.content.rstrip()
 
-    for call_group in tool_calls:
-        for call in call_group:
-            if call["name"] == "PatchDoc":
-                # Check if there are any patches
-                if call["args"]["patches"]:
-                    changes.append(
-                        {
-                            "type": "update",
-                            "doc_id": call["args"]["json_doc_id"],
-                            "planned_edits": call["args"]["planned_edits"],
-                            "value": call["args"]["patches"][0]["value"],
-                        }
+            # Create new message with cleaned content
+            if isinstance(msg, HumanMessage):
+                sanitized.append(
+                    HumanMessage(
+                        content=cleaned_content,
+                        id=msg.id if hasattr(msg, "id") else None,
                     )
-                else:
-                    # Handle case where no changes were needed
-                    changes.append(
-                        {
-                            "type": "no_update",
-                            "doc_id": call["args"]["json_doc_id"],
-                            "planned_edits": call["args"]["planned_edits"],
-                        }
+                )
+            elif isinstance(msg, AIMessage):
+                sanitized.append(
+                    AIMessage(
+                        content=cleaned_content,
+                        id=msg.id if hasattr(msg, "id") else None,
+                        additional_kwargs=msg.additional_kwargs if hasattr(msg, "additional_kwargs") else {},
+                        response_metadata=msg.response_metadata if hasattr(msg, "response_metadata") else {},
                     )
-            elif call["name"] == schema_name:
-                changes.append({"type": "new", "value": call["args"]})
-
-    # Format results as a single string
-    result_parts = []
-    for change in changes:
-        if change["type"] == "update":
-            result_parts.append(
-                f"Document {change['doc_id']} updated:\n"
-                f"Plan: {change['planned_edits']}\n"
-                f"Added content: {change['value']}"
-            )
-        elif change["type"] == "no_update":
-            result_parts.append(f"Document {change['doc_id']} unchanged:\n" f"{change['planned_edits']}")
+                )
+            elif isinstance(msg, SystemMessage):
+                sanitized.append(
+                    SystemMessage(
+                        content=cleaned_content,
+                        id=msg.id if hasattr(msg, "id") else None,
+                    )
+                )
+            else:
+                sanitized.append(msg)
         else:
-            result_parts.append(f"New {schema_name} created:\n" f"Content: {change['value']}")
+            sanitized.append(msg)
 
-    return "\n\n".join(result_parts)
-
-
-## Schema definitions
+    return sanitized
 
 
-# User profile schema
-class Profile(BaseModel):
-    """This is the profile of the user you are chatting with"""
-
-    name: Optional[str] = Field(description="The user's name", default=None)
-    location: Optional[str] = Field(description="The user's location", default=None)
-    job: Optional[str] = Field(description="The user's job", default=None)
-    connections: list[str] = Field(
-        description="Personal connection of the user, such as family members, friends, or coworkers",
-        default_factory=list,
-    )
-    interests: list[str] = Field(description="Interests that the user has", default_factory=list)
+# ============================================================================
+# AGENT NODES
+# ============================================================================
 
 
-## Initialize the model and tools
+async def supervisor_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any]:
+    """
+    Supervisor node - analyzes user request and routes to appropriate agent
+    """
+    messages = state["messages"]
 
+    # Sanitize messages to prevent trailing whitespace errors
+    messages = sanitize_messages(messages)
 
-# Update memory tool
-class UpdateMemory(TypedDict):
-    """Decision on what memory type to update"""
+    # Get user profile for context
+    user_profile = state.get("user_profile", "No profile information available")
 
-    update_type: Literal["user", "todo", "instructions"]
+    # ✅ Get user's timezone from config or default to UTC
+    user_timezone_str = "UTC"  # Default
+    try:
+        from services.database import get_database_service
 
+        configurable = config.get("configurable", {}) if config else {}
+        user_id = configurable.get("user_id")
+        if user_id:
+            db_service = get_database_service()
+            user_data = await db_service.get_user_by_id(user_id)
+            if user_data and user_data.get("timezone"):
+                user_timezone_str = user_data["timezone"]
+                print(f"✅ Using user timezone: {user_timezone_str}")
+            else:
+                print(f"⚠️  No timezone found for user {user_id}, defaulting to UTC")
+    except Exception as e:
+        print(f"⚠️  Error fetching user timezone: {e}, defaulting to UTC")
 
-def validate_messages(messages):
-    """Ensure all messages have non-empty content except final assistant message"""
-    if not messages:
-        return messages
+    # Get current date/time with user's timezone
+    from datetime import datetime
+    import pytz
 
-    cleaned = []
-    for i, msg in enumerate(messages):
-        if isinstance(msg, AIMessage) and not msg.content:
-            if i != len(messages) - 1:  # Not final message
-                msg.content = "[System: Empty message sanitized]"
-        cleaned.append(msg)
-    return cleaned
+    try:
+        user_timezone = pytz.timezone(user_timezone_str)
+        current_time = datetime.now(user_timezone)
+        current_datetime_str = current_time.strftime("%A, %B %d, %Y at %I:%M %p %Z")
+        tomorrow = current_time + timedelta(days=1)
+        tomorrow_str = tomorrow.strftime("%A, %B %d, %Y")
+    except Exception as tz_error:
+        print(f"⚠️  Error processing timezone {user_timezone_str}: {tz_error}, using UTC")
+        current_datetime_str = datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")
+        tomorrow_str = "tomorrow"
 
+    # Build routing decision prompt
+    supervisor_prompt = f"""You are the FlowState supervisor agent. Your job is to analyze the user's request and decide which specialized agent should handle it.
 
-class ValidatedChatAnthropic(ChatAnthropic):
-    def invoke(self, input, config=None, **kwargs):
-        # Handle both direct messages and input dict
-        if isinstance(input, list):
-            validated_input = validate_messages(input)
-        elif isinstance(input, dict) and "messages" in input:
-            validated_input = {
-                **input,
-                "messages": validate_messages(input["messages"]),
-            }
-        else:
-            validated_input = input
+CURRENT DATE/TIME CONTEXT:
+- Current time: {current_datetime_str}
+- Tomorrow is: {tomorrow_str}
 
-        return super().invoke(validated_input, config=config, **kwargs)
+Available agents:
+- "scheduler": Handles Google Calendar operations (viewing events, creating/updating/deleting events, finding availability)
+- "project_manager": Handles Notion operations (assignments, tasks, exams, projects, subtasks, progress tracking)
+- "general": For general conversation, questions, or when no specialized agent is needed
 
-    async def ainvoke(self, input, config=None, **kwargs):
-        # Handle both direct messages and input dict
-        if isinstance(input, list):
-            validated_input = validate_messages(input)
-        elif isinstance(input, dict) and "messages" in input:
-            validated_input = {
-                **input,
-                "messages": validate_messages(input["messages"]),
-            }
-        else:
-            validated_input = input
-
-        try:
-            return await super().ainvoke(validated_input, config=config, **kwargs)
-        except Exception as e:
-            # Handle streaming response errors gracefully
-            error_str = str(e)
-            if isinstance(e, httpx.ResponseNotRead) or "ResponseNotRead" in error_str:
-                print(f"Streaming response error handled: {e}")
-                # Re-raise as a more informative error
-                raise RuntimeError(
-                    "Streaming response error: The response content was not properly read. "
-                    "This typically occurs when streaming is enabled but the response isn't consumed correctly."
-                ) from e
-            # For other response-related exceptions
-            if any(
-                keyword in error_str.lower()
-                for keyword in [
-                    "response content",
-                    "streaming",
-                    "content",
-                    "without having called",
-                ]
-            ):
-                print(f"Response content error handled: {e}")
-                raise RuntimeError(f"Response processing error: {error_str}") from e
-            raise
-
-
-# Initialize the model - Using Sonnet for larger token limits
-# Create both streaming and non-streaming versions
-model = ValidatedChatAnthropic(
-    model="claude-3-5-sonnet-20241022",
-    temperature=0,
-    streaming=False,  # Disable streaming for general use to avoid ResponseNotRead errors
-    max_tokens=4096,  # Increase token limit for longer responses
-)
-
-# Streaming model for specific streaming operations
-streaming_model = ValidatedChatAnthropic(
-    model="claude-3-5-sonnet-20241022",
-    temperature=0,
-    streaming=True,
-    max_tokens=4096,  # Enable streaming only when needed
-)
-
-## Create the Trustcall extractors for updating the user profile and ToDo list
-profile_extractor = create_extractor(
-    model,
-    tools=[Profile],
-    tool_choice="Profile",
-)
-
-## Prompts
-
-
-## Tools for handing over the messages to the model
-def create_supervisor_handoff_tool(*, agent_name: str, name: str | None, description: str | None) -> BaseTool:
-
-    @tool(name, description=description)
-    def handoff_to_agent(
-        task_description: Annotated[
-            str,
-            "Provide a detailed task description for the next agent, including any relevant context or information needed for this specific agent to complete their tasks.",
-        ],
-        state: Annotated[MessagesState, InjectedState],
-        tool_call_id: Annotated[str, InjectedToolCallId],
-    ):
-        # Ensure the content is never empty
-        content = f"Successfully transferred to {agent_name}" if agent_name else "Handoff completed"
-
-        tool_message = ToolMessage(
-            content=content,  # Non-empty content
-            name=name,
-            tool_call_id=tool_call_id,
-        )
-        messages = state["messages"]
-
-        # Ensure the message has valid content before adding it
-        if not tool_message.content:
-            tool_message.content = f"Handoff to {agent_name}"
-
-        return Command(
-            goto=agent_name,
-            graph=Command.PARENT,
-            update={
-                "messages": messages + [tool_message],
-                "active_agent": agent_name,
-                "task_description": task_description,
-            },
-        )
-
-    return handoff_to_agent
-
-
-# Chatbot instruction for choosing what to update and what tools to call
-MODEL_SYSTEM_MESSAGE = """
-You are a supervisor agent responsible for orchestrating user interactions through specialized sub-agents. Your role is to coordinate between agents and ensure every user interaction concludes with a properly formatted response.
-
-AVAILABLE AGENTS:
-- Scheduler Agent (Scheduler Agent): Handles Google Calendar operations including viewing events, creating/updating/deleting calendar events, finding available time slots, and managing schedules
-- Project Manager Agent (PMAgent): Handles assignments, tasks, exams, projects, Notion database operations, subtask creation, progress tracking, and time estimation
-- Response Agent (ResponseAgent): Generates final JSX-formatted responses for the frontend UI (REQUIRED for all interactions)
-
-AGENT ROUTING RULES:
-- For calendar viewing, event creation/modification, availability checks, or scheduling → use Scheduler-Handoff-Tool
-- For assignments, tasks, exams, projects, Notion operations, subtasks, progress updates, or time estimates → use Project-Management-Handoff-Tool
-- After gathering ALL necessary information from sub-agents → ALWAYS use Response-Agent-Handoff-Tool (MANDATORY FINAL STEP)
-
-You have access to long-term memory tracking the user's profile:
-
-<user_profile>
+User Profile:
 {user_profile}
-</user_profile>
 
-MANDATORY WORKFLOW:
-1. Analyze the user's request and profile context
-2. Route to appropriate specialized agent(s) with detailed task descriptions
-3. Collect and process information from sub-agents
-4. ALWAYS hand off to Response Agent as the final step - NO EXCEPTIONS
-5. The Response Agent will generate the properly formatted JSX response for the frontend
+Analyze the user's request and respond with ONLY ONE of these exact words: scheduler, project_manager, or general
 
-CRITICAL REQUIREMENTS:
-- NEVER provide direct responses to users - you are an orchestrator only
-- ALWAYS conclude every interaction by routing to the Response Agent
-- The Response Agent is the ONLY agent that communicates directly with users
-- Pass comprehensive context to the Response Agent including all sub-agent results
-- Ensure task descriptions to sub-agents are detailed and include relevant user profile information
-- If no specialized processing is needed, still route to Response Agent for proper formatting
+Do not provide explanation, just the agent name."""
 
-HANDOFF PROTOCOL:
-- When routing to Scheduler Agent: Include specific details about calendar operations, date/time requirements, event details, and scheduling preferences
-- When routing to PMAgent: Include specific details about assignments, deadlines, Notion requirements
-- When routing to ResponseAgent: Include all gathered information, user context, and specify the JSX formatting requirements
-- Task descriptions should be comprehensive and include relevant user profile details
+    # Add system message and invoke
+    routing_messages = [SystemMessage(content=supervisor_prompt)] + messages
 
-Remember: You are the conductor of the orchestra - coordinate the agents but let the Response Agent handle all user-facing communication in the proper JSX format for the frontend.
+    response = await base_model.ainvoke(routing_messages)
+
+    # Extract routing decision
+    # The AI may respond with just "scheduler" or "scheduler\n\nExplanation text"
+    # We need to extract just the first word/line
+    content = response.content if hasattr(response, "content") else str(response)
+
+    if content:
+        # Get the first line and first word, then clean it
+        first_line = str(content).split("\n")[0].strip().lower()
+        agent_choice = first_line
+    else:
+        agent_choice = "general"
+
+    # Validate choice
+    if agent_choice not in ["scheduler", "project_manager", "general"]:
+        agent_choice = "general"
+
+    return {
+        "current_agent": agent_choice,
+        "needs_response_formatting": True,
+        "messages": [response],
+    }  # Always need formatting
+
+
+async def project_manager_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any]:
+    """
+    Project Manager Agent - handles Notion assignment operations
+    Loops internally until all tool calls are complete
+    """
+    messages = state["messages"]
+    user_profile = state.get("user_profile", "")
+
+    # Sanitize messages to prevent trailing whitespace errors
+    messages = sanitize_messages(messages)
+
+    # ✅ Get user's timezone from config or default to UTC
+    user_timezone_str = "UTC"  # Default
+    try:
+        from services.database import get_database_service
+
+        configurable = config.get("configurable", {}) if config else {}
+        user_id = configurable.get("user_id")
+        if user_id:
+            db_service = get_database_service()
+            user_data = await db_service.get_user_by_id(user_id)
+            if user_data and user_data.get("timezone"):
+                user_timezone_str = user_data["timezone"]
+    except Exception as e:
+        print(f"⚠️  Error fetching user timezone in PM node: {e}, defaulting to UTC")
+
+    # Get current date/time with user's timezone
+    from datetime import datetime
+    import pytz
+
+    try:
+        user_timezone = pytz.timezone(user_timezone_str)
+        current_time = datetime.now(user_timezone)
+        current_datetime_str = current_time.strftime("%A, %B %d, %Y at %I:%M %p %Z")
+        today_date = current_time.strftime("%Y-%m-%d")
+        tomorrow = current_time + timedelta(days=1)
+        tomorrow_date = tomorrow.strftime("%Y-%m-%d")
+        tomorrow_day = tomorrow.strftime("%A")
+    except:
+        current_datetime_str = datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")
+        today_date = datetime.now().strftime("%Y-%m-%d")
+        tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+        tomorrow_day = "tomorrow"
+
+    # Build context-aware prompt with explicit date/time information
+    context_prompt = f"""CRITICAL DATE/TIME CONTEXT:
+- Current time: {current_datetime_str}
+- Today's date: {today_date}
+- Tomorrow is {tomorrow_day}, {tomorrow_date}
+
+When user says "tomorrow", they mean {tomorrow_day}, {tomorrow_date}.
+When user says "today", they mean {today_date}.
+
+User Profile:
+{user_profile}
+
+{project_manager_prompt}"""
+
+    # Create agent with tools
+    pm_agent_messages = [SystemMessage(content=context_prompt)] + messages
+
+    # Bind tools to model
+    model_with_tools = base_model.bind_tools(project_management_tools)
+
+    # LOOP until agent is done with all tool calls
+    max_iterations = 10  # Safety limit
+    iteration = 0
+    current_messages = pm_agent_messages
+    all_new_messages = []
+    response = None
+
+    print(f"\n🔄 Project Manager Agent - Starting tool execution loop")
+
+    while iteration < max_iterations:
+        iteration += 1
+        print(f"  📍 Iteration {iteration}/{max_iterations}")
+
+        # Invoke agent
+        response = await model_with_tools.ainvoke(current_messages)
+        all_new_messages.append(response)
+
+        # Check if there are tool calls
+        if hasattr(response, "tool_calls") and response.tool_calls:
+            tool_names = [tc.get("name", "unknown") for tc in response.tool_calls]
+            print(f"  🔧 Tools requested: {', '.join(tool_names)}")
+
+            # Execute tools
+            tool_node = ToolNode(project_management_tools)
+            tool_results = await tool_node.ainvoke({"messages": [response]})
+
+            # Add tool results to messages
+            all_new_messages.extend(tool_results["messages"])
+
+            # Update current messages for next iteration
+            current_messages = pm_agent_messages + all_new_messages
+        else:
+            # No more tool calls, agent is done
+            print(f"  ✅ Agent completed task (no more tool calls)")
+            break
+
+    print(f"🏁 Project Manager Agent - Completed after {iteration} iterations\n")
+
+    # Get final response content
+    final_content = response.content if (response and hasattr(response, "content")) else "Task completed"
+
+    return {
+        "messages": all_new_messages,
+        "agent_results": {"project_manager": final_content},
+    }
+
+
+async def scheduler_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any]:
+    """
+    Scheduler Agent - handles Google Calendar operations
+    Loops internally until all tool calls are complete
+    """
+    messages = state["messages"]
+    user_profile = state.get("user_profile", "")
+
+    # Sanitize messages to prevent trailing whitespace errors
+    messages = sanitize_messages(messages)
+
+    # ✅ Get user's timezone from config or default to UTC
+    user_timezone_str = "UTC"  # Default
+    try:
+        from services.database import get_database_service
+
+        configurable = config.get("configurable", {}) if config else {}
+        user_id = configurable.get("user_id")
+        if user_id:
+            db_service = get_database_service()
+            user_data = await db_service.get_user_by_id(user_id)
+            if user_data and user_data.get("timezone"):
+                user_timezone_str = user_data["timezone"]
+    except Exception as e:
+        print(f"⚠️  Error fetching user timezone in scheduler node: {e}, defaulting to UTC")
+
+    # Get current date/time with user's timezone
+    from datetime import datetime
+    import pytz
+
+    try:
+        user_timezone = pytz.timezone(user_timezone_str)
+        current_time = datetime.now(user_timezone)
+        current_datetime_str = current_time.strftime("%A, %B %d, %Y at %I:%M %p %Z")
+        today_date = current_time.strftime("%Y-%m-%d")
+        tomorrow = current_time + timedelta(days=1)
+        tomorrow_date = tomorrow.strftime("%Y-%m-%d")
+        tomorrow_day = tomorrow.strftime("%A")
+    except:
+        current_datetime_str = datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")
+        today_date = datetime.now().strftime("%Y-%m-%d")
+        tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+        tomorrow_day = "tomorrow"
+
+    # Build context-aware prompt with explicit date/time information
+    context_prompt = f"""CRITICAL DATE/TIME CONTEXT:
+- Current time: {current_datetime_str}
+- Today's date: {today_date}
+- Tomorrow is {tomorrow_day}, {tomorrow_date}
+
+When user says "tomorrow", they mean {tomorrow_day}, {tomorrow_date}.
+When user says "today", they mean {today_date}.
+
+User Profile:
+{user_profile}
+
+{scheduler_prompt}"""
+
+    # Create agent with tools
+    scheduler_messages = [SystemMessage(content=context_prompt)] + messages
+
+    # Bind tools to model
+    model_with_tools = base_model.bind_tools(scheduler_tools)
+
+    # LOOP until agent is done with all tool calls
+    max_iterations = 10  # Safety limit
+    iteration = 0
+    current_messages = scheduler_messages
+    all_new_messages = []
+    response = None
+
+    print(f"\n🔄 Scheduler Agent - Starting tool execution loop")
+
+    while iteration < max_iterations:
+        iteration += 1
+        print(f"  📍 Iteration {iteration}/{max_iterations}")
+
+        # Invoke agent
+        response = await model_with_tools.ainvoke(current_messages)
+        all_new_messages.append(response)
+
+        # Check if there are tool calls
+        if hasattr(response, "tool_calls") and response.tool_calls:
+            tool_names = [tc.get("name", "unknown") for tc in response.tool_calls]
+            print(f"  🔧 Tools requested: {', '.join(tool_names)}")
+
+            # Execute tools
+            tool_node = ToolNode(scheduler_tools)
+            tool_results = await tool_node.ainvoke({"messages": [response]})
+
+            # Add tool results to messages
+            all_new_messages.extend(tool_results["messages"])
+
+            # Update current messages for next iteration
+            current_messages = scheduler_messages + all_new_messages
+        else:
+            # No more tool calls, agent is done
+            print(f"  ✅ Agent completed task (no more tool calls)")
+            break
+
+    print(f"🏁 Scheduler Agent - Completed after {iteration} iterations\n")
+
+    # Get final response content
+    final_content = response.content if (response and hasattr(response, "content")) else "Task completed"
+
+    return {"messages": all_new_messages, "agent_results": {"scheduler": final_content}}
+
+
+async def general_response_node(state: AgentState) -> Dict[str, Any]:
+    """
+    Handles general queries that don't need specialized agents
+    """
+    messages = state["messages"]
+    user_profile = state.get("user_profile", "")
+
+    current_datetime_str = datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")
+    today_date = datetime.now().strftime("%Y-%m-%d")
+    tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+    tomorrow_day = "tomorrow"
+    # Sanitize messages to prevent trailing whitespace errors
+    messages = sanitize_messages(messages)
+
+    general_prompt = f"""You are a helpful AI assistant for FlowState, an academic task and schedule management system.
+
+User Profile:
+{user_profile}
+
+Provide helpful responses to general questions. Keep responses concise and relevant.
+- Current time: {current_datetime_str}
+- Today's date: {today_date}
+- Tomorrow is {tomorrow_day}, {tomorrow_date}
 """
 
-# Trustcall instruction
-TRUSTCALL_INSTRUCTION = """Reflect on following interaction.
+    response_messages = [SystemMessage(content=general_prompt)] + messages
+    response = await base_model.ainvoke(response_messages)
 
-Use the provided tools to retain any necessary memories about the user.
-
-Use parallel tool calling to handle updates and insertions simultaneously.
-
-System Time: {time}"""
-
-# Instructions for updating the ToDo list
-CREATE_INSTRUCTIONS = """Reflect on the following interaction.
-
-Based on this interaction, update your instructions for how to update ToDo list items. Use any feedback from the user to update how they like to have items added, etc.
-
-Your current instructions are:
-
-<current_instructions>
-{current_instructions}
-</current_instructions>"""
-
-## Node definitions
+    return {"messages": [response], "agent_results": {"general": response.content}}
 
 
-scheduler_agent = create_react_agent(
-    model=model,
-    tools=scheduler_tools,
-    prompt=scheduler_prompt + "\nTask Description: {task_description}",
-    name="Scheduler Agent",
-)
-
-
-project_management_agent = create_react_agent(
-    model=model,
-    tools=project_management_tools,
-    prompt=project_manager_prompt + "\nTask Description: {task_description}",
-    name="PMAgent",
-)
-
-response_agent = create_react_agent(
-    model=model,
-    tools=[],
-    prompt=response_prompt + "\nTask Description: {task_description}\nUser Profile: {user_profile}",
-    name="ResponseAgent",
-)
-
-
-# Create supervisor agent (orchestrator)
-def get_user_profile(store, config):
-    configurable = configuration.Configuration.from_runnable_config(config)
-    user_id = configurable.user_id
-    todo_category = configurable.todo_category
-    namespace = ("profile", todo_category, user_id)
-
-    existing_items = store.search(namespace)
-    profile_data = {}
-    for item in existing_items:
-        profile_data.update(item.value)
-
-    return Profile(**profile_data).model_dump_json(indent=2)
-
-
-def update_profile(state: MessagesState, config: RunnableConfig, store: BaseStore):
-    """Reflect on the chat history and update the memory collection."""
-
-    # Get the user ID from the config
-    configurable = configuration.Configuration.from_runnable_config(config)
-    user_id = configurable.user_id
-    todo_category = configurable.todo_category
-
-    # Define the namespace for the memories
-    namespace = ("profile", todo_category, user_id)
-
-    # Retrieve the most recent memories for context
-    existing_items = store.search(namespace)
-
-    # Format the existing memories for the Trustcall extractor
-    tool_name = "Profile"
-    existing_memories = (
-        [(existing_item.key, tool_name, existing_item.value) for existing_item in existing_items] if existing_items else None
-    )
-
-    # Merge the chat history and the instruction
-    TRUSTCALL_INSTRUCTION_FORMATTED = TRUSTCALL_INSTRUCTION.format(time=datetime.now().isoformat())
-    updated_messages = list(
-        merge_message_runs(messages=[SystemMessage(content=TRUSTCALL_INSTRUCTION_FORMATTED)] + state["messages"][:-1])
-    )
-
-    # Invoke the extractor
-    result = profile_extractor.invoke({"messages": updated_messages, "existing": existing_memories})
-
-    # Save save the memories from Trustcall to the store
-    for r, rmeta in zip(result["responses"], result["response_metadata"]):
-        store.put(
-            namespace,
-            rmeta.get("json_doc_id", str(uuid.uuid4())),
-            r.model_dump(mode="json"),
-        )
-    tool_calls = state["messages"][-1].tool_calls
-    # Return tool message with update verification
-    return {
-        "messages": [
-            {
-                "role": "tool",
-                "content": "updated profile",
-                "tool_call_id": tool_calls[0]["id"],
-            }
-        ]
-    }
-
-
-def update_instructions(state: MessagesState, config: RunnableConfig, store: BaseStore):
-    """Reflect on the chat history and update the memory collection."""
-
-    # Get the user ID from the config
-    configurable = configuration.Configuration.from_runnable_config(config)
-    user_id = configurable.user_id
-    todo_category = configurable.todo_category
-
-    namespace = ("instructions", todo_category, user_id)
-
-    existing_memory = store.get(namespace, "user_instructions")
-
-    # Format the memory in the system prompt
-    system_msg = CREATE_INSTRUCTIONS.format(current_instructions=existing_memory.value if existing_memory else None)
-    new_memory = model.invoke(
-        [SystemMessage(content=system_msg)]
-        + state["messages"][:-1]
-        + [HumanMessage(content="Please update the instructions based on the conversation")]
-    )
-
-    # Overwrite the existing memory in the store
-    key = "user_instructions"
-    store.put(namespace, key, {"memory": new_memory.content})
-    tool_calls = state["messages"][-1].tool_calls
-    # Return tool message with update verification
-    return {
-        "messages": [
-            {
-                "role": "tool",
-                "content": "updated instructions",
-                "tool_call_id": tool_calls[0]["id"],
-            }
-        ]
-    }
-
-
-# Define proper handoff tools for each agent
-scheduler_handoff = create_supervisor_handoff_tool(
-    agent_name="Scheduler Agent",
-    name="Scheduler-Handoff-Tool",
-    description="Handoff to the Scheduler Agent for calendar and scheduling related tasks",
-)
-
-project_manager_handoff = create_supervisor_handoff_tool(
-    agent_name="PMAgent",
-    name="Project-Management-Handoff-Tool",
-    description="Handoff to the Project Management Agent for assignment and task related actions",
-)
-
-response_agent_handoff = create_supervisor_handoff_tool(
-    agent_name="ResponseAgent",
-    name="Response-Agent-Handoff-Tool",
-    description="Handoff to the Response Agent for final responses and user interaction once all information has been gathered",
-)
-
-
-# Modify the orchestrator_agent definition
-orchestrator_agent = create_supervisor(
-    [scheduler_agent, project_management_agent, response_agent],
-    model=model,
-    tools=[
-        scheduler_handoff,
-        project_manager_handoff,
-        response_agent_handoff,
-    ],
-    output_mode="full_history",
-    supervisor_name="Orchestrator Supervisor",
-    prompt=MODEL_SYSTEM_MESSAGE,
-)
-
-
-# Define the function that determines whether to continue or not
-def should_continue(state: MessagesState):
-    """Determine the next step in the conversation flow"""
+async def response_agent_node(state: AgentState) -> Dict[str, Any]:
+    """
+    MANDATORY Response Agent - formats all responses as JSX for frontend
+    This node is ALWAYS executed as the final step
+    """
     messages = state["messages"]
-    last_message = messages[-1]
+    user_profile = state.get("user_profile", "")
+    agent_results = state.get("agent_results", {})
 
-    # Check if last message is an AI message without content (but not the final message)
-    if isinstance(last_message, AIMessage) and not last_message.content:
-        if len(messages) > 1:
-            return "respond"
+    # Sanitize messages to prevent trailing whitespace errors
+    messages = sanitize_messages(messages)
 
-    # If there are tool calls, go to tools
-    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-        return "tools"
+    # Get the MOST RECENT user query (last HumanMessage in conversation)
+    # Use reversed() to get the latest message, not the first one from history
+    original_query = next(
+        (msg.content for msg in reversed(messages) if isinstance(msg, HumanMessage)),
+        "User query",
+    )
 
-    # If it's an AI message with content, we can respond
-    if isinstance(last_message, AIMessage) and last_message.content:
-        return "respond"
+    # Get the agent's response
+    agent_response = ""
+    if agent_results:
+        # Get the last agent's result
+        agent_response = list(agent_results.values())[-1]
+    else:
+        # Fallback to last AI message
+        agent_response = next(
+            (msg.content for msg in reversed(messages) if isinstance(msg, AIMessage)),
+            "No response generated",
+        )
 
-    # Default to respond
-    return "respond"
+    # Build comprehensive prompt for Response Agent
+    formatting_prompt = f"""{response_prompt}
+
+User Query: {original_query}
+
+User Profile:
+{user_profile}
+
+Agent Response to Format:
+{agent_response}
+
+Format the above response as valid JSX using Typography, Button, and other available components."""
+
+    # Include user message and system message
+    response_messages = [
+        SystemMessage(content=formatting_prompt),
+        HumanMessage(content="Please format the above response as JSX."),
+    ]
+    jsx_response = await base_model.ainvoke(response_messages)
+
+    # Validate JSX
+    jsx_content = jsx_response.content if hasattr(jsx_response, "content") else str(jsx_response)
+    jsx_content_str = str(jsx_content) if jsx_content else ""
+    if not _validate_jsx(jsx_content_str):
+        # Retry with explicit validation instruction
+        retry_prompt = f"""The previous JSX was invalid. Please fix it.
+
+Requirements:
+- Must start with <> and end with </>
+- All tags must be properly closed
+- Use Typography components for text
+- Ensure className attributes are complete
+
+Previous attempt:
+{jsx_content_str}
+
+Generate corrected JSX:"""
+
+        retry_messages = [
+            SystemMessage(content=response_prompt),
+            HumanMessage(content=retry_prompt),
+        ]
+        jsx_response = await base_model.ainvoke(retry_messages)
+
+    return {
+        "messages": [jsx_response],
+        "needs_response_formatting": False,
+    }  # Mark as complete
 
 
-class ValidationState(TypedDict):
-    messages: Annotated[list[BaseMessage], add_messages]
+# ============================================================================
+# ROUTING FUNCTIONS
+# ============================================================================
 
 
-def final_validation(state: ValidationState):
-    """Last-chance message validation"""
-    return {"messages": validate_messages(state["messages"])}
+def route_after_supervisor(state: AgentState) -> str:
+    """Route to the appropriate agent based on supervisor decision"""
+    current_agent = state.get("current_agent", "general")
+
+    if current_agent == "scheduler":
+        return "scheduler"
+    elif current_agent == "project_manager":
+        return "project_manager"
+    else:
+        return "general"
 
 
-# Create tools for updating profile and instructions
-@tool
-def update_user_profile(
-    profile_update: Annotated[str, "Instructions for updating the user's profile"],
-    state: Annotated[MessagesState, InjectedState],
-    tool_call_id: Annotated[str, InjectedToolCallId],
-):
-    """Update the user's profile based on conversation context"""
-    return {"messages": [ToolMessage(content="Profile update initiated", tool_call_id=tool_call_id)]}
+def should_format_response(state: AgentState) -> str:
+    """Always route to response agent for formatting"""
+    # This enforces that Response Agent is ALWAYS called
+    return "response_agent"
 
 
-@tool
-def update_user_instructions(
-    instruction_update: Annotated[str, "Instructions for updating user preferences"],
-    state: Annotated[MessagesState, InjectedState],
-    tool_call_id: Annotated[str, InjectedToolCallId],
-):
-    """Update user instructions based on feedback"""
-    return {"messages": [ToolMessage(content="Instructions update initiated", tool_call_id=tool_call_id)]}
+# ============================================================================
+# JSX VALIDATION
+# ============================================================================
 
 
-# Compile the graph
-app = orchestrator_agent.compile(name="Orchestrator Supervisor")
+def _validate_jsx(content: str) -> bool:
+    """Validate JSX format"""
+    if not content:
+        return False
+
+    # Check for React Fragment
+    if not ("<>" in content and "</>" in content):
+        return False
+
+    # Check for basic JSX structure
+    if "Typography" not in content:
+        return False
+
+    # Check for balanced tags
+    open_count = content.count("<")
+    close_count = content.count(">")
+    if open_count != close_count:
+        return False
+
+    # Check for obvious unclosed tags - simple heuristic
+    # Count opening and closing Typography tags
+    typography_opens = len(re.findall(r"<Typography[^>]*>", content))
+    typography_closes = content.count("</Typography>")
+    if typography_opens != typography_closes:
+        return False
+
+    return True
+
+
+# ============================================================================
+# BUILD THE STATEGRAPH
+# ============================================================================
+
+
+def create_flowstate_graph(checkpointer=None):
+    """
+    Create the FlowState multi-agent graph with explicit routing
+
+    Args:
+        checkpointer: Optional checkpointer for persistent conversation history
+    """
+    # Initialize the graph
+    workflow = StateGraph(AgentState)
+
+    # Add all nodes
+    workflow.add_node("supervisor", supervisor_node)
+    workflow.add_node("scheduler", scheduler_node)
+    workflow.add_node("project_manager", project_manager_node)
+    workflow.add_node("general", general_response_node)
+    workflow.add_node("response_agent", response_agent_node)
+
+    # Set entry point
+    workflow.set_entry_point("supervisor")
+
+    # Add conditional routing from supervisor to specialized agents
+    workflow.add_conditional_edges(
+        "supervisor",
+        route_after_supervisor,
+        {
+            "scheduler": "scheduler",
+            "project_manager": "project_manager",
+            "general": "general",
+        },
+    )
+
+    # CRITICAL: All agents MUST route to response_agent
+    # This enforces consistent JSX formatting
+    workflow.add_edge("scheduler", "response_agent")
+    workflow.add_edge("project_manager", "response_agent")
+    workflow.add_edge("general", "response_agent")
+
+    # Response agent is the final step
+    workflow.add_edge("response_agent", END)
+
+    # Compile with checkpointer for conversation persistence
+    return workflow.compile(checkpointer=checkpointer)
+
+
+# Create the compiled graph with checkpointer for conversation persistence
+# This enables the agent to remember conversation history within each thread
+checkpointer = MemorySaver()
+app = create_flowstate_graph(checkpointer=checkpointer)
+
+
+# ============================================================================
+# STREAMING FUNCTIONS (Updated for new graph structure)
+# ============================================================================
 
 
 async def stream_response(user_input: str, config: dict):
-    """Stream agent steps and tool calls for AgentLoadingCard"""
-
-    print(f"stream_response called with input: {user_input}")  # Debug log
+    """
+    Stream agent steps for the new StateGraph architecture
+    """
+    print(f"stream_response called with input: {user_input}")
 
     try:
-        # Create the initial state
-        initial_state = {"messages": [HumanMessage(content=user_input)]}
+        # Create initial state
+        initial_state = {
+            "messages": [HumanMessage(content=user_input)],
+            "current_agent": None,
+            "needs_response_formatting": True,
+            "user_profile": None,  # TODO: Load from store
+            "agent_results": {},
+        }
 
-        # Stream with updates mode and include subgraphs
-        async for chunk in app.astream(
-            initial_state,
-            config=config,
-            stream_mode="updates",  # Stream updates instead of messages
-            subgraphs=True,  # Include subgraph updates
-        ):
+        # Stream the graph execution
+        # Type ignore for config - RunnableConfig compatibility
+        async for chunk in app.astream(initial_state, config=config, stream_mode="updates"):  # type: ignore
             try:
-                print(f"Received chunk: {chunk}")  # Debug log
+                print(f"\n{'=' * 80}")
+                print(f"🔍 CHUNK: {chunk}")
+                print(f"{'=' * 80}\n")
 
-                # Safely handle chunk structure
-                if not isinstance(chunk, (tuple, list)) or len(chunk) < 2:
-                    print(f"Skipping malformed chunk: {chunk}")
-                    continue
+                # Chunk format: {node_name: node_output}
+                for node_name, node_output in chunk.items():
+                    if node_name == "__start__" or node_name == "__end__":
+                        continue
 
-                node_name, node_update = chunk[0], chunk[1]
+                    print(f"📍 Node: {node_name}")
 
-                if node_name == "__start__" or node_name == "__end__":
-                    continue
+                    # Yield routing information
+                    if node_name == "supervisor":
+                        agent_choice = node_output.get("current_agent", "unknown")
+                        yield {
+                            "type": "routing",
+                            "agent": "Supervisor",
+                            "message": f"Routing to {agent_choice} agent...",
+                            "timestamp": datetime.now().isoformat(),
+                        }
 
-                # Safely extract node name
-                if isinstance(node_name, tuple):
-                    actual_node_name = str(node_name[0]) if len(node_name) > 0 else "Unknown"
-                else:
-                    actual_node_name = str(node_name)
+                    # Yield agent activity
+                    elif node_name in ["scheduler", "project_manager", "general"]:
+                        yield {
+                            "type": "action",
+                            "agent": node_name.replace("_", " ").title(),
+                            "message": f"Processing request...",
+                            "timestamp": datetime.now().isoformat(),
+                        }
 
-                print(f"Processing node: {actual_node_name}")  # Debug log
+                    # Yield final response
+                    elif node_name == "response_agent":
+                        messages = node_output.get("messages", [])
+                        if messages:
+                            final_message = messages[-1]
+                            jsx_content = final_message.content if hasattr(final_message, "content") else str(final_message)
 
-                # Safely extract messages from node_update
-                messages = []
-                if isinstance(node_update, dict):
-                    if "agent" in node_update and isinstance(node_update["agent"], dict):
-                        messages = node_update["agent"].get("messages", [])
-                    else:
-                        messages = node_update.get("messages", [])
+                            # Strip markdown code fences if present
+                            if jsx_content.startswith("```"):
+                                lines = jsx_content.split("\n")
+                                if lines[0].strip().startswith("```"):
+                                    lines = lines[1:]
+                                if lines and lines[-1].strip() == "```":
+                                    lines = lines[:-1]
+                                jsx_content = "\n".join(lines)
 
-                if not messages:
-                    continue
-
-                last_message = messages[-1] if messages else None
-                if not last_message:
-                    continue
-
-                # Handle supervisor routing decisions
-                if "Orchestrator Supervisor" in actual_node_name or "supervisor" in actual_node_name.lower():
-                    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-                        for tool_call in last_message.tool_calls:
-                            tool_name = tool_call.get("name", "")
-                            if "Handoff" in tool_name:
-                                # Extract target agent from tool name
-                                if "Project-Management" in tool_name:
-                                    target_agent = "Project Management Agent"
-                                elif "Response-Agent" in tool_name:
-                                    target_agent = "Response Agent"
-                                elif "Scheduler-Handoff" in tool_name:
-                                    target_agent = "Scheduler Agent"
-                                else:
-                                    target_agent = "Agent"
-
-                                yield {
-                                    "type": "routing",
-                                    "agent": "Main Agent",
-                                    "message": f"Routing request to {target_agent}...",
-                                    "timestamp": datetime.now().isoformat(),
-                                }
-
-                # Handle Scheduler Agent actions
-                elif "Scheduler Agent" in actual_node_name:
-                    # Check for tool calls
-                    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-                        for tool_call in last_message.tool_calls:
-                            tool_name = tool_call.get("name", "Unknown Tool")
                             yield {
-                                "type": "tool",
-                                "agent": "Scheduler Agent",
-                                "message": tool_name,
-                                "tool": tool_name,
+                                "type": "completion",
+                                "agent": "Response Agent",
+                                "message": "Formatting response...",
                                 "timestamp": datetime.now().isoformat(),
                             }
 
-                    # Check for AI message content
-                    elif hasattr(last_message, "content") and last_message.content:
-                        content = str(last_message.content).lower()
-                        if any(
-                            word in content
-                            for word in [
-                                "getting",
-                                "retrieving",
-                                "checking",
-                                "analyzing",
-                                "processing",
-                                "creating",
-                                "updating",
-                                "deleting",
-                                "finding",
-                            ]
-                        ):
-                            step_type = "action"
-                        else:
-                            step_type = "completion"
-
-                        message_content = str(last_message.content)
-                        truncated_content = message_content[:100] + "..." if len(message_content) > 100 else message_content
-
-                        yield {
-                            "type": step_type,
-                            "agent": "Scheduler Agent",
-                            "message": truncated_content,
-                            "timestamp": datetime.now().isoformat(),
-                        }
-
-                # Handle Project Management Agent actions
-                elif "PMAgent" in actual_node_name:
-                    # Check for tool calls
-                    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-                        for tool_call in last_message.tool_calls:
-                            tool_name = tool_call.get("name", "Unknown Tool")
                             yield {
-                                "type": "tool",
-                                "agent": "Project Management Agent",
-                                "message": tool_name,
-                                "tool": tool_name,
+                                "type": "final_response",
+                                "agent": "Response Agent",
+                                "message": "Response ready",
+                                "content": jsx_content,
                                 "timestamp": datetime.now().isoformat(),
                             }
-
-                    # Check for AI message content
-                    elif hasattr(last_message, "content") and last_message.content:
-                        content = str(last_message.content).lower()
-                        if any(
-                            word in content
-                            for word in [
-                                "getting",
-                                "retrieving",
-                                "checking",
-                                "analyzing",
-                                "processing",
-                            ]
-                        ):
-                            step_type = "action"
-                        else:
-                            step_type = "completion"
-
-                        message_content = str(last_message.content)
-                        truncated_content = message_content[:100] + "..." if len(message_content) > 100 else message_content
-
-                        yield {
-                            "type": step_type,
-                            "agent": "Project Management Agent",
-                            "message": truncated_content,
-                            "timestamp": datetime.now().isoformat(),
-                        }
-
-                # Handle Response Agent
-                elif "ResponseAgent" in actual_node_name:
-                    if hasattr(last_message, "content") and last_message.content:
-                        # Show completion step
-                        yield {
-                            "type": "completion",
-                            "agent": "Response Agent",
-                            "message": "Formatting response for display...",
-                            "timestamp": datetime.now().isoformat(),
-                        }
-
-                        # Yield the final response for the chat
-                        final_response_content = str(last_message.content)
-
-                        # Log response length for debugging
-                        print(f"Final response length: {len(final_response_content)} characters")
-
-                        # Check if JSX response appears complete
-                        if "<>" in final_response_content or "<Typography" in final_response_content:
-                            # Basic JSX validation
-                            open_fragments = final_response_content.count("<>")
-                            close_fragments = final_response_content.count("</>")
-                            has_unclosed_quotes = bool(re.search(r'className="[^"]*$', final_response_content))
-                            has_unclosed_tags = final_response_content.endswith("<") or bool(
-                                re.search(r"<[^>]*$", final_response_content)
-                            )
-
-                            if open_fragments != close_fragments or has_unclosed_quotes or has_unclosed_tags:
-                                print(
-                                    f"⚠️ JSX appears incomplete - fragments: {open_fragments}/{close_fragments}, unclosed quotes: {has_unclosed_quotes}, unclosed tags: {has_unclosed_tags}"
-                                )
-                                # Add completion warning
-                                final_response_content += "\n<!-- JSX Response may be incomplete -->"
-
-                        yield {
-                            "type": "final_response",
-                            "agent": "Response Agent",
-                            "message": "Response ready",
-                            "content": final_response_content,
-                            "timestamp": datetime.now().isoformat(),
-                        }
 
             except Exception as chunk_error:
-                print(f"Error processing chunk {chunk}: {chunk_error}")
-                # Continue processing other chunks instead of failing completely
+                print(f"Error processing chunk: {chunk_error}")
                 continue
 
-    except GeneratorExit:
-        print("Stream generator was closed early")
-        # Don't return, let the generator close naturally
-        raise
     except Exception as e:
         print(f"Error in stream_response: {e}")
-        # Yield an error message instead of crashing
+        import traceback
+
+        traceback.print_exc()
         yield {
             "type": "error",
             "agent": "System",
@@ -796,65 +751,11 @@ async def stream_response(user_input: str, config: dict):
         }
 
 
+# Placeholder for stream_events - can be implemented similarly if needed
 async def stream_events(user_input: str, config: dict):
-    """Stream detailed events from the supervisor agent for debugging"""
+    """Stream detailed events (placeholder for now)"""
+    async for event in stream_response(user_input, config):
+        yield event
 
-    try:
-        initial_state = {"messages": [HumanMessage(content=user_input)]}
 
-        async for event in app.astream_events(initial_state, config=config, version="v2"):
-            try:
-                # Handle different event types for more granular control
-                if event.get("event") == "on_chain_start":
-                    # Agent starting
-                    agent_name = event.get("name", "Unknown Agent")
-                    if agent_name != "RunnableSequence":  # Filter out generic sequences
-                        yield {
-                            "type": "routing",
-                            "agent": "Main Agent",
-                            "message": f"Starting {agent_name}...",
-                            "timestamp": datetime.now().isoformat(),
-                        }
-
-                elif event.get("event") == "on_tool_start":
-                    # Tool execution starting
-                    tool_name = event.get("name", "Unknown Tool")
-                    agent_name = "Agent"
-                    if "tags" in event and isinstance(event["tags"], dict):
-                        agent_name = event["tags"].get("agent", "Agent")
-
-                    yield {
-                        "type": "tool",
-                        "agent": agent_name,
-                        "message": tool_name,
-                        "tool": tool_name,
-                        "timestamp": datetime.now().isoformat(),
-                    }
-
-                elif event.get("event") == "on_chain_end":
-                    # Agent completing
-                    agent_name = event.get("name", "Unknown Agent")
-                    if agent_name != "RunnableSequence" and "Agent" in agent_name:
-                        yield {
-                            "type": "completion",
-                            "agent": agent_name,
-                            "message": f"Completed processing with {agent_name}",
-                            "timestamp": datetime.now().isoformat(),
-                        }
-
-            except Exception as event_error:
-                print(f"Error processing event {event}: {event_error}")
-                continue
-
-    except GeneratorExit:
-        print("Event stream generator was closed early")
-        # Don't return, let the generator close naturally
-        raise
-    except Exception as e:
-        print(f"Error in stream_events: {e}")
-        yield {
-            "type": "error",
-            "agent": "System",
-            "message": f"Event streaming error: {str(e)}",
-            "timestamp": datetime.now().isoformat(),
-        }
+print("✅ StateGraph-based supervisor loaded successfully")

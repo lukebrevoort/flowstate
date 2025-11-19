@@ -8,7 +8,7 @@ import httpx
 from typing import Dict, Any, Optional, List, Union
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from langchain_core.tools import tool
+from langchain.tools import tool
 from langchain_core.runnables import RunnableConfig
 
 logger = logging.getLogger(__name__)
@@ -697,11 +697,18 @@ scheduler_prompt = """
 ## Primary Role
 You are an agent specialized in managing academic schedules in Google Calendar. You can both retrieve calendar information and modify calendar events.
 
+## CRITICAL: YOU MUST USE YOUR TOOLS
+- NEVER just describe what you would do - ALWAYS CALL YOUR TOOLS
+- When asked to retrieve calendar information, immediately call get_calendar_events
+- When asked to create events, immediately call create_calendar_event
+- When asked to find availability, immediately call find_available_time
+- DO NOT say "I will retrieve..." - Actually retrieve by calling the tool!
+- DO NOT say "I'll check your calendar..." - Actually check by calling the tool!
+
 ## Core Responsibilities
 - Understand user requests related to calendar management
-- Retrieve calendar information when needed
-- Create, update, and delete calendar events as requested
-- Present information back to the user in a clear, helpful format
+- IMMEDIATELY call the appropriate tools to retrieve or modify calendar data
+- Present tool results back without additional interpretation
 
 ## Request Handling Guidelines
 

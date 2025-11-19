@@ -9,6 +9,7 @@ from .beta_usage import BetaUsage
 from .beta_container import BetaContainer
 from .beta_stop_reason import BetaStopReason
 from .beta_content_block import BetaContentBlock, BetaContentBlock as BetaContentBlock
+from .beta_context_management_response import BetaContextManagementResponse
 
 __all__ = ["BetaMessage"]
 
@@ -59,6 +60,12 @@ class BetaMessage(BaseModel):
     ```json
     [{ "type": "text", "text": "B)" }]
     ```
+    """
+
+    context_management: Optional[BetaContextManagementResponse] = None
+    """Context management response.
+
+    Information about context management strategies applied during the request.
     """
 
     model: Model

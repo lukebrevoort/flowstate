@@ -92,6 +92,7 @@ class DatabaseService:
                             "email": profile.get("email"),
                             "notion_connected": profile.get("notion_connected", False),
                             "google_calendar_connected": profile.get("google_calendar_connected", False),
+                            "timezone": profile.get("timezone", "UTC"),
                         }
                     else:
                         # If trigger didn't work, manually create the profile
@@ -122,6 +123,7 @@ class DatabaseService:
                         "email": user_data.email,
                         "notion_connected": False,
                         "google_calendar_connected": False,
+                        "timezone": "UTC",
                     }
             else:
                 raise Exception("Failed to create user in Supabase Auth")
@@ -149,6 +151,7 @@ class DatabaseService:
                         "email": profile.get("email"),
                         "notion_connected": profile.get("notion_connected", False),
                         "google_calendar_connected": profile.get("google_calendar_connected", False),
+                        "timezone": profile.get("timezone", "UTC"),
                         "access_token": auth_response.get("access_token"),
                     }
                 else:
@@ -160,6 +163,7 @@ class DatabaseService:
                         "email": user.get("email"),
                         "notion_connected": False,
                         "google_calendar_connected": False,
+                        "timezone": "UTC",
                         "access_token": auth_response.get("access_token"),
                     }
 
@@ -183,6 +187,7 @@ class DatabaseService:
                     "email": profile.get("email"),
                     "notion_connected": profile.get("notion_connected", False),
                     "google_calendar_connected": profile.get("google_calendar_connected", False),
+                    "timezone": profile.get("timezone", "UTC"),
                 }
 
             return None
@@ -205,6 +210,7 @@ class DatabaseService:
                     "email": profile.get("email"),
                     "notion_connected": profile.get("notion_connected", False),
                     "google_calendar_connected": profile.get("google_calendar_connected", False),
+                    "timezone": profile.get("timezone", "UTC"),
                 }
 
             return None
