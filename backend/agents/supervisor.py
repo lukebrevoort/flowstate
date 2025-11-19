@@ -433,8 +433,9 @@ async def response_agent_node(state: AgentState) -> Dict[str, Any]:
     # Sanitize messages to prevent trailing whitespace errors
     messages = sanitize_messages(messages)
 
-    # Get the original user query
-    original_query = next((msg.content for msg in messages if isinstance(msg, HumanMessage)), "User query")
+    # Get the MOST RECENT user query (last HumanMessage in conversation)
+    # Use reversed() to get the latest message, not the first one from history
+    original_query = next((msg.content for msg in reversed(messages) if isinstance(msg, HumanMessage)), "User query")
 
     # Get the agent's response
     agent_response = ""
