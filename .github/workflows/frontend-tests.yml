@@ -2,6 +2,7 @@ name: Frontend Tests
 
 on:
   push:
+    branches: [main]
     paths:
       - "frontend/**"
       - ".github/workflows/frontend-tests.yml"
@@ -12,7 +13,7 @@ on:
 # Ensure only one workflow per branch runs at a time
 concurrency:
   group: frontend-tests-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Add permissions for the workflow to push changes
 permissions:
@@ -22,6 +23,7 @@ permissions:
 jobs:
   frontend-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     strategy:
       matrix:
@@ -162,6 +164,7 @@ jobs:
   # Additional job for component testing (if needed later)
   component-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: frontend-tests
     if: github.event_name == 'pull_request'
 
